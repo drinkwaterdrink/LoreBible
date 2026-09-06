@@ -1,0 +1,8 @@
+{
+  "name": "Lore Bible v0.02",
+  "description": "A scenario-authoring studio for AI roleplay writers. Guided wizard turning scraps of ideas into structured scenario seed documents.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

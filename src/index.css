@@ -1,0 +1,454 @@
+@import "tailwindcss";
+
+:root {
+  --vellum: #F4EFE4;
+  --vellum-deep: #EBE4D6;
+  --vellum-raised: #FBF8F1;
+  --ink: #23201B;
+  --ink-soft: rgba(87, 81, 71, 0.2);
+  --graphite: #544D43;
+  --ink-blue: #2E4A6B;
+  --rubric: #A63D2F;
+  --sage: #6E7F6A;
+  --gold: #B08D49;
+  --lamp-glow: rgba(251, 248, 241, 0.4);
+  --sheet-shadow: 0 1px 3px rgba(35, 32, 27, 0.08), 0 4px 16px -4px rgba(35, 32, 27, 0.06);
+  --font-manuscript: "Spectral", "Newsreader", Georgia, serif;
+  --font-apparatus: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-hand: "Caveat", cursive;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+.dark {
+  --vellum: #1C1A17;
+  --vellum-deep: #151310;
+  --vellum-raised: #25221D;
+  --ink: #EDE6D8;
+  --ink-soft: rgba(237, 230, 216, 0.18);
+  --graphite: #B5ADA2;
+  --ink-blue: #7C9FBF;
+  --rubric: #BF4C3D;
+  --sage: #899E85;
+  --gold: #C09E57;
+  --lamp-glow: rgba(220, 185, 120, 0.12);
+  --sheet-shadow: 0 2px 24px -8px rgba(0, 0, 0, 0.55);
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--vellum);
+  color: var(--ink);
+  font-family: var(--font-apparatus);
+  overflow-x: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.35s ease, color 0.35s ease;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+/* Base manuscript typography */
+.font-manuscript,
+.manuscript {
+  font-family: var(--font-manuscript);
+}
+
+.font-apparatus {
+  font-family: var(--font-apparatus);
+}
+
+.font-hand,
+.handwriting {
+  font-family: var(--font-hand);
+  color: var(--ink-blue);
+}
+
+.handwriting {
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.font-mono-ui {
+  font-family: var(--font-mono);
+}
+
+/* Paper texture overlay from Natural Tones */
+.texture-overlay,
+.paper-texture-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  z-index: 1;
+}
+
+/* Laid lines texture */
+.laid-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(var(--ink-soft) 0px, var(--ink-soft) 1px, transparent 1px, transparent 3px);
+  opacity: 0.05;
+  z-index: 1;
+}
+
+/* Desk lamp pool of warmth */
+.lamp-light,
+.lamp-light-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 0%, rgba(251, 248, 241, 0.4) 0%, transparent 70%);
+  z-index: 2;
+}
+
+.dark .lamp-light,
+.dark .lamp-light-layer {
+  background: radial-gradient(circle at 50% 0%, var(--lamp-glow) 0%, transparent 70%);
+}
+
+/* Paper sheet surface */
+.manuscript-sheet {
+  background-color: var(--vellum-raised);
+  border: 1px solid var(--ink-soft);
+  box-shadow: var(--sheet-shadow);
+  border-radius: 2px;
+  position: relative;
+}
+
+.manuscript-sheet-raised {
+  background-color: var(--vellum-raised);
+  border: 1px solid var(--ink-soft);
+  box-shadow: 0 4px 20px -6px rgba(60, 50, 35, 0.12);
+  border-radius: 2px;
+}
+
+/* Underline-only inputs */
+.input-underline {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--ink-soft);
+  border-radius: 0;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s ease, border-width 0.1s ease;
+}
+
+.input-underline:focus {
+  border-bottom: 1.5px solid var(--rubric);
+}
+
+/* Buttons */
+.btn-rubric,
+.btn-primary {
+  background: var(--rubric);
+  color: var(--vellum-raised);
+  font-family: var(--font-apparatus);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 10px 16px;
+  border-radius: 2px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(35, 32, 27, 0.12);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-rubric:hover,
+.btn-primary:hover {
+  opacity: 0.94;
+  box-shadow: 0 2px 6px rgba(35, 32, 27, 0.18);
+}
+
+.btn-rubric:active,
+.btn-primary:active {
+  transform: translateY(1px);
+  box-shadow: 0 0.5px 1px rgba(35, 32, 27, 0.2);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-apparatus);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 2px;
+  border: 1px solid var(--ink-soft);
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-secondary:hover {
+  background-color: var(--vellum-raised);
+  border-color: var(--graphite);
+}
+
+.btn-tertiary {
+  background: transparent;
+  color: var(--rubric);
+  border: none;
+  font-family: var(--font-apparatus);
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.15s ease;
+}
+
+.btn-tertiary:hover {
+  opacity: 0.85;
+}
+
+/* Nav item classes */
+.nav-item {
+  color: var(--graphite);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.nav-item.active {
+  border-left: 2px solid var(--rubric);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Custom focus ring */
+*:focus-visible {
+  outline: 2px solid var(--rubric) !important;
+  outline-offset: 2px !important;
+}
+
+/* Thin warm scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink-soft);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--graphite);
+}
+
+/* Animations */
+@keyframes inkBleedIn {
+  0% {
+    opacity: 0;
+    filter: blur(1px);
+    transform: translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+.animate-ink-bleed {
+  animation: inkBleedIn 400ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes diceTumble {
+  0% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-4px) rotate(-6deg); }
+  50% { transform: translateY(2px) rotate(4deg); }
+  75% { transform: translateY(-1px) rotate(-2deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+
+.animate-dice-tumble {
+  animation: diceTumble 450ms ease-out forwards;
+}
+
+/* Scribe section rule */
+.scribe-header {
+  font-family: var(--font-manuscript);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--graphite);
+  padding-bottom: 0.35rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--rubric);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+/* Margin key tag */
+.lore-key-tag {
+  color: var(--sage);
+  font-variant: all-small-caps;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  background: transparent;
+}
+
+/* ==========================================
+   DENSITY TOGGLE MODES
+   ========================================== */
+.manuscript-compact .entry-card {
+  padding: 0.5rem 0.75rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.manuscript-compact p,
+.manuscript-compact .entry-text {
+  font-size: 0.875rem !important;
+  line-height: 1.45 !important;
+}
+
+.manuscript-compact .scribe-header {
+  margin-bottom: 0.625rem !important;
+  padding-bottom: 0.2rem !important;
+}
+
+.manuscript-compact .entry-title {
+  font-size: 0.9375rem !important;
+}
+
+/* ==========================================
+   ACCESSIBILITY: PREFERS-REDUCED-MOTION
+   ========================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-ink-bleed,
+  .animate-dice-tumble,
+  .animate-pulse {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
+/* ==========================================
+   WRITER'S PRINT STYLESHEET (Cmd + P)
+   Pure black ink on crisp white paper, dropping all chrome
+   ========================================== */
+@media print {
+  @page {
+    margin: 20mm 15mm 20mm 15mm;
+    size: auto;
+  }
+
+  /* Reset colors to true printer ink on paper */
+  :root, .dark {
+    --vellum: #FFFFFF !important;
+    --vellum-deep: #FFFFFF !important;
+    --vellum-raised: #FFFFFF !important;
+    --ink: #111111 !important;
+    --ink-soft: #666666 !important;
+    --graphite: #333333 !important;
+    --rubric: #8B0000 !important;
+    --sheet-shadow: none !important;
+  }
+
+  body, html, #root {
+    background: #FFFFFF !important;
+    color: #111111 !important;
+    font-size: 11pt !important;
+    line-height: 1.6 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Hide app chrome, sidebars, navigation, modals, buttons */
+  header,
+  nav,
+  aside,
+  .sidebar-rail,
+  .texture-overlay,
+  .paper-texture-layer,
+  .laid-lines,
+  .lamp-light,
+  .lamp-light-layer,
+  button,
+  .btn-rubric,
+  .btn-primary,
+  .btn-secondary,
+  .btn-tertiary,
+  #margin-drawer-backdrop,
+  #sidebar-mobile-backdrop,
+  .print\\:hidden,
+  [role="dialog"] {
+    display: none !important;
+  }
+
+  /* Main viewport expands to full printable page */
+  #main-stage-viewport,
+  #refine-stage-root,
+  .manuscript-sheet {
+    position: static !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #FFFFFF !important;
+  }
+
+  .scribe-header {
+    border-bottom: 1.5pt solid #111111 !important;
+    color: #111111 !important;
+    font-size: 12pt !important;
+    page-break-after: avoid;
+    break-after: avoid;
+    margin-top: 18pt !important;
+    margin-bottom: 8pt !important;
+  }
+
+  .entry-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    border-left: 2pt solid #444444 !important;
+    border-top: none !important;
+    border-right: none !important;
+    border-bottom: 0.5pt solid #CCCCCC !important;
+    margin-bottom: 10pt !important;
+    padding: 6pt 10pt !important;
+    background: #FAFAFA !important;
+  }
+
+  /* Retain margin notes as neat editorial footnotes or side margin blocks */
+  .margin-note-print {
+    display: block !important;
+    font-family: var(--font-hand), cursive !important;
+    font-size: 10pt !important;
+    color: #444444 !important;
+    margin-top: 4pt !important;
+    padding-left: 6pt !important;
+    border-left: 1pt dashed #888888 !important;
+  }
+}
+
