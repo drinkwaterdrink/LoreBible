@@ -6,6 +6,7 @@ import {
   PhysicsConfig,
   SparkParse,
   BuildLogItem,
+  GenerationSettings,
 } from "./types";
 import {
   parseSparkApi,
@@ -219,27 +220,24 @@ export default function App() {
   const [maxUnlockedStage, setMaxUnlockedStage] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   // Spark state
-  const [sparkText, setSparkText] = useState<string>(
-    "hunter academy where the scholarship is an execution sentence"
-  );
-  const [parse, setParse] = useState<SparkParse>({
-    franchise: "Hunter x Hunter",
-    nonNegotiables: ["hunter academy", "scholarship as execution sentence"],
-    registerWords: ["unhinged", "taut", "grim"],
-    userRole: "impoverished applicant",
-    openNegotiables: [
-      "The true purpose of the preliminary stamina test",
-      "Which proctor secretly owes money to the applicants' parish",
-    ],
-  });
+  const [sparkText, setSparkText] = useState<string>("");
+  const [parse, setParse] = useState<SparkParse | null>(null);
   const [isParsingSpark, setIsParsingSpark] = useState(false);
 
   // Canon state
-  const [canon, setCanon] = useState<CanonConfig>({
-    enabled: true,
-    franchiseName: "Hunter x Hunter",
-    fidelity: "Adjacent",
-    explanation: "Suspends naming ban, preserves setting logistics.",
+  const [canon, setCanon] = useState<CanonConfig>(DEFAULT_CANON);
+
+  // Generation Settings (Quality, Divergence Mode, Author Flavor)
+  const [settings, setSettings] = useState<GenerationSettings>({
+    quality: "Deep Craft",
+    divergenceMode: "Exploratory",
+    authorFlavor: {
+      mode: "Off",
+      strength: "Sprinkle",
+      autoBehavior: "Compatible",
+      manualAuthorId: null,
+      overdriveEnabled: false,
+    },
   });
 
   // Divergence state
@@ -471,7 +469,7 @@ export default function App() {
         setParse(currentParse);
       }
 
-      const generatedTakes = await fetchDivergenceTakes(sparkText, currentParse, canon);
+      const generatedTakes = await fetchDivergenceTakes(sparkText, currentParse, canon, undefined, settings);
       const initializedTakes = generatedTakes.map((take) => ({
         ...take,
         versions: [take],
@@ -497,7 +495,7 @@ export default function App() {
     setIsLoadingDivergence(true);
     setDivergenceError(null);
     try {
-      const freshTakes = await fetchDivergenceTakes(sparkText, parse, canon);
+      const freshTakes = await fetchDivergenceTakes(sparkText, parse, canon, undefined, settings);
       const initializedTakes = freshTakes.map((freshTake, idx) => {
         const prevTake = takes[idx];
         const prevVersions = prevTake?.versions || (prevTake ? [prevTake] : []);
@@ -525,7 +523,7 @@ export default function App() {
     setIsLoadingDivergence(true);
     setDivergenceError(null);
     try {
-      const branchedTakes = await fetchDivergenceTakes(sparkText, parse, canon, pushInstruction);
+      const branchedTakes = await fetchDivergenceTakes(sparkText, parse, canon, pushInstruction, settings);
       const initialized = branchedTakes.map((bTake) => ({
         ...bTake,
         versions: [bTake],
@@ -559,6 +557,7 @@ export default function App() {
         canon,
         targetAngle: targetTake.angle,
         currentTake: targetTake,
+        settings,
       });
 
       const prevVersions = targetTake.versions && targetTake.versions.length > 0
@@ -607,6 +606,7 @@ export default function App() {
         targetAngle: targetTake.angle,
         currentTake: targetTake,
         steerInstruction,
+        settings,
       });
 
       const steeredWithNote: DivergenceTake = {
@@ -996,6 +996,8 @@ export default function App() {
               isParsingMargin={isParsingSpark}
               hasParsedMargin={Boolean(parse && (parse.nonNegotiables.length > 0 || parse.registerWords.length > 0))}
               onOpenMargin={() => setIsMarginOpen(true)}
+              settings={settings}
+              onUpdateSettings={setSettings}
             />
           )}
 
@@ -1016,6 +1018,8 @@ export default function App() {
               sparkText={sparkText}
               divergenceError={divergenceError}
               onRetry={handleProceedToDivergence}
+              settings={settings}
+              onUpdateSettings={setSettings}
             />
           )}
 

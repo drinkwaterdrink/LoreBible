@@ -20,6 +20,24 @@ export interface SparkParse {
   registerWords: string[];
   userRole: string | null;
   openNegotiables: string[];
+  sparkDNA?: SparkDNA;
+}
+
+export interface SparkDNA {
+  nonNegotiables: string[];
+  premisePromise: string;
+  toneEnvelope: {
+    primary: string;
+    descriptors: string[];
+  };
+  genreSignals: string[];
+  playerAgencyBoundaries: string;
+  openVariables: string[];
+  existingPressures: string[];
+  assumptions: string[];
+  opportunitySpace: string[];
+  userRole: string | null;
+  franchise: string | null;
 }
 
 export type CanonFidelity = 'Strict' | 'Adjacent' | 'Riff';
@@ -31,20 +49,80 @@ export interface CanonConfig {
   explanation: string;
 }
 
-export type DivergenceAngle = 'Grounded' | 'Strange' | 'Inverted' | 'Rescaled' | string;
+export type DivergenceAngle = string;
+
+export type AuthorId =
+  | 'terry-pratchett'
+  | 'neil-gaiman'
+  | 'stephen-king'
+  | 'quentin-tarantino'
+  | 'douglas-adams'
+  | 'nisio-isin'
+  | 'kinoko-nasu'
+  | 'gen-urobuchi'
+  | 'michael-crichton'
+  | '90s-mascot-chaos'
+  | 'narrative-style-overdrive';
+
+export type AuthorFlavorMode = 'Off' | 'Auto' | 'Manual';
+export type AuthorFlavorStrength = 'Sprinkle' | 'Strong' | 'Overdrive';
+export type AuthorAutoBehavior = 'Compatible' | 'Wildcard';
+
+export interface AuthorFlavorConfig {
+  mode: AuthorFlavorMode;
+  strength: AuthorFlavorStrength;
+  autoBehavior: AuthorAutoBehavior;
+  manualAuthorId?: AuthorId | null;
+  overdriveEnabled?: boolean;
+}
+
+export type DivergenceMode = 'Faithful' | 'Exploratory' | 'Radical' | 'Unbound';
+export type GenerationQuality = 'Fast' | 'Balanced' | 'Deep Craft';
+export type SemanticRerollType = 'reimagine' | 'mutate' | 'push_further';
 
 export interface DivergenceTake {
   id: string;
   title: string;
   pitch: string;
   genreTone: string;
-  whatsStrange: string;
-  angle: DivergenceAngle;
+  whatsStrange?: string;
+  angle: string; // Dynamic human-readable tag or engine, e.g. "Interpersonal Friction", "Ticking Crucible", "The Hidden Truth"
   retainedNonNegotiables: string[];
+  whatChanged?: string;
+  whatProtected?: string;
+  primaryEngine?: string;
+  optionalHooks?: string[];
+  authorFlavorId?: AuthorId | null;
+  authorFlavorName?: string | null;
+  authorFlavorStrength?: AuthorFlavorStrength;
+  architectMetadata?: {
+    scale?: string;
+    socialDensity?: string;
+    conflictSource?: string;
+    urgency?: string;
+    score?: number;
+  };
   versions?: DivergenceTake[];
   versionIndex?: number;
   steerNote?: string;
   isEdited?: boolean;
+}
+
+export interface GenerationSettings {
+  quality: GenerationQuality;
+  divergenceMode: DivergenceMode;
+  authorFlavor: AuthorFlavorConfig;
+  allowOfflineFallback?: boolean;
+  timeoutSeconds?: number;
+}
+
+export interface GenerationApiError {
+  status: number;
+  message: string;
+  retryDelayMs?: number;
+  isRateLimit?: boolean;
+  isDailyQuota?: boolean;
+  stageName?: string;
 }
 
 export interface PhysicsConfig {

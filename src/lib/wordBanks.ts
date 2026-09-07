@@ -22,7 +22,7 @@ export const OBJECTS_AND_PLACES = [
   "a cartographer's private basement",
   "a tax-collector's deadbox",
   "a clockwork lighthouse that ticks backward",
-  "a hunter academy entrance exam docket",
+  "an inherited receipt ledger with missing margins",
 ];
 
 export const EMOTIONAL_REGISTERS = [
@@ -278,7 +278,7 @@ export const SPARK_EXAMPLES = [
   "cozy apocalypse",
   "noir + cottagecore + grief",
   "she's been dead three years but nobody told her",
-  "hunter academy where the scholarship is a death warrant",
+  "a historic clocktower maintaining the timeline of a divided harbor city",
   "underwater noir: a levee detective looking for a dry-sider's daughter",
   "dune spice smuggling ring run out of a monastery laundry",
 ];

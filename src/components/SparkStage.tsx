@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState } from "react";
 import { rollCollision, generateNovelSparks, NovelSpark } from "../lib/wordBanks";
-import { Dices, ArrowRight, RotateCcw, Feather, Sparkles, HelpCircle, Check, BookOpen } from "lucide-react";
+import { Dices, ArrowRight, RotateCcw, Feather, Sparkles, HelpCircle, Check, BookOpen, Sliders, ChevronDown, ChevronUp } from "lucide-react";
+import { GenerationSettings, AuthorId, DivergenceMode, GenerationQuality, AuthorFlavorStrength } from "../types";
+import { AUTHOR_PROFILES } from "../lib/authorProfiles";
 
 interface SparkStageProps {
   sparkText: string;
@@ -11,6 +13,8 @@ interface SparkStageProps {
   isParsingMargin?: boolean;
   hasParsedMargin?: boolean;
   onOpenMargin?: () => void;
+  settings?: GenerationSettings;
+  onUpdateSettings?: (settings: GenerationSettings) => void;
 }
 
 export const SparkStage: React.FC<SparkStageProps> = ({
@@ -22,10 +26,13 @@ export const SparkStage: React.FC<SparkStageProps> = ({
   isParsingMargin = false,
   hasParsedMargin = false,
   onOpenMargin,
+  settings,
+  onUpdateSettings,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isTumbling, setIsTumbling] = useState(false);
   const [showCollideExplainer, setShowCollideExplainer] = useState(false);
+  const [showCraftSettings, setShowCraftSettings] = useState(false);
   const [novelSparks, setNovelSparks] = useState<NovelSpark[]>(() => generateNovelSparks(4));
   const [isRollingSparks, setIsRollingSparks] = useState(false);
   const [justInked, setJustInked] = useState(false);
@@ -178,7 +185,7 @@ export const SparkStage: React.FC<SparkStageProps> = ({
           ref={textareaRef}
           value={sparkText}
           onChange={(e) => onChangeSpark(e.target.value)}
-          placeholder="Write your premise here... (e.g. hunter academy where the scholarship is a death warrant, or gothic alchemist who blackmails ghosts with false obituaries)"
+          placeholder="Write your premise here... (e.g. Victorian apothecary dealing in illicit sensory memories, small-town baker receiving daily anonymous blackmail notes, deep-space salvage crew encountering an impossible broadcast, or royal bodyguard bound by a blood debt)"
           className="w-full bg-transparent resize-y min-h-[140px] max-h-[440px] overflow-y-auto outline-none font-hand text-xl text-[var(--ink-blue)] leading-relaxed border-none focus:ring-0 placeholder:text-[var(--graphite)]/50 placeholder:font-hand placeholder:text-lg"
           rows={4}
           autoFocus
@@ -192,6 +199,186 @@ export const SparkStage: React.FC<SparkStageProps> = ({
             {wordCount} words · {sparkText.length.toLocaleString()} chars
           </span>
         </div>
+
+        {/* CRAFT CALIBRATION & AUTHOR FLAVOR (TOGGLEABLE) */}
+        {settings && onUpdateSettings && (
+          <div className="mt-3 pt-3 border-t border-[var(--ink-soft)]/60">
+            <button
+              type="button"
+              onClick={() => setShowCraftSettings(!showCraftSettings)}
+              className="flex items-center justify-between w-full text-left text-[11px] font-apparatus font-semibold uppercase tracking-wider text-[var(--graphite)] hover:text-[var(--ink)] transition-colors py-1"
+            >
+              <div className="flex items-center gap-2">
+                <Sliders size={12} className="text-[var(--gold)]" />
+                <span>Creative Engine Calibration &amp; Author Flavor</span>
+                <span className="text-[9px] font-mono-ui normal-case text-[var(--gold)] bg-[var(--gold)]/10 px-1.5 py-0.2 rounded">
+                  {settings.quality} · {settings.divergenceMode}
+                  {settings.authorFlavor.mode !== "Off" && ` · ${settings.authorFlavor.manualAuthorId ? AUTHOR_PROFILES[settings.authorFlavor.manualAuthorId]?.name || "Author" : "Auto Flavor"}`}
+                </span>
+              </div>
+              {showCraftSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+
+            {showCraftSettings && (
+              <div className="mt-2.5 p-3 rounded-[3px] bg-[var(--vellum-raised)] border border-[var(--ink-soft)] space-y-3 animate-fade-in text-xs font-manuscript">
+                {/* Generation Quality */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--ink-soft)] pb-2.5">
+                  <div>
+                    <span className="font-apparatus uppercase tracking-wider text-[10px] font-semibold text-[var(--ink)] block">
+                      Pipeline Quality
+                    </span>
+                    <span className="text-[10px] text-[var(--graphite)]">
+                      {settings.quality === "Deep Craft"
+                        ? "3-stage Architect → Critic → Writer pipeline with High thinking. Max angle variance."
+                        : settings.quality === "Balanced"
+                        ? "Standard balanced inference with medium thinking."
+                        : "Fast lightweight drafting."}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {(["Fast", "Balanced", "Deep Craft"] as GenerationQuality[]).map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => onUpdateSettings({ ...settings, quality: q })}
+                        className={`text-[10px] font-apparatus px-2 py-0.8 rounded border transition-all ${
+                          settings.quality === q
+                            ? "bg-[var(--rubric)] text-white border-[var(--rubric)] font-bold shadow-xs"
+                            : "bg-[var(--vellum)] text-[var(--graphite)] border-[var(--ink-soft)] hover:text-[var(--ink)]"
+                        }`}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Divergence Mode */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--ink-soft)] pb-2.5">
+                  <div>
+                    <span className="font-apparatus uppercase tracking-wider text-[10px] font-semibold text-[var(--ink)] block">
+                      Possibility Spread Mode
+                    </span>
+                    <span className="text-[10px] text-[var(--graphite)]">
+                      {settings.divergenceMode === "Exploratory"
+                        ? "Orthogonal discovery across psychological, systemic, strange, and structural axes."
+                        : settings.divergenceMode === "Faithful"
+                        ? "Anchors tightly to premise without radical departures."
+                        : settings.divergenceMode === "Radical"
+                        ? "Pushes maximal tension and contrast between each angle."
+                        : "Wildcard adjacent collisions and unexpected subgenres."}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {(["Faithful", "Exploratory", "Radical", "Unbound"] as DivergenceMode[]).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => onUpdateSettings({ ...settings, divergenceMode: m })}
+                        className={`text-[10px] font-apparatus px-2 py-0.8 rounded border transition-all ${
+                          settings.divergenceMode === m
+                            ? "bg-[var(--gold)] text-black border-[var(--gold)] font-bold shadow-xs"
+                            : "bg-[var(--vellum)] text-[var(--graphite)] border-[var(--ink-soft)] hover:text-[var(--ink)]"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Optional Author Flavor */}
+                <div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                    <div>
+                      <span className="font-apparatus uppercase tracking-wider text-[10px] font-semibold text-[var(--ink)] block">
+                        Optional Author Flavor Overlay
+                      </span>
+                      <span className="text-[10px] text-[var(--graphite)]">
+                        Lends literary cadence, dialogue habits, and craft worldview without copying content.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {(["Off", "Auto", "Manual"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() =>
+                            onUpdateSettings({
+                              ...settings,
+                              authorFlavor: {
+                                ...settings.authorFlavor,
+                                mode,
+                              },
+                            })
+                          }
+                          className={`text-[10px] font-apparatus px-2 py-0.8 rounded border transition-all ${
+                            settings.authorFlavor.mode === mode
+                              ? "bg-[var(--ink-blue)] text-white border-[var(--ink-blue)] font-bold"
+                              : "bg-[var(--vellum)] text-[var(--graphite)] border-[var(--ink-soft)] hover:text-[var(--ink)]"
+                          }`}
+                        >
+                          {mode === "Off" ? "None" : mode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {settings.authorFlavor.mode === "Manual" && (
+                    <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                      <select
+                        value={settings.authorFlavor.manualAuthorId || ""}
+                        onChange={(e) =>
+                          onUpdateSettings({
+                            ...settings,
+                            authorFlavor: {
+                              ...settings.authorFlavor,
+                              manualAuthorId: (e.target.value as AuthorId) || null,
+                            },
+                          })
+                        }
+                        className="text-xs font-apparatus bg-[var(--vellum)] border border-[var(--ink-soft)] rounded px-2 py-1 text-[var(--ink)] outline-none"
+                      >
+                        <option value="">Select Author Voice…</option>
+                        {Object.values(AUTHOR_PROFILES).map((prof) => (
+                          <option key={prof.id} value={prof.id}>
+                            {prof.name} — {prof.subtitle}
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-[var(--graphite)] font-apparatus">Strength:</span>
+                        {(["Sprinkle", "Strong", "Overdrive"] as AuthorFlavorStrength[]).map((str) => (
+                          <button
+                            key={str}
+                            type="button"
+                            onClick={() =>
+                              onUpdateSettings({
+                                ...settings,
+                                authorFlavor: {
+                                  ...settings.authorFlavor,
+                                  strength: str,
+                                },
+                              })
+                            }
+                            className={`text-[9px] font-apparatus px-1.5 py-0.5 rounded border transition-all ${
+                              settings.authorFlavor.strength === str
+                                ? "bg-[var(--ink)] text-[var(--vellum)] border-[var(--ink)] font-bold"
+                                : "bg-[var(--vellum)] text-[var(--graphite)] border-[var(--ink-soft)]"
+                            }`}
+                          >
+                            {str}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* DEDICATED MARGIN APPARATUS INKING SECTION */}
         <div className="mt-4 pt-3 border-t border-dashed border-[var(--ink-soft)] bg-[var(--vellum-raised)]/60 -mx-5 sm:-mx-6 px-5 sm:px-6 py-3 rounded-b-[3px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

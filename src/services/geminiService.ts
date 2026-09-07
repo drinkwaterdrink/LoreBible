@@ -42,12 +42,17 @@ export async function fetchDivergenceTakes(
   sparkText: string,
   parse: SparkParse,
   canon: CanonConfig,
-  pushInstruction?: string
+  pushInstruction?: string,
+  settings?: {
+    quality?: "Standard" | "Deep Craft";
+    divergenceMode?: "balanced" | "orthogonal" | "genre_bending" | "high_contrast";
+    authorFlavor?: string | null;
+  }
 ): Promise<DivergenceTake[]> {
   const res = await fetch("/api/divergence", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sparkText, parse, canon, pushInstruction }),
+    body: JSON.stringify({ sparkText, parse, canon, pushInstruction, settings }),
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
@@ -67,6 +72,12 @@ export async function fetchSingleDivergenceTake(params: {
   targetAngle: string;
   currentTake?: DivergenceTake;
   steerInstruction?: string;
+  settings?: {
+    quality?: "Standard" | "Deep Craft";
+    divergenceMode?: "balanced" | "orthogonal" | "genre_bending" | "high_contrast";
+    authorFlavor?: string | null;
+    semanticRerollMode?: "reimagine" | "mutate" | "push_further";
+  };
 }): Promise<DivergenceTake> {
   const res = await fetch("/api/divergence-single", {
     method: "POST",

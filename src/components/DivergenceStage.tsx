@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { DivergenceTake } from "../types";
+import { DivergenceTake, GenerationSettings } from "../types";
 import {
   Feather,
   Compass,
@@ -33,6 +33,8 @@ interface DivergenceStageProps {
   sparkText: string;
   divergenceError?: string | null;
   onRetry?: () => void;
+  settings?: GenerationSettings;
+  onUpdateSettings?: (settings: GenerationSettings) => void;
 }
 
 interface EditFormState {
@@ -44,12 +46,13 @@ interface EditFormState {
 }
 
 const STEER_SUGGESTIONS = [
-  "More intimate & claustrophobic",
-  "Accentuate mechanical friction & logistics",
-  "Deepen personal betrayal & family debt",
-  "Heighten eerie psychological dread",
-  "Focus on bureaucratic corruption & red tape",
-  "Urgent countdown / ticking clock",
+  "More intimate & character-driven",
+  "Heighten suspense & ticking clock",
+  "Deepen personal relationships & stakes",
+  "Accentuate strange or uncanny rules",
+  "Focus on social friction & hidden motives",
+  "Lighter, warmer, or more comedic tone",
+  "Darker psychological undercurrent",
 ];
 
 export const DivergenceStage: React.FC<DivergenceStageProps> = ({
@@ -68,6 +71,8 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
   sparkText,
   divergenceError,
   onRetry,
+  settings,
+  onUpdateSettings: _onUpdateSettings,
 }) => {
   // Push further across all 4 (original branch)
   const [pushingTakeId, setPushingTakeId] = useState<string | null>(null);
@@ -165,9 +170,17 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-[var(--ink-soft)] pb-4">
         <div>
-          <span className="text-[11px] font-apparatus font-semibold uppercase tracking-widest text-[var(--graphite)]">
-            Stage 02 · Divergence
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-apparatus font-semibold uppercase tracking-widest text-[var(--graphite)]">
+              Stage 02 · Divergence
+            </span>
+            {settings && (
+              <span className="text-[9px] font-mono-ui px-1.5 py-0.2 rounded bg-[var(--gold)]/15 text-[var(--gold)] border border-[var(--gold)]/30 font-semibold">
+                {settings.quality} · {settings.divergenceMode}
+                {settings.authorFlavor.mode !== "Off" && " · Flavor Active"}
+              </span>
+            )}
+          </div>
           <h2 className="text-2xl font-manuscript font-normal text-[var(--ink)] mt-1">
             Four angles on the premise.
           </h2>
@@ -282,9 +295,16 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
                     )}
                   </div>
 
-                  <span className="lore-key-tag shrink-0">
-                    {take.genreTone}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {take.authorFlavorName && (
+                      <span className="text-[9px] font-apparatus px-1.5 py-0.2 rounded bg-[var(--ink-blue)]/15 text-[var(--ink-blue)] font-semibold border border-[var(--ink-blue)]/30">
+                        {take.authorFlavorName}
+                      </span>
+                    )}
+                    <span className="lore-key-tag shrink-0">
+                      {take.genreTone}
+                    </span>
+                  </div>
                 </div>
 
                 {/* VERSION HISTORY NAVIGATOR BAR */}

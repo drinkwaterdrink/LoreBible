@@ -67,7 +67,7 @@ export function calculateLocalGravityAudit(npcText: string, userText: string): G
 
   const diagnosticNotes = notes.length > 0
     ? notes.join(" ")
-    : "Low gravity drift. The NPC maintains distinct tactical friction, physical exhaustion, and self-interested motivation.";
+    : "Low gravity drift. The NPC maintains authentic autonomy, personal stakes, and natural character voice.";
 
   return {
     modelVoice,
@@ -191,7 +191,7 @@ export function auditOpeningMessageLocal(firstMessage: string, sparkText?: strin
       explanation: staticFlagged
         ? `The scene begins with passive historical setup ("${staticQuote}") rather than immediate physical motion.`
         : "Clean: Opens mid-motion (in media res) with immediate tactile pressure and active character speech.",
-      remedy: "Start with an iron latch dropping, a coin hitting the zinc counter, or a question barked through an intake screen.",
+      remedy: "Start with an immediate physical action, tactile environmental cue, or dialogue spoken mid-motion.",
     },
     {
       id: "asking_feelings" as const,
@@ -202,7 +202,7 @@ export function auditOpeningMessageLocal(firstMessage: string, sparkText?: strin
       explanation: endingFlagged
         ? `Ending the post with an artificial prompt question ("${endingQuote}") breaks narrative immersion.`
         : "Clean: Closes with a lingering threat, a suspended action, or an expectant glance rather than a prompt.",
-      remedy: "End on the NPC's cold gaze or an unbolted lock; never ask 'What do you do next?'.",
+      remedy: "End on an unresolved sensory detail, a suspended action, or an expectant glance; never ask 'What do you do next?'.",
     },
   ];
 
@@ -221,13 +221,13 @@ export function auditOpeningMessageLocal(firstMessage: string, sparkText?: strin
 
 export function performVoiceCheckLocal(lines: string[], npcName: string): VoiceCheckResult {
   const assistantPatterns = [
-    { regex: /how can i help/i, note: "Classic AI greeting cliché. Substitute an uncooperative procedural demand." },
-    { regex: /happy to help/i, note: "Helpful assistant inflection. NPCs in this setting do not assist for free." },
-    { regex: /feel free to/i, note: "Customer service phrasing. Replace with an administrative deadline." },
-    { regex: /what can i do for you/i, note: "Service counter voice. Characters should protect their own time." },
+    { regex: /how can i help/i, note: "Classic AI greeting cliché. Substitute an authentic, character-driven opener." },
+    { regex: /happy to help/i, note: "Helpful assistant inflection. NPCs should act from their own motivations and priorities." },
+    { regex: /feel free to/i, note: "Customer service phrasing. Replace with natural setting-appropriate dialogue." },
+    { regex: /what can i do for you/i, note: "Service counter voice. Characters should speak with their own distinct voice." },
     { regex: /is there anything else/i, note: "Polite wrap-up pattern typical of LLM assistants." },
-    { regex: /certainly!/i, note: "Enthusiastic obedience. Needs reluctance or transactional bargaining." },
-    { regex: /i'd be glad to/i, note: "Unconditional friendliness violates setting stakes." },
+    { regex: /certainly!/i, note: "Generic assistant enthusiasm. Ground the response in this character's authentic disposition." },
+    { regex: /i'd be glad to/i, note: "Generic assistant friendliness violates natural character stakes." },
     { regex: /as an ai/i, note: "Fatal meta-assistant contamination." },
   ];
 

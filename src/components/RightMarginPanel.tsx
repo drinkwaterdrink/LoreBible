@@ -162,7 +162,7 @@ export const RightMarginPanel: React.FC<RightMarginPanelProps> = ({
                   onChange={(e) =>
                     onUpdateCanon({ ...canon, franchiseName: e.target.value })
                   }
-                  placeholder="e.g. Hunter x Hunter, Dune"
+                  placeholder="e.g. Star Wars, Pride & Prejudice, Dune"
                   className="w-full text-[11px] input-underline py-0.5"
                 />
               </div>
@@ -245,7 +245,7 @@ export const RightMarginPanel: React.FC<RightMarginPanelProps> = ({
                     type="text"
                     value={newNonNeg}
                     onChange={(e) => setNewNonNeg(e.target.value)}
-                    placeholder="e.g. hunter academy"
+                    placeholder="e.g. herbalist guild, deep-orbit station"
                     className="input-underline text-[10px] w-full py-0.5"
                     autoFocus
                   />

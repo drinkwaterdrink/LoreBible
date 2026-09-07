@@ -132,11 +132,11 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
       const npcName = activeVoiceNpc.fields?.name || "Character";
       // Generate sample dialogue lines based on character profile
       const sampleLines = [
-        `"State your business at the gate, and keep your hands where the bailiff can see them."`,
-        `"If you're looking for sympathy, check the municipal cemetery. Here, we run on copper vouchers."`,
-        `"I could look at your papers, but it will cost two silver pieces to jump the ledger queue."`,
-        `"Don't speak so loud. The walls here have ears, and the ears belong to Inspector Corvis."`,
-        `"Step through before the steam vent discharges, or spend the night in the mud sluice."`,
+        `"State your business, and keep your hands where I can see them."`,
+        `"If you're looking for unearned sympathy, you've come to the wrong door."`,
+        `"I could consider your request, but everything in this place carries an immediate price."`,
+        `"Don't speak so loud. The walls here have ears, and neither of us needs the scrutiny."`,
+        `"Make your decision before the window closes, or step aside."`,
       ];
 
       const res = await voiceCheckApi({
@@ -338,24 +338,24 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={() => handleSendUserTurn("I show you a counterfeit voucher with an irregular seal.")}
+                  onClick={() => handleSendUserTurn("I present questionable credentials with an irregular seal.")}
                   className="px-2 py-1 text-[11px] font-manuscript rounded bg-[var(--vellum)] border border-[var(--ink-soft)] hover:border-[var(--graphite)] text-[var(--ink)]"
                 >
-                  &quot;Show counterfeit voucher&quot;
+                  &quot;Present questionable credentials&quot;
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleSendUserTurn("I offer two silver marks to skip the waiting line.")}
+                  onClick={() => handleSendUserTurn("I offer an immediate private incentive to overlook protocol.")}
                   className="px-2 py-1 text-[11px] font-manuscript rounded bg-[var(--vellum)] border border-[var(--ink-soft)] hover:border-[var(--graphite)] text-[var(--ink)]"
                 >
-                  &quot;Attempt silver bribe&quot;
+                  &quot;Attempt leverage / bribe&quot;
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleSendUserTurn("I ask what happened to the applicant who was dragged out earlier.")}
+                  onClick={() => handleSendUserTurn("I ask about the unexpected incident that occurred just before I arrived.")}
                   className="px-2 py-1 text-[11px] font-manuscript rounded bg-[var(--vellum)] border border-[var(--ink-soft)] hover:border-[var(--graphite)] text-[var(--ink)]"
                 >
-                  &quot;Inquire about dragged applicant&quot;
+                  &quot;Probe sensitive incident&quot;
                 </button>
               </div>
             </div>
@@ -745,7 +745,7 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
               value={openingText}
               onChange={(e) => setOpeningText(e.target.value)}
               className="w-full p-4 rounded-[2px] text-xs sm:text-sm font-manuscript text-[var(--ink)] bg-[var(--vellum)] border border-[var(--ink-soft)] focus:outline-none focus:border-[var(--rubric)] leading-relaxed resize-y"
-              placeholder="Start in media res: an iron latch dropping, rain hitting the zinc counter, an official demanding vouchers..."
+              placeholder="Start in media res: an unexpected sound, a tense threshold, an interlocutor demanding answers..."
             />
           </div>
         </div>
