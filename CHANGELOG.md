@@ -4,6 +4,25 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.33 — 2026-09-08
+
+### Added
+
+- Divergence cards now carry stable lineage metadata identifying their node, immutable parent, root, and the operation that created them.
+- Regression coverage protects single-card reroll/steer ancestry, push-further fan-out, and reroll-all history isolation.
+
+### Changed
+
+- **Push further** now sends the exact selected Divergence card to the generation service and requires every returned branch to develop that source.
+- Rerolling all angles starts a clean board of independent roots instead of attaching new cards to old histories by array position.
+- Single-card rerolls, steering, and manual edits share one lineage-aware versioning path and avoid recursively nesting version histories.
+- The compact application version label now reads `v0.33`.
+
+### Fixed
+
+- Reordered model results can no longer inherit the history of an unrelated angle during **Reroll all**.
+- Cancelled or failed board-level generation continues to leave the last accepted Divergence board untouched; only completed results are committed.
+
 ## v0.32 — 2026-09-08
 
 ### Added

@@ -60,12 +60,31 @@ export async function fetchDivergenceTakes(
   canon: CanonConfig,
   pushInstruction?: string,
   settings?: GenerationSettings,
-  options?: { signal?: AbortSignal; onEvent?: (event: GenerationStreamEvent) => void },
+  options?: {
+    signal?: AbortSignal;
+    onEvent?: (event: GenerationStreamEvent) => void;
+    sourceTake?: DivergenceTake;
+    operation?: "initial" | "reroll_all" | "push_further";
+  },
 ): Promise<DivergenceTake[]> {
+  const sourceTake = options?.sourceTake
+    ? (() => {
+        const { versions: _versions, versionIndex: _versionIndex, ...selectedSnapshot } = options.sourceTake;
+        return selectedSnapshot;
+      })()
+    : undefined;
   const res = await fetch("/api/divergence", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ sparkText, parse, canon, pushInstruction, settings }),
+    body: JSON.stringify({
+      sparkText,
+      parse,
+      canon,
+      pushInstruction,
+      settings,
+      sourceTake,
+      operation: options?.operation,
+    }),
     signal: options?.signal,
   });
   if (!res.ok) {

@@ -43,6 +43,7 @@ import { readSparkDraft, writeSparkDraft } from "./lib/sparkDraft";
 import { createDraftScenarioDocument, DEFAULT_CANON, DEFAULT_PHYSICS } from "./lib/scenarioDraft";
 import { captureSavedProject, captureWorkspaceDraft, restoreSavedProject, restoreWorkspaceDraft } from "./lib/projectWorkspace";
 import { clearWorkspaceDraft, readWorkspaceDraft, writeWorkspaceDraft } from "./lib/workspacePersistence";
+import { appendDivergenceVersion, initializeDivergenceBoard, initializePushedBoard } from "./lib/divergenceLineage";
 import { Menu, Feather, X, PlusCircle, Save } from "lucide-react";
 import { AppVersionBadge } from "./components/AppVersionBadge";
 import { StorageRecoveryNotice } from "./components/StorageRecoveryNotice";
@@ -486,12 +487,8 @@ export default function App() {
         setParse(currentParse);
       }
 
-      const generatedTakes = await fetchDivergenceTakes(sparkText, currentParse, canon, undefined, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)) });
-      const initializedTakes = generatedTakes.map((take) => ({
-        ...take,
-        versions: [take],
-        versionIndex: 0,
-      }));
+      const generatedTakes = await fetchDivergenceTakes(sparkText, currentParse, canon, undefined, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)), operation: "initial" });
+      const initializedTakes = initializeDivergenceBoard(generatedTakes, "initial");
       setTakes(initializedTakes);
       if (initializedTakes.length > 0) {
         setSelectedTakeId(initializedTakes[0].id);
@@ -521,17 +518,8 @@ export default function App() {
     setIsLoadingDivergence(true);
     setDivergenceError(null);
     try {
-      const freshTakes = await fetchDivergenceTakes(sparkText, parse, canon, undefined, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)) });
-      const initializedTakes = freshTakes.map((freshTake, idx) => {
-        const prevTake = takes[idx];
-        const prevVersions = prevTake?.versions || (prevTake ? [prevTake] : []);
-        const newVersions = [...prevVersions, freshTake];
-        return {
-          ...freshTake,
-          versions: newVersions,
-          versionIndex: newVersions.length - 1,
-        };
-      });
+      const freshTakes = await fetchDivergenceTakes(sparkText, parse, canon, undefined, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)), operation: "reroll_all" });
+      const initializedTakes = initializeDivergenceBoard(freshTakes, "reroll_all");
       setTakes(initializedTakes);
       if (initializedTakes.length > 0) {
         setSelectedTakeId(initializedTakes[0].id);
@@ -558,12 +546,8 @@ export default function App() {
     setIsLoadingDivergence(true);
     setDivergenceError(null);
     try {
-      const branchedTakes = await fetchDivergenceTakes(sparkText, parse, canon, pushInstruction, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)) });
-      const initialized = branchedTakes.map((bTake) => ({
-        ...bTake,
-        versions: [bTake],
-        versionIndex: 0,
-      }));
+      const branchedTakes = await fetchDivergenceTakes(sparkText, parse, canon, pushInstruction, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)), sourceTake: take, operation: "push_further" });
+      const initialized = initializePushedBoard(branchedTakes, take);
       setTakes(initialized);
       if (initialized.length > 0) {
         setSelectedTakeId(initialized[0].id);
@@ -600,15 +584,7 @@ export default function App() {
         settings,
       });
 
-      const prevVersions = targetTake.versions && targetTake.versions.length > 0
-        ? targetTake.versions
-        : [targetTake];
-      const newVersions = [...prevVersions, freshTake];
-      const takeWithHistory: DivergenceTake = {
-        ...freshTake,
-        versions: newVersions,
-        versionIndex: newVersions.length - 1,
-      };
+      const takeWithHistory = appendDivergenceVersion(targetTake, freshTake, "reroll");
 
       setTakes((prev) =>
         prev.map((t) =>
@@ -654,15 +630,7 @@ export default function App() {
         steerNote: steerInstruction,
       };
 
-      const prevVersions = targetTake.versions && targetTake.versions.length > 0
-        ? targetTake.versions
-        : [targetTake];
-      const newVersions = [...prevVersions, steeredWithNote];
-      const takeWithHistory: DivergenceTake = {
-        ...steeredWithNote,
-        versions: newVersions,
-        versionIndex: newVersions.length - 1,
-      };
+      const takeWithHistory = appendDivergenceVersion(targetTake, steeredWithNote, "steer");
 
       setTakes((prev) =>
         prev.map((t) =>
@@ -715,18 +683,12 @@ export default function App() {
         const matches = t.id === updatedTake.id || t.versions?.some((v) => v.id === updatedTake.id);
         if (!matches) return t;
 
-        const prevVersions = t.versions || [t];
         const editedSnapshot: DivergenceTake = {
           ...updatedTake,
           id: `take-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
           isEdited: true,
         };
-        const newVersions = [...prevVersions, editedSnapshot];
-        const finalTake: DivergenceTake = {
-          ...editedSnapshot,
-          versions: newVersions,
-          versionIndex: newVersions.length - 1,
-        };
+        const finalTake = appendDivergenceVersion(t, editedSnapshot, "manual_edit");
 
         if (selectedTakeId === t.id) {
           setSelectedTakeId(finalTake.id);

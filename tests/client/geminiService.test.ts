@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseSparkApi, streamForgeDocument } from "../../src/services/geminiService";
+import { fetchDivergenceTakes, parseSparkApi, streamForgeDocument } from "../../src/services/geminiService";
 import { GenerationRequestError } from "../../src/contracts/generationFailure";
 
 test("parseSparkApi forwards the caller abort signal", async () => {
@@ -52,5 +52,53 @@ test("Forge client dispatches structured progress and cancellation", async () =>
       onCancelled: (message) => seen.push(message),
     });
     expect(seen).toEqual(["Bundle 1", "Forge stopped."]);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("push-further sends the exact selected take and operation to the server", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: Record<string, unknown> | undefined;
+  const sourceTake = {
+    id: "take-selected",
+    title: "Selected branch",
+    pitch: "The exact selected pitch",
+    genreTone: "Noir",
+    angle: "Social fracture",
+    retainedNonNegotiables: ["Keep this"],
+    versions: [{
+      id: "older-version",
+      title: "Older branch",
+      pitch: "Do not send this alternative",
+      genreTone: "Noir",
+      angle: "Social fracture",
+      retainedNonNegotiables: ["Keep this"],
+    }],
+    versionIndex: 0,
+  };
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requestBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ takes: [{ ...sourceTake, id: "child" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    await fetchDivergenceTakes(
+      "spark",
+      { franchise: null, nonNegotiables: [], registerWords: [], userRole: null, openNegotiables: [] },
+      { enabled: false, franchiseName: null, fidelity: "Riff", explanation: "" },
+      "make it stranger",
+      undefined,
+      { sourceTake, operation: "push_further" },
+    );
+    expect(requestBody?.sourceTake).toEqual({
+      id: "take-selected",
+      title: "Selected branch",
+      pitch: "The exact selected pitch",
+      genreTone: "Noir",
+      angle: "Social fracture",
+      retainedNonNegotiables: ["Keep this"],
+    });
+    expect(requestBody?.operation).toBe("push_further");
   } finally { globalThis.fetch = originalFetch; }
 });

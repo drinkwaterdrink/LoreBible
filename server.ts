@@ -780,13 +780,21 @@ app.post("/api/divergence", async (req, res) => {
     requestLifecycle?.dispose();
   };
   try {
-    const { sparkText, parse, canon, pushInstruction, settings } = req.body;
+    const { sparkText, parse, canon, pushInstruction, settings, sourceTake, operation } = req.body;
     if (!sparkText) {
       if (wantsStream) {
         finishStream({ type: "error", task: "divergence", message: "Missing sparkText" });
         return;
       }
       return res.status(400).json({ error: "Missing sparkText" });
+    }
+    if (operation === "push_further" && (!sourceTake?.id || !sourceTake?.title || !sourceTake?.pitch)) {
+      const message = "Push further requires the exact selected Divergence take.";
+      if (wantsStream) {
+        finishStream({ type: "error", task: "divergence", message, code: "INVALID_REQUEST", action: "retry", retryable: false });
+        return;
+      }
+      return res.status(400).json({ error: message, code: "INVALID_REQUEST" });
     }
 
     let modelSelection: ModelSelection | null = null;
@@ -841,6 +849,9 @@ app.post("/api/divergence", async (req, res) => {
 
     const divergenceModeGuidance = buildDivergenceModeGuidance(settings?.divergenceMode || "Exploratory");
     const sharedContext = buildSharedContext({ sparkText, parse, canon });
+    const sourceTakeDirective = sourceTake
+      ? `\nSELECTED SOURCE TAKE (the immutable parent of every new branch):\n${JSON.stringify(sourceTake, null, 2)}\nEvery result must develop this exact take. Do not substitute another displayed angle.`
+      : "";
 
     if (ai || modelSelection) {
       try {
@@ -856,6 +867,7 @@ ${divergenceModeGuidance}
 DIVERGENCE ARCHITECT:
 Analyze the scenario premise and propose 6 structurally distinct candidate branches.
 ${sharedContext}
+${sourceTakeDirective}
 ${pushInstruction ? `USER PUSH INSTRUCTION: "${pushInstruction}"` : ""}
 
 UNIVERSAL POSSIBILITY SPACE DIMENSIONS TO EXPLORE:
@@ -991,6 +1003,7 @@ ${branchFlavorInstructions}
 DIVERGENCE WRITER:
 Flesh out the following 4 selected scenario branches into rich Divergence cards.
 ${sharedContext}
+${sourceTakeDirective}
 CRITIC NOTES: "${criticResult?.criticNotes || "Ensure high conceptual distance."}"
 
 SELECTED BRANCHES:
@@ -1076,6 +1089,7 @@ ${authorFlavorPrompt}
 
 DIVERGENCE GENERATOR: Generate four competing premise angles for this scenario.
 ${sharedContext}
+${sourceTakeDirective}
 ${pushInstruction ? `\nSPECIAL USER PUSH INSTRUCTION: "${pushInstruction}"` : ""}
 
 UNIVERSAL POSSIBILITY SPACE:

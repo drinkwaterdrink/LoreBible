@@ -68,6 +68,14 @@ export interface AuthorFlavorConfig {
 export type DivergenceMode = 'Faithful' | 'Exploratory' | 'Radical' | 'Unbound';
 export type GenerationQuality = 'Fast' | 'Balanced' | 'Deep Craft';
 export type SemanticRerollType = 'reimagine' | 'mutate' | 'push_further';
+export type DivergenceLineageOperation = 'initial' | 'reroll_all' | 'reroll' | 'steer' | 'push_further' | 'manual_edit';
+
+export interface DivergenceLineage {
+  nodeId: string;
+  rootNodeId: string;
+  parentNodeId: string | null;
+  operation: DivergenceLineageOperation;
+}
 
 export interface DivergenceTake {
   id: string;
@@ -91,6 +99,7 @@ export interface DivergenceTake {
     urgency?: string;
     score?: number;
   };
+  lineage?: DivergenceLineage;
   versions?: DivergenceTake[];
   versionIndex?: number;
   steerNote?: string;

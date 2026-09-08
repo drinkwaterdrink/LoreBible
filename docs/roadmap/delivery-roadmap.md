@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** planned, with no future milestone marked complete. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 5 of 17 ordered roadmap items complete (M0.1–M0.5); 12 remain. M0.6 is next. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 
@@ -37,16 +37,16 @@ Milestone numbers M0–M9 correspond broadly to user phases 1–10, with the add
 
 ### Ordered implementation backlog
 
-| ID | Deliverable / likely files | Required evidence |
-|---|---|---|
-| M0.1 | Remove status fallback from card System Prompt and synthetic constant state entries; `src/lib/exportGenerators.ts` | Sentinel state absent from runtime exports, retained in source/Markdown; explicit prompt retained; CHARX JSON inspected |
-| M0.2 | Neutral draft construction; `src/App.tsx:createDraftScenarioDocument`, extracted pure builder, relevant defaults | Blank/cozy/family/space fixtures contain no invented genre motifs; existing authored documents unchanged |
-| M0.3 | Inventory every generation path, remove silent creative fallback, preserve candidates; `server.ts`, `server/generation`, `src/services` | Missing key/auth/quota/timeout/schema failure never returns authored content as AI success; prior content survives |
-| M0.4 | Complete V2 save/load and draft lifecycle; `src/App.tsx`, `src/lib/projectPersistence.ts` | Per-project workflow/settings/history restore; delete does not resurrect; corruption recovery; reload/mobile mode switch |
-| M0.5 | Correct branch lineage and steering; App handlers, divergence contracts/services | Selected take sent; immutable parent IDs; reroll-all no index-based history mixing; failure/cancel retains board |
-| M0.6 | Capability-aware model discovery and shared gateway coverage; `server/model`, connection routes/UI | Provider-scoped normalization; text-capability filtering; custom IDs; stale catalog race; discovery deadline; Refine uses selected route |
-| M0.7 | Consolidate active exporters around minimal typed IR; retire duplicates in `src/services/geminiService.ts` after caller audit | Golden outputs/round trips; documented omissions; no serializer-generated canon |
-| M0.8 | CI and mobile workflow regression gate; `.github/workflows`, existing tests/components | Frozen install, `bun test`, typecheck, build; mobile dialogs/actions; exact terminal SSE behavior |
+| ID | Status | Deliverable / likely files | Required evidence |
+|---|---|---|---|
+| M0.1 | Complete | Remove status fallback from card System Prompt and synthetic constant state entries; `src/lib/exportGenerators.ts` | Sentinel state absent from runtime exports, retained in source/Markdown; explicit prompt retained; CHARX JSON inspected |
+| M0.2 | Complete | Neutral draft construction; `src/App.tsx:createDraftScenarioDocument`, extracted pure builder, relevant defaults | Blank/cozy/family/space fixtures contain no invented genre motifs; existing authored documents unchanged |
+| M0.3 | Complete | Inventory every generation path, remove silent creative fallback, preserve candidates; `server.ts`, `server/generation`, `src/services` | Missing key/auth/quota/timeout/schema failure never returns authored content as AI success; prior content survives |
+| M0.4 | Complete | Complete V2 save/load and draft lifecycle; `src/App.tsx`, `src/lib/projectPersistence.ts` | Per-project workflow/settings/history restore; delete does not resurrect; corruption recovery; reload/mobile mode switch |
+| M0.5 | Complete | Correct branch lineage and steering; App handlers, divergence contracts/services | Selected take sent; immutable parent IDs; reroll-all no index-based history mixing; failure/cancel retains board |
+| M0.6 | Next | Capability-aware model discovery and shared gateway coverage; `server/model`, connection routes/UI | Provider-scoped normalization; text-capability filtering; custom IDs; stale catalog race; discovery deadline; Refine uses selected route |
+| M0.7 | Pending | Consolidate active exporters around minimal typed IR; retire duplicates in `src/services/geminiService.ts` after caller audit | Golden outputs/round trips; documented omissions; no serializer-generated canon |
+| M0.8 | Pending | CI and mobile workflow regression gate; `.github/workflows`, existing tests/components | Frozen install, `bun test`, typecheck, build; mobile dialogs/actions; exact terminal SSE behavior |
 
 Use [M0.1's detailed plan](../superpowers/plans/2026-09-07-production-studio-export-state-safety.md) first. Each subsequent row gets a bounded implementation plan with a reproduced failure before product-code changes.
 
