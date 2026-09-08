@@ -14,6 +14,16 @@ LoreBible will become a creative production studio whose rich source world and c
 4. [Capability evidence register](capability-evidence.md): what official Lumiverse documentation supports versus what still needs native fixtures and runtime evidence.
 5. [First implementation slice](../superpowers/plans/2026-09-07-production-studio-export-state-safety.md): narrowly scoped, test-first removal of temporary-state leakage from exports.
 
+Application changes are summarized in the project-level [changelog](../../CHANGELOG.md).
+
+## Current progress
+
+| Slice | Status | Result |
+|---|---|---|
+| M0.1 Export-state safety | Complete | Temporary state is excluded from runtime lore/System Prompt while remaining in the manuscript source. |
+| M0.2 Neutral draft construction | Complete | New drafts preserve supplied material without legacy scenario-template content; verified across blank, domestic, social, and science-fiction fixtures. |
+| M0.3 Truthful generation failures | Next | Inventory and remove or explicitly isolate remaining deterministic creative fallbacks. |
+
 ## Recommended order
 
 ```text
