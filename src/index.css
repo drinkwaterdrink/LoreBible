@@ -397,7 +397,7 @@ html, body {
   .btn-tertiary,
   #margin-drawer-backdrop,
   #sidebar-mobile-backdrop,
-  .print\\:hidden,
+  [class~="print:hidden"],
   [role="dialog"] {
     display: none !important;
   }
@@ -451,4 +451,3 @@ html, body {
     border-left: 1pt dashed #888888 !important;
   }
 }
-

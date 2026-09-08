@@ -16,9 +16,18 @@ import {
 import {
   buildAuthorFlavorPrompt,
   selectAutoAuthor,
+  selectAutoAuthorsForBranches,
   getAuthorProfile,
 } from "./src/lib/authorProfiles.js";
-import { AuthorFlavorStrength } from "./src/types";
+import { AuthorFlavorStrength, AuthorId } from "./src/types";
+import { parseModelSelection, type GenerationProvenance, type ModelSelection } from "./src/contracts/generation.js";
+import { parseCanonicalSparkDNA } from "./src/contracts/spark.js";
+import { createWindowsDpapiProtector } from "./server/secrets/dpapi.js";
+import { createProfileStore, resolveDefaultProfileStorePath, type ProfileStore } from "./server/secrets/profileStore.js";
+import { registerConnectionRoutes } from "./server/routes/connections.js";
+import { createModelGateway, ModelGatewayError, type ModelGateway } from "./server/model/gateway.js";
+import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
+import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
 
 dotenv.config();
 
@@ -26,6 +35,33 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "5mb" }));
+
+// Connection profiles are persisted outside the repository and encrypted with
+// Windows DPAPI. The route layer is isolated so generation can report a
+// truthful, actionable error when no profile store is available.
+let connectionStore: ProfileStore | null = null;
+let modelGateway: ModelGateway | null = null;
+try {
+  connectionStore = createProfileStore(
+    resolveDefaultProfileStorePath(),
+    createWindowsDpapiProtector(),
+  );
+  modelGateway = createModelGateway(connectionStore);
+  registerConnectionRoutes(app, {
+    store: connectionStore,
+    environmentGeminiKey: process.env.GEMINI_API_KEY,
+  });
+} catch (error) {
+  console.warn("[Connections] Profile routes unavailable:", error instanceof Error ? error.message : error);
+}
+
+function resolveRequestedModelSelection(value: unknown): ModelSelection | null {
+  if (value == null) return null;
+  const selection = parseModelSelection(value);
+  if (!selection.profileId && !selection.modelId) return null;
+  if (!selection.profileId || !selection.modelId) throw new TypeError("Both modelSelection.profileId and modelSelection.modelId are required.");
+  return selection;
+}
 
 let aiClient: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI | null {
@@ -116,7 +152,8 @@ function cleanErrorMessage(err: any): string {
 async function callGeminiGenerate(
   ai: GoogleGenAI,
   config: any,
-  thinkingLevel: ThinkingLevel = ThinkingLevel.MEDIUM
+  thinkingLevel: ThinkingLevel = ThinkingLevel.MEDIUM,
+  signal?: AbortSignal,
 ): Promise<any> {
   let lastError: any = null;
 
@@ -138,6 +175,7 @@ async function callGeminiGenerate(
     // Up to 2 attempts per model (for brief rate limit delays only)
     for (let modelAttempt = 1; modelAttempt <= 2; modelAttempt++) {
       try {
+        signal?.throwIfAborted();
         const isGemini3 = model.startsWith("gemini-3.");
         const requestPayload = {
           ...config,
@@ -145,6 +183,7 @@ async function callGeminiGenerate(
           config: {
             ...(config.config || {}),
             ...(isGemini3 ? { thinkingConfig: { thinkingLevel } } : {}),
+            ...(signal ? { abortSignal: signal } : {}),
           },
         };
         const res = await ai.models.generateContent(requestPayload);
@@ -171,7 +210,7 @@ async function callGeminiGenerate(
         const delayMs = parseRetryDelayMs(err);
         if (delayMs && delayMs <= 8000 && modelAttempt < 2) {
           console.log(`[Rate Limit on ${model}] Waiting ${delayMs}ms before retry...`);
-          await new Promise((r) => setTimeout(r, delayMs));
+          if (signal) await abortableDelay(delayMs, signal); else await new Promise((r) => setTimeout(r, delayMs));
           continue;
         }
 
@@ -183,6 +222,79 @@ async function callGeminiGenerate(
   }
 
   throw new Error(cleanErrorMessage(lastError));
+}
+
+async function executeSelectedModelWithRetry<T>(params: {
+  gateway: ModelGateway;
+  selection: ModelSelection;
+  systemInstruction: string;
+  userPrompt: string;
+  responseSchema?: any;
+  stageName: string;
+  sparkText: string;
+  maxAttempts?: number;
+  thinkingLevel?: ThinkingLevel;
+  signal?: AbortSignal;
+  onAttempt?: (attempt: number, maxAttempts: number, stageName: string) => void;
+  onMetadata?: (provenance: GenerationProvenance) => void;
+  onContentDelta?: (delta: string) => void;
+  onReasoningDelta?: (delta: string) => void;
+  onUsage?: (usage: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number }) => void;
+  onProviderActivity?: () => void;
+}): Promise<T> {
+  const { gateway, selection, responseSchema, stageName, sparkText, maxAttempts = 3, thinkingLevel = ThinkingLevel.MEDIUM } = params;
+  let reasoningEffort: "low" | "medium" | "high" = thinkingLevel === ThinkingLevel.LOW ? "low" : thinkingLevel === ThinkingLevel.HIGH ? "high" : "medium";
+  let lastErr: unknown = null;
+  let userPrompt = params.userPrompt;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      params.signal?.throwIfAborted();
+      const attemptLabel = attempt > 1 && lastErr instanceof ModelGatewayError && lastErr.code === "REQUEST_TIMEOUT"
+        ? `${stageName} · retrying with ${reasoningEffort} reasoning after timeout`
+        : stageName;
+      params.onAttempt?.(attempt, maxAttempts, attemptLabel);
+      if (attempt > 1) {
+        const delay = Math.min(12000, (attempt - 1) * 1500);
+        if (params.signal) await abortableDelay(delay, params.signal); else await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      const response = await gateway.generate({
+        profileId: selection.profileId as string,
+        modelId: selection.modelId as string,
+        systemInstruction: params.systemInstruction,
+        userPrompt,
+        responseSchema,
+        reasoningEffort,
+        stageName,
+        timeoutMs: 150_000,
+        inactivityTimeoutMs: 60_000,
+        overallTimeoutMs: 480_000,
+        onContentDelta: params.onContentDelta,
+        onReasoningDelta: params.onReasoningDelta,
+        onUsage: params.onUsage,
+        onProviderActivity: params.onProviderActivity,
+        signal: params.signal,
+      });
+      if (!params.onUsage && !params.onReasoningDelta) params.onMetadata?.(response.provenance);
+      let parsed: any = response.parsed;
+      if (parsed === undefined) parsed = JSON.parse(response.text);
+      const contaminatedTerm = checkContamination(parsed);
+      if (contaminatedTerm) {
+        if (attempt < maxAttempts) {
+          userPrompt += `\n\nCRITICAL: The previous generation contained the banned illustrative term "${contaminatedTerm}". Generate fresh content faithful to: "${sparkText}".`;
+          continue;
+        }
+        throw new ModelGatewayError(`Structured output contained a banned illustrative term: ${contaminatedTerm}.`, "INVALID_STRUCTURED_OUTPUT", 502);
+      }
+      return parsed as T;
+    } catch (error) {
+      if (params.signal?.aborted || (error instanceof ModelGatewayError && error.code === "CLIENT_DISCONNECTED")) throw error;
+      lastErr = error;
+      console.log(`[Notice in ${stageName} selected-model attempt ${attempt}/${maxAttempts}]:`, cleanErrorMessage(error));
+      if (error instanceof ModelGatewayError && error.code === "REQUEST_TIMEOUT") reasoningEffort = lowerReasoningEffort(reasoningEffort);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(cleanErrorMessage(lastErr));
 }
 
 // Health check
@@ -310,6 +422,15 @@ async function executeGeminiWithRetry<T>(params: {
   sparkText: string;
   maxAttempts?: number;
   thinkingLevel?: ThinkingLevel;
+  modelSelection?: ModelSelection | null;
+  gateway?: ModelGateway | null;
+  signal?: AbortSignal;
+  onAttempt?: (attempt: number, maxAttempts: number, stageName: string) => void;
+  onMetadata?: (provenance: GenerationProvenance) => void;
+  onContentDelta?: (delta: string) => void;
+  onReasoningDelta?: (delta: string) => void;
+  onUsage?: (usage: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number }) => void;
+  onProviderActivity?: () => void;
 }): Promise<T> {
   const {
     ai,
@@ -320,17 +441,45 @@ async function executeGeminiWithRetry<T>(params: {
     sparkText,
     maxAttempts = 3,
     thinkingLevel = ThinkingLevel.MEDIUM,
+    modelSelection = null,
+    gateway = null,
+    signal,
+    onAttempt,
+    onMetadata,
   } = params;
+  if (modelSelection) {
+    if (!gateway) throw new ModelGatewayError("Connection profile storage is unavailable.", "INTERNAL_ERROR", 500);
+    return executeSelectedModelWithRetry<T>({
+      gateway,
+      selection: modelSelection,
+      systemInstruction,
+      userPrompt,
+      responseSchema,
+      stageName,
+      sparkText,
+      maxAttempts,
+      thinkingLevel,
+      signal,
+      onAttempt,
+      onMetadata,
+      onContentDelta: params.onContentDelta,
+      onReasoningDelta: params.onReasoningDelta,
+      onUsage: params.onUsage,
+      onProviderActivity: params.onProviderActivity,
+    });
+  }
   let lastErr: any = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
+      signal?.throwIfAborted();
+      onAttempt?.(attempt, maxAttempts, stageName);
       if (attempt > 1) {
         const baseDelay = (attempt - 1) * 1500;
         const suggestedDelay = parseRetryDelayMs(lastErr) || 0;
         const delay = Math.max(baseDelay, Math.min(suggestedDelay, 12000));
         console.log(`[Retry] Attempt ${attempt}/${maxAttempts} for ${stageName} after ${delay}ms...`);
-        await new Promise((r) => setTimeout(r, delay));
+        if (signal) await abortableDelay(delay, signal); else await new Promise((r) => setTimeout(r, delay));
       }
 
       const res = await callGeminiGenerate(
@@ -343,8 +492,24 @@ async function executeGeminiWithRetry<T>(params: {
             ...(responseSchema ? { responseSchema } : {}),
           },
         },
-        thinkingLevel
+        thinkingLevel,
+        signal,
       );
+
+      const usageMetadata = res.usageMetadata || {};
+      onMetadata?.({
+        provider: "gemini",
+        profileId: "environment-gemini",
+        modelRequested: "gemini-auto",
+        modelReported: null,
+        repaired: false,
+        offlineFallback: false,
+        usage: {
+          inputTokens: typeof usageMetadata.promptTokenCount === "number" ? usageMetadata.promptTokenCount : undefined,
+          outputTokens: typeof usageMetadata.candidatesTokenCount === "number" ? usageMetadata.candidatesTokenCount : undefined,
+          reasoningTokens: typeof usageMetadata.thoughtsTokenCount === "number" ? usageMetadata.thoughtsTokenCount : undefined,
+        },
+      });
 
       const rawText = res.text || "";
       let parsed: any;
@@ -365,7 +530,7 @@ Return ONLY strictly valid, complete JSON matching the required schema. Do not o
             responseMimeType: "application/json",
             ...(responseSchema ? { responseSchema } : {}),
           },
-        });
+        }, ThinkingLevel.MEDIUM, signal);
         parsed = JSON.parse(repairRes.text || "{}");
       }
 
@@ -381,6 +546,7 @@ Return ONLY strictly valid, complete JSON matching the required schema. Do not o
 
       return parsed as T;
     } catch (err: any) {
+      if (signal?.aborted) throw err;
       lastErr = err;
       console.log(`[Notice in ${stageName} attempt ${attempt}/${maxAttempts}]: ${cleanErrorMessage(err)}`);
     }
@@ -446,14 +612,16 @@ function generateDeterministicSparkParse(sparkText: string): any {
     userRole,
     openNegotiables,
     sparkDNA: {
-      corePremise: sparkText,
-      genreArchetype: "Grounded Speculative / Open Scenario",
-      tonalRegisters: registerWords,
       nonNegotiables,
-      implicitAssumptions: ["Standard social or environmental consequences apply"],
-      wildcards: ["Unexpected personal history", "Hidden resource constraint"],
+      premisePromise: sparkText,
+      toneEnvelope: { primary: registerWords[0] || "grounded", descriptors: registerWords },
+      genreSignals: ["Grounded Speculative / Open Scenario"],
+      playerAgencyBoundaries: "{{user}} retains authority over protagonist choices.",
+      openVariables: openNegotiables,
+      existingPressures: [],
+      assumptions: ["Standard social or environmental consequences apply"],
+      opportunitySpace: ["Unexpected personal history", "Hidden resource constraint"],
       userRole,
-      openNegotiables,
       franchise,
     },
   };
@@ -518,16 +686,23 @@ function generateDeterministicDivergenceTakes(sparkText: string, parse?: any): a
 
 // 1. Spark Parse endpoint (Extracts full SparkDNA & backward-compatible SparkParse)
 app.post("/api/parse-spark", async (req, res) => {
+  const requestLifecycle = createRequestAbortSignal(req, res);
   try {
-    const { sparkText, allowOfflineFallback = false } = req.body;
+    const { sparkText, settings, allowOfflineFallback = false } = req.body;
     if (!sparkText || typeof sparkText !== "string") {
       return res.status(400).json({ error: "Missing sparkText" });
     }
 
+    let modelSelection: ModelSelection | null = null;
+    try {
+      modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
+    } catch (error) {
+      return res.status(400).json({ code: "INVALID_MODEL_SELECTION", error: error instanceof Error ? error.message : "Invalid model selection." });
+    }
     const ai = getAI();
     let parsed: any = null;
 
-    if (ai) {
+    if (ai || modelSelection) {
       try {
         const prompt = `${CREATIVE_CONSTITUTION_PROMPT}
 
@@ -535,16 +710,18 @@ You are the Spark DNA Extractor for Lore Bible.
 Analyze the user's raw scenario spark text.
 Extract a complete, genre-agnostic SPARK DNA profile without imposing any unrequested genre tropes or legacy biases.
 
-Return strictly JSON matching this structure:
+Return strictly JSON matching this canonical structure:
 {
-  "corePremise": "Dense, crisp summary of the premise as written",
-  "genreArchetype": "The native genre/archetype of the spark (e.g. Cozy Romance, Sci-Fi Mystery, Political Satire, etc.)",
-  "tonalRegisters": ["2 to 4 evocative adjectives capturing the energy, tone, and register"],
   "nonNegotiables": ["2 to 5 concrete proper nouns, factions, institutions, objects, or mandatory conditions explicitly stated"],
-  "implicitAssumptions": ["1 to 3 implicit narrative assumptions present in the prompt"],
-  "wildcards": ["1 to 3 unconstrained vectors where divergence is encouraged to play freely"],
+  "premisePromise": "Dense, crisp summary of the premise as written",
+  "toneEnvelope": { "primary": "The primary native tone", "descriptors": ["2 to 4 evocative descriptors"] },
+  "genreSignals": ["The native genre or archetype signals"],
+  "playerAgencyBoundaries": "Explicitly state that {{user}} retains authority over protagonist choices.",
+  "openVariables": ["2 to 4 open questions or fertile ambiguities"],
+  "existingPressures": ["1 to 3 pressures already present in the spark"],
+  "assumptions": ["1 to 3 implicit narrative assumptions present in the prompt"],
+  "opportunitySpace": ["1 to 3 unconstrained vectors where divergence is encouraged"],
   "userRole": "The user's starting occupation, station, or position if explicitly specified, or null if open",
-  "openNegotiables": ["2 to 4 open questions or fertile ambiguities"],
   "franchise": "The specific IP/franchise name if Canon Mode was detected, else null"
 }
 
@@ -554,17 +731,19 @@ User spark:
         const parseSchema = {
           type: Type.OBJECT,
           properties: {
-            corePremise: { type: Type.STRING },
-            genreArchetype: { type: Type.STRING },
-            tonalRegisters: { type: Type.ARRAY, items: { type: Type.STRING } },
             nonNegotiables: { type: Type.ARRAY, items: { type: Type.STRING } },
-            implicitAssumptions: { type: Type.ARRAY, items: { type: Type.STRING } },
-            wildcards: { type: Type.ARRAY, items: { type: Type.STRING } },
+            premisePromise: { type: Type.STRING },
+            toneEnvelope: { type: Type.OBJECT, properties: { primary: { type: Type.STRING }, descriptors: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["primary", "descriptors"] },
+            genreSignals: { type: Type.ARRAY, items: { type: Type.STRING } },
+            playerAgencyBoundaries: { type: Type.STRING },
+            openVariables: { type: Type.ARRAY, items: { type: Type.STRING } },
+            existingPressures: { type: Type.ARRAY, items: { type: Type.STRING } },
+            assumptions: { type: Type.ARRAY, items: { type: Type.STRING } },
+            opportunitySpace: { type: Type.ARRAY, items: { type: Type.STRING } },
             userRole: { type: Type.STRING, nullable: true },
-            openNegotiables: { type: Type.ARRAY, items: { type: Type.STRING } },
             franchise: { type: Type.STRING, nullable: true },
           },
-          required: ["corePremise", "genreArchetype", "tonalRegisters", "nonNegotiables", "openNegotiables"],
+          required: ["nonNegotiables", "premisePromise", "toneEnvelope", "genreSignals", "playerAgencyBoundaries", "openVariables", "existingPressures", "assumptions", "opportunitySpace"],
         };
 
         const result = await executeGeminiWithRetry<any>({
@@ -576,22 +755,31 @@ User spark:
           sparkText,
           maxAttempts: 2,
           thinkingLevel: ThinkingLevel.LOW,
+          modelSelection,
+          gateway: modelGateway,
+          signal: requestLifecycle.signal,
         });
 
         if (result && result.nonNegotiables && result.nonNegotiables.length > 0) {
+          const canonical = parseCanonicalSparkDNA(result);
           parsed = {
-            ...result,
-            registerWords: result.tonalRegisters || [],
-            sparkDNA: result,
+            franchise: canonical.franchise,
+            nonNegotiables: canonical.nonNegotiables,
+            registerWords: canonical.toneEnvelope.descriptors,
+            userRole: canonical.userRole,
+            openNegotiables: canonical.openVariables,
+            sparkDNA: canonical,
           };
         }
       } catch (modelErr: any) {
+        if (requestLifecycle.signal.aborted || (modelErr instanceof ModelGatewayError && modelErr.code === "CLIENT_DISCONNECTED")) return;
         console.warn("[Spark Parse Model Call Error]:", modelErr?.message || modelErr);
         if (!allowOfflineFallback) {
           const delayMs = parseRetryDelayMs(modelErr);
           const isRateLimit = Boolean(delayMs) || getRawErrorString(modelErr).includes("429");
-          const status = isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
+          const status = modelErr instanceof ModelGatewayError ? modelErr.status : isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
           return res.status(status).json({
+            code: modelErr instanceof ModelGatewayError ? modelErr.code : undefined,
             error: cleanErrorMessage(modelErr),
             retryDelayMs: delayMs || (isRateLimit ? 10000 : null),
             isRateLimit,
@@ -606,19 +794,56 @@ User spark:
 
     return res.json(parsed);
   } catch (err: any) {
+    if (requestLifecycle.signal.aborted) return;
     console.error("Parse spark unhandled error:", err);
     return res.status(500).json({ error: cleanErrorMessage(err) });
+  } finally {
+    requestLifecycle.dispose();
   }
 });
 
 // 2. Divergence endpoint (Universal Possibility Space + Deep Craft Pipeline + Author Flavor)
 app.post("/api/divergence", async (req, res) => {
+  const wantsStream = String(req.headers.accept || "").includes("text/event-stream");
+  const requestLifecycle = wantsStream ? createRequestAbortSignal(req, res) : null;
+  const session = wantsStream ? createSseSession(res, "divergence") : null;
+  session?.startHeartbeat();
+  const sendProgress = (phase: "requesting" | "architect" | "critic" | "writer" | "validating" | "retrying", label: string, completedSteps?: number, totalSteps?: number, attempt?: number, maxAttempts?: number) => session?.send({ type: "progress", task: "divergence", phase, label, completedSteps, totalSteps, attempt, maxAttempts });
+  const sendMetadata = (provenance: GenerationProvenance) => {
+    if (provenance.usage) session?.send({ type: "usage", task: "divergence", usage: provenance.usage });
+    if (provenance.reasoning) session?.send({ type: "reasoning", task: "divergence", delta: provenance.reasoning, complete: true });
+  };
+  const selectedProviderEvents = {
+    onContentDelta: (delta: string) => session?.send({ type: "output_delta" as const, task: "divergence" as const, characters: delta.length }),
+    onReasoningDelta: (delta: string) => session?.send({ type: "reasoning" as const, task: "divergence" as const, delta }),
+    onUsage: (usage: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number }) => session?.send({ type: "usage" as const, task: "divergence" as const, usage }),
+    onProviderActivity: () => session?.send({ type: "provider_activity" as const, task: "divergence" as const, at: Date.now() }),
+  };
+  const finishStream = (event: Parameters<NonNullable<typeof session>["finish"]>[0]) => {
+    session?.finish(event);
+    session?.dispose();
+    requestLifecycle?.dispose();
+  };
   try {
     const { sparkText, parse, canon, pushInstruction, settings, allowOfflineFallback = false } = req.body;
     if (!sparkText) {
+      if (wantsStream) {
+        finishStream({ type: "error", task: "divergence", message: "Missing sparkText" });
+        return;
+      }
       return res.status(400).json({ error: "Missing sparkText" });
     }
 
+    let modelSelection: ModelSelection | null = null;
+    try {
+      modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
+    } catch (error) {
+      if (wantsStream) {
+        finishStream({ type: "error", task: "divergence", code: "INVALID_MODEL_SELECTION", message: error instanceof Error ? error.message : "Invalid model selection." });
+        return;
+      }
+      return res.status(400).json({ code: "INVALID_MODEL_SELECTION", error: error instanceof Error ? error.message : "Invalid model selection." });
+    }
     const ai = getAI();
     let takes: any[] | null = null;
 
@@ -630,32 +855,22 @@ app.post("/api/divergence", async (req, res) => {
 
     // Resolve Author Flavor
     let authorFlavorPrompt = "";
-    let activeAuthorName: string | undefined;
-    let activeAuthorStrength: string | undefined;
+    let activeAuthorStrength: AuthorFlavorStrength | undefined;
+    let manualAuthorId: AuthorId | undefined;
+    let authorAssignments: Array<{ id: AuthorId; name: string; strength: AuthorFlavorStrength }> = [];
 
     const authorFlavor = settings?.authorFlavor;
     if (authorFlavor && (authorFlavor.mode || "").toLowerCase() !== "off") {
+      const isOverdrive = Boolean(authorFlavor.overdrive || authorFlavor.overdriveEnabled);
+      const rawStrength = (authorFlavor.strength || "sprinkle").toLowerCase();
+      activeAuthorStrength = isOverdrive ? "Overdrive" : rawStrength === "strong" ? "Strong" : "Sprinkle";
       let authorId = authorFlavor.manualAuthor || authorFlavor.manualAuthorId;
-      if ((authorFlavor.mode || "").toLowerCase() === "auto" || !authorId) {
-        authorId = selectAutoAuthor(
-          sparkText,
-          parse?.registerWords || parse?.tonalRegisters || [],
-          (authorFlavor.autoBehavior || "compatible").toLowerCase()
-        );
-      }
+      if ((authorFlavor.mode || "").toLowerCase() === "auto") authorId = undefined;
       if (authorId) {
         const profile = getAuthorProfile(authorId);
         if (profile) {
-          activeAuthorName = profile.name;
-          const isOverdrive = Boolean(authorFlavor.overdrive || authorFlavor.overdriveEnabled);
-          const rawStrength = (authorFlavor.strength || "sprinkle").toLowerCase();
-          const strengthVal: AuthorFlavorStrength = isOverdrive
-            ? "Overdrive"
-            : rawStrength === "strong"
-            ? "Strong"
-            : "Sprinkle";
-          activeAuthorStrength = strengthVal;
-          authorFlavorPrompt = buildAuthorFlavorPrompt(authorId, strengthVal);
+          manualAuthorId = authorId as AuthorId;
+          authorFlavorPrompt = buildAuthorFlavorPrompt(authorId, activeAuthorStrength);
         }
       }
     }
@@ -663,17 +878,16 @@ app.post("/api/divergence", async (req, res) => {
     const divergenceModeGuidance = buildDivergenceModeGuidance(settings?.divergenceMode || "Exploratory");
     const sharedContext = buildSharedContext({ sparkText, parse, canon });
 
-    if (ai) {
+    if (ai || modelSelection) {
       try {
         if (quality === "Deep Craft") {
           // --- DEEP CRAFT 3-STAGE PIPELINE ---
           // Stage 1: Architect (propose 6 diverse candidate branches across possibility space)
           console.log("[Deep Craft] Stage 1: Architect proposing 6 diverse candidate branches...");
+          sendProgress("architect", "Architect proposing six distinct branches", 0, 4);
           const architectPrompt = `${CREATIVE_CONSTITUTION_PROMPT}
 
 ${divergenceModeGuidance}
-
-${authorFlavorPrompt}
 
 DIVERGENCE ARCHITECT:
 Analyze the scenario premise and propose 6 structurally distinct candidate branches.
@@ -722,12 +936,19 @@ REQUIREMENTS:
             sparkText,
             maxAttempts: 2,
             thinkingLevel: ThinkingLevel.HIGH,
+            modelSelection,
+            gateway: modelGateway,
+            signal: requestLifecycle?.signal,
+            onAttempt: (attempt, maxAttempts, stageName) => sendProgress(attempt > 1 ? "retrying" : "architect", attempt > 1 ? `Retrying ${stageName}` : stageName, 0, 4, attempt, maxAttempts),
+            onMetadata: sendMetadata,
+            ...selectedProviderEvents,
           });
 
           const candidates = architectResult?.candidates || [];
 
           // Stage 2: Distinctiveness Critic & Selection
           console.log("[Deep Craft] Stage 2: Critic evaluating candidate branches for distinctiveness...");
+          sendProgress("critic", "Critic comparing branch distinctiveness", 1, 4);
           const criticPrompt = `${DISTINCTIVENESS_CRITIC_PROMPT}
 
 PREMISE: "${sparkText}"
@@ -761,6 +982,12 @@ TASK:
             sparkText,
             maxAttempts: 2,
             thinkingLevel: ThinkingLevel.HIGH,
+            modelSelection,
+            gateway: modelGateway,
+            signal: requestLifecycle?.signal,
+            onAttempt: (attempt, maxAttempts, stageName) => sendProgress(attempt > 1 ? "retrying" : "critic", attempt > 1 ? `Retrying ${stageName}` : stageName, 1, 4, attempt, maxAttempts),
+            onMetadata: sendMetadata,
+            ...selectedProviderEvents,
           });
 
           const chosenIndices = criticResult?.selectedIndices || [0, 1, 2, 3];
@@ -769,13 +996,27 @@ TASK:
             selectedCandidates.push(...candidates.filter((c) => !chosenIndices.includes(c.index)).slice(0, 4 - selectedCandidates.length));
           }
 
+          const flavorMode = (authorFlavor?.mode || "off").toLowerCase();
+          if (flavorMode === "auto") {
+            const ids = selectAutoAuthorsForBranches(
+              selectedCandidates,
+              { primary: parse?.corePromise || sparkText, descriptors: parse?.registerWords || parse?.tonalRegisters || [] },
+              String(authorFlavor?.autoBehavior || "compatible").toLowerCase() === "wildcard" ? "Wildcard" : "Compatible",
+            );
+            authorAssignments = ids.map((id) => ({ id, name: getAuthorProfile(id)?.name || id, strength: activeAuthorStrength || "Sprinkle" }));
+          } else if (manualAuthorId) {
+            authorAssignments = selectedCandidates.map(() => ({ id: manualAuthorId!, name: getAuthorProfile(manualAuthorId)?.name || manualAuthorId!, strength: activeAuthorStrength || "Sprinkle" }));
+          }
+          const branchFlavorInstructions = authorAssignments.map((assignment, index) => `BRANCH ${index + 1} (${selectedCandidates[index]?.title || "selected branch"}):\n${buildAuthorFlavorPrompt(assignment.id, assignment.strength)}`).join("\n");
+
           // Stage 3: Writer (Flesh out the 4 selected branches into full Divergence cards)
           console.log("[Deep Craft] Stage 3: Writer drafting finalized Divergence cards...");
+          sendProgress("writer", "Writer drafting four divergence cards", 2, 4);
           const writerPrompt = `${CREATIVE_CONSTITUTION_PROMPT}
 
 ${divergenceModeGuidance}
 
-${authorFlavorPrompt}
+${branchFlavorInstructions}
 
 DIVERGENCE WRITER:
 Flesh out the following 4 selected scenario branches into rich Divergence cards.
@@ -831,6 +1072,12 @@ Return strictly JSON with the "takes" array containing 4 items.`;
             sparkText,
             maxAttempts: 2,
             thinkingLevel: ThinkingLevel.HIGH,
+            modelSelection,
+            gateway: modelGateway,
+            signal: requestLifecycle?.signal,
+            onAttempt: (attempt, maxAttempts, stageName) => sendProgress(attempt > 1 ? "retrying" : "writer", attempt > 1 ? `Retrying ${stageName}` : stageName, 2, 4, attempt, maxAttempts),
+            onMetadata: sendMetadata,
+            ...selectedProviderEvents,
           });
 
           if (writerResult && Array.isArray(writerResult.takes) && writerResult.takes.length > 0) {
@@ -838,6 +1085,19 @@ Return strictly JSON with the "takes" array containing 4 items.`;
           }
         } else {
           // --- FAST / BALANCED STREAMLINED GENERATION ---
+          sendProgress("writer", "Generating four divergence angles", 0, 1);
+          const flavorMode = (authorFlavor?.mode || "off").toLowerCase();
+          if (flavorMode === "auto") {
+            const placeholderBranches = ["psychological", "systemic", "strange", "structural"].map((primaryEngine) => ({ primaryEngine }));
+            authorAssignments = selectAutoAuthorsForBranches(
+              placeholderBranches,
+              { primary: parse?.corePromise || sparkText, descriptors: parse?.registerWords || parse?.tonalRegisters || [] },
+              String(authorFlavor?.autoBehavior || "compatible").toLowerCase() === "wildcard" ? "Wildcard" : "Compatible",
+            ).map((id) => ({ id, name: getAuthorProfile(id)?.name || id, strength: activeAuthorStrength || "Sprinkle" }));
+            authorFlavorPrompt = authorAssignments.map((assignment, index) => `TAKE ${index + 1}:\n${buildAuthorFlavorPrompt(assignment.id, assignment.strength)}`).join("\n");
+          } else if (manualAuthorId) {
+            authorAssignments = Array.from({ length: 4 }, () => ({ id: manualAuthorId!, name: getAuthorProfile(manualAuthorId)?.name || manualAuthorId!, strength: activeAuthorStrength || "Sprinkle" }));
+          }
           const prompt = `${CREATIVE_CONSTITUTION_PROMPT}
 
 ${divergenceModeGuidance}
@@ -897,6 +1157,12 @@ Emit strictly valid JSON matching the schema with 4 takes in the "takes" array.`
             sparkText,
             maxAttempts: 2,
             thinkingLevel,
+            modelSelection,
+            gateway: modelGateway,
+            signal: requestLifecycle?.signal,
+            onAttempt: (attempt, maxAttempts, stageName) => sendProgress(attempt > 1 ? "retrying" : "writer", attempt > 1 ? `Retrying ${stageName}` : stageName, 0, 1, attempt, maxAttempts),
+            onMetadata: sendMetadata,
+            ...selectedProviderEvents,
           });
 
           if (result && Array.isArray(result.takes) && result.takes.length > 0) {
@@ -904,16 +1170,26 @@ Emit strictly valid JSON matching the schema with 4 takes in the "takes" array.`
           }
         }
       } catch (modelErr: any) {
+        if (requestLifecycle?.signal.aborted || (modelErr instanceof ModelGatewayError && modelErr.code === "CLIENT_DISCONNECTED")) {
+          finishStream({ type: "cancelled", task: "divergence", message: "Generation stopped." });
+          return;
+        }
         console.warn("[Divergence Model Call Error]:", modelErr?.message || modelErr);
         if (!allowOfflineFallback) {
           const delayMs = parseRetryDelayMs(modelErr);
           const isRateLimit = Boolean(delayMs) || getRawErrorString(modelErr).includes("429");
-          const status = isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
-          return res.status(status).json({
+          const status = modelErr instanceof ModelGatewayError ? modelErr.status : isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
+          const payload = {
+            code: modelErr instanceof ModelGatewayError ? modelErr.code : undefined,
             error: cleanErrorMessage(modelErr),
             retryDelayMs: delayMs || (isRateLimit ? 10000 : null),
             isRateLimit,
-          });
+          };
+          if (wantsStream) {
+            finishStream({ type: "error", task: "divergence", code: payload.code, message: payload.error });
+            return;
+          }
+          return res.status(status).json(payload);
         }
       }
     }
@@ -922,17 +1198,31 @@ Emit strictly valid JSON matching the schema with 4 takes in the "takes" array.`
       takes = generateDeterministicDivergenceTakes(sparkText, parse);
     }
 
+    sendProgress("validating", "Validating and publishing angles", quality === "Deep Craft" ? 3 : 0, quality === "Deep Craft" ? 4 : 1);
     const sanitizedTakes = takes.map((t, idx) => ({
       ...t,
       id: t.id || `take-${Date.now()}-${idx}`,
       angle: cleanAngleLabel(t.angle, idx),
-      authorFlavorName: activeAuthorName || t.authorFlavorName,
-      authorFlavorStrength: activeAuthorStrength || t.authorFlavorStrength,
+      authorFlavorId: authorAssignments[idx]?.id || t.authorFlavorId,
+      authorFlavorName: authorAssignments[idx]?.name || t.authorFlavorName,
+      authorFlavorStrength: authorAssignments[idx]?.strength || t.authorFlavorStrength,
     }));
 
+    if (wantsStream) {
+      finishStream({ type: "done", task: "divergence", result: { takes: sanitizedTakes } });
+      return;
+    }
     return res.json({ takes: sanitizedTakes });
   } catch (err: any) {
+    if (requestLifecycle?.signal.aborted) {
+      finishStream({ type: "cancelled", task: "divergence", message: "Generation stopped." });
+      return;
+    }
     console.error("Divergence endpoint error:", err);
+    if (wantsStream) {
+      finishStream({ type: "error", task: "divergence", message: cleanErrorMessage(err) });
+      return;
+    }
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
@@ -958,6 +1248,12 @@ app.post("/api/divergence-single", async (req, res) => {
       return res.status(400).json({ error: "Missing sparkText" });
     }
 
+    let modelSelection: ModelSelection | null = null;
+    try {
+      modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
+    } catch (error) {
+      return res.status(400).json({ code: "INVALID_MODEL_SELECTION", error: error instanceof Error ? error.message : "Invalid model selection." });
+    }
     const ai = getAI();
     let take: any | null = null;
     const angleCategory = targetAngle || currentTake?.angle || "Dynamic Angle";
@@ -977,7 +1273,7 @@ app.post("/api/divergence-single", async (req, res) => {
       authorPrompt = buildAuthorFlavorPrompt(activeAuthor, strengthVal);
     }
 
-    if (ai) {
+    if (ai || modelSelection) {
       try {
         const sharedContext = buildSharedContext({ sparkText, parse, canon });
         const prompt = `${CREATIVE_CONSTITUTION_PROMPT}
@@ -1033,6 +1329,8 @@ REQUIREMENTS:
           sparkText,
           maxAttempts: 2,
           thinkingLevel: ThinkingLevel.MEDIUM,
+          modelSelection,
+          gateway: modelGateway,
         });
 
         if (result && result.take && result.take.title) {
@@ -1050,8 +1348,9 @@ REQUIREMENTS:
         if (!allowOfflineFallback) {
           const delayMs = parseRetryDelayMs(modelErr);
           const isRateLimit = Boolean(delayMs) || getRawErrorString(modelErr).includes("429");
-          const status = isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
+          const status = modelErr instanceof ModelGatewayError ? modelErr.status : isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
           return res.status(status).json({
+            code: modelErr instanceof ModelGatewayError ? modelErr.code : undefined,
             error: cleanErrorMessage(modelErr),
             retryDelayMs: delayMs || (isRateLimit ? 10000 : null),
             isRateLimit,
@@ -1090,18 +1389,28 @@ REQUIREMENTS:
 
 // 3. Document Forge endpoint (Sequential 6-Bundle Generation over SSE)
 app.post("/api/forge", async (req, res) => {
-  const { sparkText, parse, canon, physics, chosenTake } = req.body;
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-
+  const { sparkText, parse, canon, physics, chosenTake, settings, allowOfflineFallback = false } = req.body;
+  const requestLifecycle = createRequestAbortSignal(req, res);
+  const session = createSseSession(res, "forge");
+  session.startHeartbeat();
+  const cleanup = () => { session.dispose(); requestLifecycle.dispose(); };
   const sendEvent = (event: string, data: any) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    if (event === "section") session.send({ type: "section", task: "forge", key: data.key, data: data.data });
+    else if (event === "log") session.send({ type: "progress", task: "forge", phase: data.status === "done" ? "validating" : data.stage === "init" ? "requesting" : "forge_bundle", label: data.label });
+    else if (event === "done") { session.finish({ type: "done", task: "forge", result: data }); cleanup(); }
+    else if (event === "error") { session.finish({ type: "error", task: "forge", message: data.message || "Forge generation failed.", code: data.code }); cleanup(); }
   };
 
+  let modelSelection: ModelSelection | null = null;
+  try {
+    modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
+  } catch (error) {
+    sendEvent("error", { stage: "Initialization", code: "INVALID_MODEL_SELECTION", message: error instanceof Error ? error.message : "Invalid model selection." });
+    return res.end();
+  }
+
   const ai = getAI();
-  if (!ai) {
+  if (!ai && !modelSelection) {
     sendEvent("error", {
       stage: "Initialization",
       message: "GEMINI_API_KEY is not configured on the server.",
@@ -1683,6 +1992,7 @@ app.post("/api/forge", async (req, res) => {
   try {
     for (let i = 0; i < bundles.length; i++) {
       const bundle = bundles[i];
+      session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Forging bundle ${i + 1} of ${bundles.length}: ${bundle.name}`, completedSteps: i, totalSteps: bundles.length });
       sendEvent("log", {
         stage: bundle.keys[0],
         label: `Forging ${bundle.name}…`,
@@ -1721,8 +2031,33 @@ Emit strictly valid JSON matching the schema for this bundle.`;
           stageName: bundle.name,
           sparkText,
           maxAttempts: 3,
+          modelSelection,
+          gateway: modelGateway,
+          signal: requestLifecycle.signal,
+          onAttempt: (attempt, maxAttempts, stageName) => session.send({ type: "progress", task: "forge", phase: attempt > 1 ? "retrying" : "forge_bundle", label: attempt > 1 ? `Retrying ${stageName}` : `Waiting for ${stageName}`, completedSteps: i, totalSteps: bundles.length, attempt, maxAttempts }),
+          onMetadata: (provenance) => {
+            if (provenance.usage) session.send({ type: "usage", task: "forge", usage: provenance.usage });
+            if (provenance.reasoning) session.send({ type: "reasoning", task: "forge", delta: provenance.reasoning, complete: true });
+          },
+          onContentDelta: (delta) => session.send({ type: "output_delta", task: "forge", characters: delta.length }),
+          onReasoningDelta: (delta) => session.send({ type: "reasoning", task: "forge", delta }),
+          onUsage: (usage) => session.send({ type: "usage", task: "forge", usage }),
+          onProviderActivity: () => session.send({ type: "provider_activity", task: "forge", at: Date.now() }),
         });
       } catch (bundleErr: any) {
+        if (requestLifecycle.signal.aborted || (bundleErr instanceof ModelGatewayError && bundleErr.code === "CLIENT_DISCONNECTED")) {
+          session.finish({ type: "cancelled", task: "forge", message: "Forge stopped." });
+          cleanup();
+          return;
+        }
+        if (modelSelection && !allowOfflineFallback) {
+          sendEvent("error", {
+            stage: bundle.name,
+            code: bundleErr instanceof ModelGatewayError ? bundleErr.code : "PROVIDER_UNAVAILABLE",
+            message: bundleErr instanceof Error ? bundleErr.message : "Selected provider generation failed.",
+          });
+          return res.end();
+        }
         console.warn(`[Forge Fallback] Model generation hit quota/rate limit for ${bundle.name}, engaging thematic manuscript synthesis:`, bundleErr?.message || bundleErr);
         sendEvent("log", {
           stage: bundle.keys[0],
@@ -1758,6 +2093,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
         label: `${bundle.name} — inked and verified`,
         status: "done",
       });
+      session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `${bundle.name} complete`, completedSteps: i + 1, totalSteps: bundles.length });
     }
 
     if (doc.core?.title) {
@@ -1766,14 +2102,17 @@ Emit strictly valid JSON matching the schema for this bundle.`;
 
     sendEvent("log", { stage: "final", label: "Manuscript inked and bound across all 6 bundles", status: "done" });
     sendEvent("done", { document: doc });
-    res.end();
   } catch (err: any) {
+    if (requestLifecycle.signal.aborted) {
+      session.finish({ type: "cancelled", task: "forge", message: "Forge stopped." });
+      cleanup();
+      return;
+    }
     console.error("Forge pipeline error:", err);
     sendEvent("error", {
       stage: "The Forge",
       message: err?.message || "Generation halted due to model error",
     });
-    res.end();
   }
 });
 

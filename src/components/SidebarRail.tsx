@@ -1,11 +1,12 @@
 import React from "react";
-import { BookOpen, Moon, Sun, Archive, Sparkles, X, HelpCircle, Feather, PlusCircle, Save } from "lucide-react";
+import { BookOpen, Moon, Sun, Archive, Sparkles, X, HelpCircle, Feather, PlusCircle, Save, KeyRound } from "lucide-react";
 
 interface SidebarRailProps {
   currentStage: 1 | 2 | 3 | 4 | 5;
   onSelectStage: (stage: 1 | 2 | 3 | 4 | 5) => void;
   maxUnlockedStage: 1 | 2 | 3 | 4 | 5;
   workingTitle?: string;
+  modelSummary?: string;
   isDark: boolean;
   onToggleDark: () => void;
   onOpenVault: () => void;
@@ -13,6 +14,7 @@ interface SidebarRailProps {
   onOpenCommandPalette: () => void;
   onOpenShortcuts?: () => void;
   onOpenOnboarding?: () => void;
+  onOpenSettings?: () => void;
   onNewScenario?: () => void;
   onSaveScenario?: () => void;
   onCloseMobile?: () => void;
@@ -31,6 +33,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
   onSelectStage,
   maxUnlockedStage,
   workingTitle,
+  modelSummary,
   isDark,
   onToggleDark,
   onOpenVault,
@@ -38,6 +41,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
   onOpenCommandPalette,
   onOpenShortcuts,
   onOpenOnboarding,
+  onOpenSettings,
   onNewScenario,
   onSaveScenario,
   onCloseMobile,
@@ -87,6 +91,13 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
             <span className="text-xs italic manuscript font-manuscript text-[var(--ink)] line-clamp-2">
               {workingTitle}
             </span>
+          </div>
+        )}
+
+        {modelSummary && (
+          <div className="mb-4 px-2 py-1.5 border-l-2 border-[var(--rubric)]/60">
+            <span className="text-[9px] uppercase tracking-widest text-[var(--graphite)] block">Active model</span>
+            <span className="text-[10px] font-mono-ui text-[var(--ink)] line-clamp-2">{modelSummary}</span>
           </div>
         )}
 
@@ -219,6 +230,19 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
               <span className="text-[11px] uppercase tracking-wider font-apparatus">Guide Note</span>
             </span>
             <span className="text-[10px] font-hand text-[var(--ink-blue)]">read</span>
+          </button>
+        )}
+
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-[var(--graphite)] hover:text-[var(--ink)] hover:bg-[var(--vellum-raised)] transition-colors rounded-[2px]"
+            title="Configure provider connections and models"
+          >
+            <span className="flex items-center gap-2">
+              <KeyRound size={13} className="text-[var(--rubric)]" />
+              <span className="text-[11px] uppercase tracking-wider font-apparatus">Connections</span>
+            </span>
           </button>
         )}
 

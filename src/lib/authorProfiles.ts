@@ -276,7 +276,8 @@ export function selectAutoAuthor(
   toneEnvelope: { primary?: string; descriptors?: string[] } | undefined,
   primaryEngine?: string,
   autoBehavior: 'Compatible' | 'Wildcard' = 'Compatible',
-  excludeIds: AuthorId[] = []
+  excludeIds: AuthorId[] = [],
+  random: () => number = Math.random,
 ): AuthorId {
   const allIds = (Object.keys(AUTHOR_PROFILES) as AuthorId[]).filter(
     (id) => id !== 'narrative-style-overdrive' && !excludeIds.includes(id)
@@ -286,7 +287,7 @@ export function selectAutoAuthor(
 
   if (autoBehavior === 'Wildcard') {
     // Pick random from pool
-    return pool[Math.floor(Math.random() * pool.length)];
+    return pool[Math.floor(random() * pool.length)];
   }
 
   // Compatible mode: score profiles against tone & engine
@@ -329,6 +330,23 @@ export function selectAutoAuthor(
   scores.sort((a, b) => b.score - a.score);
   // Pick from top scoring candidates with light randomness
   const topCandidates = scores.slice(0, Math.min(3, scores.length));
-  const chosen = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+  const chosen = topCandidates[Math.floor(random() * topCandidates.length)];
   return chosen ? chosen.id : pool[0];
+}
+
+export function selectAutoAuthorsForBranches(
+  branches: Array<{ primaryEngine?: string; angle?: string }>,
+  toneEnvelope: { primary?: string; descriptors?: string[] } | undefined,
+  autoBehavior: 'Compatible' | 'Wildcard' = 'Compatible',
+  random: () => number = Math.random,
+): AuthorId[] {
+  const selected: AuthorId[] = [];
+  for (const branch of branches) {
+    const branchTone = {
+      primary: toneEnvelope?.primary,
+      descriptors: [...(toneEnvelope?.descriptors || []), branch.primaryEngine || "", branch.angle || ""].filter(Boolean),
+    };
+    selected.push(selectAutoAuthor(branchTone, branch.primaryEngine || branch.angle, autoBehavior, selected, random));
+  }
+  return selected;
 }

@@ -16,6 +16,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { RuledLinesSkeleton } from "./RuledLinesSkeleton";
+import { GenerationActivity, type GenerationActivityProps } from "./GenerationActivity";
 
 interface DivergenceStageProps {
   takes: DivergenceTake[];
@@ -35,6 +36,7 @@ interface DivergenceStageProps {
   onRetry?: () => void;
   settings?: GenerationSettings;
   onUpdateSettings?: (settings: GenerationSettings) => void;
+  generationActivity?: GenerationActivityProps;
 }
 
 interface EditFormState {
@@ -73,6 +75,7 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
   onRetry,
   settings,
   onUpdateSettings: _onUpdateSettings,
+  generationActivity,
 }) => {
   // Push further across all 4 (original branch)
   const [pushingTakeId, setPushingTakeId] = useState<string | null>(null);
@@ -192,15 +195,17 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
         <button
           id="reroll-all-divergence-btn"
           type="button"
-          onClick={onRerollAll}
-          disabled={isLoading || !!rerollingSingleId}
+          onClick={isLoading ? generationActivity?.onCancel : onRerollAll}
+          disabled={!!rerollingSingleId}
           className="btn-secondary flex items-center gap-1.5 self-start shrink-0 cursor-pointer disabled:opacity-50"
           title="Reroll all four angles together"
         >
           <Feather size={12} className={isLoading ? "text-[var(--rubric)] animate-pulse" : ""} />
-          <span>{isLoading ? "Recalibrating..." : "Reroll All Angles"}</span>
+          <span>{isLoading ? "Cancel Generation" : "Reroll All Angles"}</span>
         </button>
       </div>
+
+      {generationActivity && <GenerationActivity {...generationActivity} />}
 
       {/* Error Banner if Divergence generation failed */}
       {divergenceError && (

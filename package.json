@@ -1,15 +1,19 @@
 {
-  "name": "react-example",
+  "name": "lore-bible",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.3.0",
   "type": "module",
+  "packageManager": "bun@1.3.14",
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "clean": "bun -e \"import { rmSync } from 'node:fs'; for (const p of ['dist','server.js']) rmSync(p,{recursive:true,force:true})\"",
+    "lint": "tsc --noEmit",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "typecheck:milestone": "tsc --project tsconfig.providers.json --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -22,11 +26,13 @@
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "vite": "^6.2.3"
+    "react-dom": "^19.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/bun": "1.3.14",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",

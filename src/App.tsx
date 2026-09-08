@@ -28,11 +28,53 @@ import { OnboardingNote } from "./components/OnboardingNote";
 import { ShortcutsReferenceCard } from "./components/ShortcutsReferenceCard";
 import { WaxSealStamp } from "./components/WaxSealStamp";
 import { NewScenarioModal } from "./components/NewScenarioModal";
+import { SettingsModal } from "./components/SettingsModal";
+import { createSavedProjectV2, parseProjectStorage, saveProjectToStore, serializeProjectStore } from "./lib/projectPersistence";
+import type { GenerationProgressEvent, GenerationStreamEvent, GenerationTask, GenerationUsage } from "./contracts/generationProgress";
+import { appendBoundedReasoning } from "./lib/reasoningBuffer";
+import { readSparkDraft, writeSparkDraft } from "./lib/sparkDraft";
 import { Menu, Feather, X, PlusCircle, Save } from "lucide-react";
 
 const STORAGE_KEY_SCENARIOS = "lore_bible_saved_scenarios_v1";
-const STORAGE_KEY_CURRENT = "lore_bible_current_working_draft_v1";
+
+interface ActivityState {
+  progress: GenerationProgressEvent | null;
+  startedAt: number | null;
+  usage: GenerationUsage;
+  reasoning: string;
+  reasoningTruncated: boolean;
+  status: "idle" | "active" | "cancelled" | "complete" | "error";
+  lastEventAt: number | null;
+  lastProviderActivityAt: number | null;
+  outputCharacters: number;
+}
+
+function activeActivity(task: GenerationTask, label: string): ActivityState {
+  return { progress: { task, phase: "requesting", label }, startedAt: Date.now(), usage: {}, reasoning: "", reasoningTruncated: false, status: "active", lastEventAt: Date.now(), lastProviderActivityAt: null, outputCharacters: 0 };
+}
+
+function applyActivityEvent(state: ActivityState, event: GenerationStreamEvent): ActivityState {
+  if (event.type === "progress") return { ...state, progress: event, lastEventAt: Date.now() };
+  if (event.type === "heartbeat") return { ...state, lastEventAt: Date.now() };
+  if (event.type === "provider_activity") return { ...state, lastProviderActivityAt: event.at, lastEventAt: Date.now() };
+  if (event.type === "output_delta") return { ...state, outputCharacters: state.outputCharacters + event.characters, lastEventAt: Date.now() };
+  if (event.type === "usage") return { ...state, usage: {
+    inputTokens: (state.usage.inputTokens || 0) + (event.usage.inputTokens || 0),
+    outputTokens: (state.usage.outputTokens || 0) + (event.usage.outputTokens || 0),
+    reasoningTokens: (state.usage.reasoningTokens || 0) + (event.usage.reasoningTokens || 0),
+  }, lastEventAt: Date.now() };
+  if (event.type === "reasoning") {
+    const next = appendBoundedReasoning(state.reasoning, `${state.reasoning ? "\n\n" : ""}${event.delta}`);
+    return { ...state, reasoning: next.text, reasoningTruncated: state.reasoningTruncated || next.truncated, lastEventAt: Date.now() };
+  }
+  if (event.type === "cancelled") return { ...state, status: "cancelled", progress: { task: event.task, phase: "cancelled", label: event.message }, lastEventAt: Date.now() };
+  if (event.type === "error") return { ...state, status: "error", progress: { task: event.task, phase: "error", label: event.message }, lastEventAt: Date.now() };
+  if (event.type === "done") return { ...state, status: "complete", progress: { task: event.task, phase: "complete", label: "Complete" }, lastEventAt: Date.now() };
+  return state;
+}
+const STORAGE_KEY_SCENARIOS_V2 = "lore_bible_saved_projects_v2";
 const STORAGE_KEY_THEME = "lore_bible_theme_mode_v1";
+const STORAGE_KEY_MODEL_SELECTION = "lore_bible_model_selection_v1";
 
 const DEFAULT_PHYSICS: PhysicsConfig = {
   density: "Standard",
@@ -220,7 +262,9 @@ export default function App() {
   const [maxUnlockedStage, setMaxUnlockedStage] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   // Spark state
-  const [sparkText, setSparkText] = useState<string>("");
+  const [sparkText, setSparkText] = useState<string>(() => {
+    try { return readSparkDraft(window.localStorage); } catch { return ""; }
+  });
   const [parse, setParse] = useState<SparkParse | null>(null);
   const [isParsingSpark, setIsParsingSpark] = useState(false);
 
@@ -238,6 +282,14 @@ export default function App() {
       manualAuthorId: null,
       overdriveEnabled: false,
     },
+    modelSelection: (() => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_MODEL_SELECTION);
+        if (!saved) return null;
+        const parsed = JSON.parse(saved);
+        return parsed && typeof parsed === "object" ? { profileId: typeof parsed.profileId === "string" ? parsed.profileId : null, modelId: typeof parsed.modelId === "string" ? parsed.modelId : null } : null;
+      } catch { return null; }
+    })(),
   });
 
   // Divergence state
@@ -246,6 +298,10 @@ export default function App() {
   const [isLoadingDivergence, setIsLoadingDivergence] = useState(false);
   const [rerollingSingleId, setRerollingSingleId] = useState<string | null>(null);
   const [divergenceError, setDivergenceError] = useState<string | null>(null);
+  const [anchorActivity, setAnchorActivity] = useState<ActivityState>(() => ({ ...activeActivity("anchors", "Ready"), startedAt: null, status: "idle", lastEventAt: null }));
+  const [divergenceActivity, setDivergenceActivity] = useState<ActivityState>(() => ({ ...activeActivity("divergence", "Ready"), startedAt: null, status: "idle", lastEventAt: null }));
+  const anchorControllerRef = useRef<AbortController | null>(null);
+  const divergenceControllerRef = useRef<AbortController | null>(null);
 
   // Physics state
   const [physics, setPhysics] = useState<PhysicsConfig>(DEFAULT_PHYSICS);
@@ -256,12 +312,18 @@ export default function App() {
   const [buildLogs, setBuildLogs] = useState<BuildLogItem[]>([]);
   const [isForging, setIsForging] = useState(false);
   const [forgeError, setForgeError] = useState<string | null>(null);
+  const [forgeActivity, setForgeActivity] = useState<ActivityState>(() => ({ ...activeActivity("forge", "Ready"), startedAt: null, status: "idle", lastEventAt: null }));
+  const forgeControllerRef = useRef<AbortController | null>(null);
 
   // Vault & Modals
   const [savedScenarios, setSavedScenarios] = useState<LoreBibleDocument[]>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY_SCENARIOS);
-      return stored ? JSON.parse(stored) : [];
+      const raw = localStorage.getItem(STORAGE_KEY_SCENARIOS_V2) || localStorage.getItem(STORAGE_KEY_SCENARIOS);
+      const parsed = parseProjectStorage(raw);
+      if (parsed.recoveryJson) {
+        localStorage.setItem(`lore_bible_saved_projects_recovery_${Date.now()}`, parsed.recoveryJson);
+      }
+      return parsed.store.projects.map((project) => project.document);
     } catch {
       return [];
     }
@@ -285,6 +347,7 @@ export default function App() {
   });
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isNewScenarioModalOpen, setIsNewScenarioModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isWaxStampActive, setIsWaxStampActive] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -303,12 +366,41 @@ export default function App() {
     }, 3200);
   };
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_MODEL_SELECTION, JSON.stringify(settings.modelSelection || null));
+    } catch {
+      // Model IDs are a convenience only; generation remains usable if storage is unavailable.
+    }
+  }, [settings.modelSelection]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => writeSparkDraft(window.localStorage, sparkText), 250);
+    return () => window.clearTimeout(timer);
+  }, [sparkText]);
+
+  useEffect(() => () => {
+    anchorControllerRef.current?.abort();
+    divergenceControllerRef.current?.abort();
+    forgeControllerRef.current?.abort();
+  }, []);
+
+  const handleCancelAnchors = () => anchorControllerRef.current?.abort();
+  const handleCancelDivergence = () => divergenceControllerRef.current?.abort();
+  const handleCancelForge = () => forgeControllerRef.current?.abort();
+
   // Explicit Margin Inking handler (User presses button when finished writing)
   const handleAnalyzeSpark = async () => {
     if (!sparkText.trim()) return;
+    anchorControllerRef.current?.abort();
+    const controller = new AbortController();
+    anchorControllerRef.current = controller;
+    setAnchorActivity(activeActivity("anchors", "Sending anchors"));
     setIsParsingSpark(true);
     try {
-      const parsed = await parseSparkApi(sparkText);
+      setAnchorActivity((state) => ({ ...state, progress: { task: "anchors", phase: "waiting", label: "Waiting for model", completedSteps: 1, totalSteps: 3 } }));
+      const parsed = await parseSparkApi(sparkText, settings, controller.signal);
+      setAnchorActivity((state) => ({ ...state, progress: { task: "anchors", phase: "validating", label: "Validating anchors", completedSteps: 2, totalSteps: 3 } }));
       setParse((prev) => {
         if (!prev) return parsed;
         // Merge without losing user's custom non-negotiables
@@ -333,12 +425,20 @@ export default function App() {
         }));
       }
       setIsMarginOpen(true);
+      setAnchorActivity((state) => ({ ...state, status: "complete", progress: { task: "anchors", phase: "complete", label: "Anchors complete", completedSteps: 3, totalSteps: 3 } }));
       triggerToast("Margin Apparatus inked and analyzed from premise.");
-    } catch (err) {
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === "AbortError") {
+        setAnchorActivity((state) => ({ ...state, status: "cancelled", progress: { task: "anchors", phase: "cancelled", label: "Scribing stopped" } }));
+        triggerToast("Scribing stopped.");
+        return;
+      }
       console.error("Manual spark analyze error:", err);
+      setAnchorActivity((state) => ({ ...state, status: "error", progress: { task: "anchors", phase: "error", label: "Anchor analysis failed" } }));
       triggerToast("Unable to reach AI analyzer; offline template preserved.");
     } finally {
       setIsParsingSpark(false);
+      if (anchorControllerRef.current === controller) anchorControllerRef.current = null;
     }
   };
 
@@ -392,6 +492,7 @@ export default function App() {
     if (saveFirst) {
       handleSaveCurrentScenario();
     }
+    writeSparkDraft(window.localStorage, "");
     setSparkText("");
     setParse(null);
     setCanon({
@@ -436,6 +537,7 @@ export default function App() {
         setIsOnboardingOpen(false);
         setIsMobileNavOpen(false);
         setIsNewScenarioModalOpen(false);
+        setIsSettingsOpen(false);
       }
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
@@ -453,23 +555,51 @@ export default function App() {
 
   // Auto-save saved scenarios to localStorage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_SCENARIOS, JSON.stringify(savedScenarios));
-  }, [savedScenarios]);
+    try {
+      let store = parseProjectStorage(localStorage.getItem(STORAGE_KEY_SCENARIOS_V2)).store;
+      for (const savedDocument of savedScenarios) {
+        const project = createSavedProjectV2({
+          document: savedDocument,
+          workflow: {
+            stage: String(currentStage),
+            sparkParse: savedDocument.parse || null,
+            canon: savedDocument.canon,
+            physics: savedDocument.physics,
+            takes: savedDocument.takes || (savedDocument.chosenTake ? [savedDocument.chosenTake] : []),
+            selectedTakeId: savedDocument.chosenTake?.id || null,
+          },
+          generation: {
+            settings,
+            modelSelection: settings.modelSelection || { profileId: null, modelId: null },
+            provenance: [],
+          },
+        });
+        store = saveProjectToStore(store, project);
+      }
+      localStorage.setItem(STORAGE_KEY_SCENARIOS_V2, serializeProjectStore(store));
+    } catch {
+      // Vault persistence is best-effort; the active manuscript remains in memory.
+    }
+  }, [savedScenarios, currentStage, settings]);
 
   // Proceed from Stage 1 (SPARK) -> Stage 2 (DIVERGENCE)
   const handleProceedToDivergence = async () => {
     if (!sparkText.trim()) return;
+    divergenceControllerRef.current?.abort();
+    const controller = new AbortController();
+    divergenceControllerRef.current = controller;
+    setDivergenceActivity(activeActivity("divergence", "Preparing divergence"));
     setIsLoadingDivergence(true);
     setDivergenceError(null);
     try {
       // Ensure parse is ready
       let currentParse = parse;
       if (!currentParse || currentParse.nonNegotiables.length === 0) {
-        currentParse = await parseSparkApi(sparkText);
+        currentParse = await parseSparkApi(sparkText, settings, controller.signal);
         setParse(currentParse);
       }
 
-      const generatedTakes = await fetchDivergenceTakes(sparkText, currentParse, canon, undefined, settings);
+      const generatedTakes = await fetchDivergenceTakes(sparkText, currentParse, canon, undefined, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)) });
       const initializedTakes = generatedTakes.map((take) => ({
         ...take,
         versions: [take],
@@ -482,20 +612,29 @@ export default function App() {
       setCurrentStage(2);
       setMaxUnlockedStage((prev) => (prev < 2 ? 2 : prev));
     } catch (err: any) {
+      if (controller.signal.aborted || err?.name === "AbortError") {
+        setDivergenceActivity((state) => ({ ...state, status: "cancelled", progress: { task: "divergence", phase: "cancelled", label: "Generation stopped" } }));
+        return;
+      }
       console.error("Proceed to divergence error:", err);
       setDivergenceError(err?.message || "Failed to generate divergence angles.");
       setCurrentStage(2);
     } finally {
       setIsLoadingDivergence(false);
+      if (divergenceControllerRef.current === controller) divergenceControllerRef.current = null;
     }
   };
 
   // Reroll all divergence takes
   const handleRerollDivergence = async () => {
+    divergenceControllerRef.current?.abort();
+    const controller = new AbortController();
+    divergenceControllerRef.current = controller;
+    setDivergenceActivity(activeActivity("divergence", "Preparing reroll"));
     setIsLoadingDivergence(true);
     setDivergenceError(null);
     try {
-      const freshTakes = await fetchDivergenceTakes(sparkText, parse, canon, undefined, settings);
+      const freshTakes = await fetchDivergenceTakes(sparkText, parse, canon, undefined, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)) });
       const initializedTakes = freshTakes.map((freshTake, idx) => {
         const prevTake = takes[idx];
         const prevVersions = prevTake?.versions || (prevTake ? [prevTake] : []);
@@ -511,19 +650,28 @@ export default function App() {
         setSelectedTakeId(initializedTakes[0].id);
       }
     } catch (err: any) {
+      if (controller.signal.aborted || err?.name === "AbortError") {
+        setDivergenceActivity((state) => ({ ...state, status: "cancelled", progress: { task: "divergence", phase: "cancelled", label: "Generation stopped" } }));
+        return;
+      }
       console.error("Reroll divergence error:", err);
       setDivergenceError(err?.message || "Failed to reroll divergence angles.");
     } finally {
       setIsLoadingDivergence(false);
+      if (divergenceControllerRef.current === controller) divergenceControllerRef.current = null;
     }
   };
 
   // Push further from a specific take across 4 variations
   const handlePushFurther = async (take: DivergenceTake, pushInstruction: string) => {
+    divergenceControllerRef.current?.abort();
+    const controller = new AbortController();
+    divergenceControllerRef.current = controller;
+    setDivergenceActivity(activeActivity("divergence", "Preparing pushed branches"));
     setIsLoadingDivergence(true);
     setDivergenceError(null);
     try {
-      const branchedTakes = await fetchDivergenceTakes(sparkText, parse, canon, pushInstruction, settings);
+      const branchedTakes = await fetchDivergenceTakes(sparkText, parse, canon, pushInstruction, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)) });
       const initialized = branchedTakes.map((bTake) => ({
         ...bTake,
         versions: [bTake],
@@ -534,10 +682,15 @@ export default function App() {
         setSelectedTakeId(initialized[0].id);
       }
     } catch (err: any) {
+      if (controller.signal.aborted || err?.name === "AbortError") {
+        setDivergenceActivity((state) => ({ ...state, status: "cancelled", progress: { task: "divergence", phase: "cancelled", label: "Generation stopped" } }));
+        return;
+      }
       console.error("Push further error:", err);
       setDivergenceError(err?.message || "Failed to push premise angle.");
     } finally {
       setIsLoadingDivergence(false);
+      if (divergenceControllerRef.current === controller) divergenceControllerRef.current = null;
     }
   };
 
@@ -548,7 +701,7 @@ export default function App() {
     try {
       let currentParse = parse;
       if (!currentParse || currentParse.nonNegotiables.length === 0) {
-        currentParse = await parseSparkApi(sparkText);
+        currentParse = await parseSparkApi(sparkText, settings);
         setParse(currentParse);
       }
       const freshTake = await fetchSingleDivergenceTake({
@@ -596,7 +749,7 @@ export default function App() {
     try {
       let currentParse = parse;
       if (!currentParse || currentParse.nonNegotiables.length === 0) {
-        currentParse = await parseSparkApi(sparkText);
+        currentParse = await parseSparkApi(sparkText, settings);
         setParse(currentParse);
       }
       const steeredTake = await fetchSingleDivergenceTake({
@@ -705,6 +858,10 @@ export default function App() {
   // Proceed from Stage 3 (PHYSICS) -> Stage 4 (FORGE)
   const handleStartForge = async () => {
     const chosenTake = takes.find((t) => t.id === selectedTakeId) || takes[0];
+    forgeControllerRef.current?.abort();
+    const controller = new AbortController();
+    forgeControllerRef.current = controller;
+    setForgeActivity(activeActivity("forge", "Preparing the Forge"));
     setCurrentStage(4);
     setMaxUnlockedStage((prev) => (prev < 4 ? 4 : prev));
     setIsForging(true);
@@ -719,6 +876,7 @@ export default function App() {
         canon,
         physics,
         chosenTake,
+        settings,
       },
       {
         onLog: (log) => {
@@ -738,6 +896,7 @@ export default function App() {
         onComplete: (doc) => {
           setDocument(doc);
           setIsForging(false);
+          setForgeActivity((state) => ({ ...state, status: "complete", progress: { task: "forge", phase: "complete", label: "Forge complete", completedSteps: 6, totalSteps: 6 } }));
           setMaxUnlockedStage(5);
           // Auto-save to vault
           setSavedScenarios((prev) => {
@@ -749,9 +908,25 @@ export default function App() {
           console.error("Forge error:", err);
           setForgeError(err);
           setIsForging(false);
+          setForgeActivity((state) => ({ ...state, status: "error", progress: { task: "forge", phase: "error", label: err } }));
         },
-      }
+        onProgress: (event) => {
+          setForgeActivity((state) => applyActivityEvent(state, { type: "progress", ...event }));
+          setBuildLogs((prev) => [...prev, { id: `log-${Date.now()}-${Math.random()}`, stage: event.phase, label: event.label, status: event.completedSteps === event.totalSteps ? "done" : "active" }]);
+        },
+        onUsage: (usage) => setForgeActivity((state) => applyActivityEvent(state, { type: "usage", task: "forge", usage })),
+        onReasoning: (delta, complete) => setForgeActivity((state) => applyActivityEvent(state, { type: "reasoning", task: "forge", delta, complete })),
+        onProviderActivity: (at) => setForgeActivity((state) => applyActivityEvent(state, { type: "provider_activity", task: "forge", at })),
+        onOutputDelta: (characters) => setForgeActivity((state) => applyActivityEvent(state, { type: "output_delta", task: "forge", characters })),
+        onHeartbeat: () => setForgeActivity((state) => ({ ...state, lastEventAt: Date.now() })),
+        onCancelled: (message) => {
+          setIsForging(false);
+          setForgeActivity((state) => ({ ...state, status: "cancelled", progress: { task: "forge", phase: "cancelled", label: message } }));
+        },
+      },
+      controller.signal,
     );
+    if (forgeControllerRef.current === controller) forgeControllerRef.current = null;
   };
 
   // Proceed from Stage 4 (FORGE) -> Stage 5 (REFINE)
@@ -842,7 +1017,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-full flex flex-col relative bg-[var(--vellum)] text-[var(--ink)] overflow-hidden">
+    <div className="h-screen h-[100dvh] w-full flex flex-col relative bg-[var(--vellum)] text-[var(--ink)] overflow-hidden">
       {/* Paper texture overlay (fixed SVG grain + laid lines) */}
       <div className="texture-overlay" />
       <div className="laid-lines" />
@@ -904,6 +1079,7 @@ export default function App() {
             onSelectStage={(s) => setCurrentStage(s)}
             maxUnlockedStage={maxUnlockedStage}
             workingTitle={workingTitle}
+            modelSummary={settings.modelSelection?.modelId || "Default Gemini / offline"}
             isDark={isDark}
             onToggleDark={() => setIsDark(!isDark)}
             onOpenVault={() => setIsVaultOpen(true)}
@@ -911,6 +1087,7 @@ export default function App() {
             onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             onOpenShortcuts={() => setIsShortcutsOpen(true)}
             onOpenOnboarding={() => setIsOnboardingOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
             onNewScenario={handlePromptNewScenario}
             onSaveScenario={handleSaveCurrentScenario}
           />
@@ -998,6 +1175,12 @@ export default function App() {
               onOpenMargin={() => setIsMarginOpen(true)}
               settings={settings}
               onUpdateSettings={setSettings}
+              generationActivity={(isParsingSpark ? anchorActivity : divergenceActivity).status !== "idle" ? {
+                ...(isParsingSpark ? anchorActivity : divergenceActivity),
+                task: isParsingSpark ? "anchors" : "divergence",
+                onCancel: isParsingSpark ? handleCancelAnchors : handleCancelDivergence,
+                onClearReasoning: () => isParsingSpark ? setAnchorActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) : setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })),
+              } : undefined}
             />
           )}
 
@@ -1020,6 +1203,7 @@ export default function App() {
               onRetry={handleProceedToDivergence}
               settings={settings}
               onUpdateSettings={setSettings}
+              generationActivity={divergenceActivity.status !== "idle" ? { ...divergenceActivity, task: "divergence", onCancel: handleCancelDivergence, onClearReasoning: () => setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) } : undefined}
             />
           )}
 
@@ -1043,6 +1227,7 @@ export default function App() {
               workingTitle={workingTitle}
               forgeError={forgeError}
               onRetryForge={handleStartForge}
+              generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) } : undefined}
             />
           )}
 
@@ -1119,6 +1304,7 @@ export default function App() {
               }}
               maxUnlockedStage={maxUnlockedStage}
               workingTitle={workingTitle}
+              modelSummary={settings.modelSelection?.modelId || "Default Gemini / offline"}
               isDark={isDark}
               onToggleDark={() => setIsDark(!isDark)}
               onOpenVault={() => {
@@ -1136,6 +1322,10 @@ export default function App() {
               }}
               onOpenOnboarding={() => {
                 setIsOnboardingOpen(true);
+                setIsMobileNavOpen(false);
+              }}
+              onOpenSettings={() => {
+                setIsSettingsOpen(true);
                 setIsMobileNavOpen(false);
               }}
               onNewScenario={() => {
@@ -1162,6 +1352,13 @@ export default function App() {
         onDuplicateScenario={handleDuplicateScenario}
         onRenameScenario={handleRenameScenario}
         currentDocumentId={document?.id}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        selection={settings.modelSelection || null}
+        onSelectionChange={(modelSelection) => setSettings((current) => ({ ...current, modelSelection }))}
       />
 
       <CommandPalette

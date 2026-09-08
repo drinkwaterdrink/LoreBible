@@ -2,6 +2,12 @@
  * Types for Lore Bible — scenario-authoring studio.
  */
 
+import type { ModelSelection, GenerationProvenance } from './contracts/generation';
+import type { SparkDNA } from './contracts/spark';
+
+export type { ModelSelection, GenerationProvenance } from './contracts/generation';
+export type { CanonicalSparkDNA, SparkDNA } from './contracts/spark';
+
 export type Permanence = 'P' | 'C' | 'T';
 
 export interface Entry {
@@ -21,23 +27,6 @@ export interface SparkParse {
   userRole: string | null;
   openNegotiables: string[];
   sparkDNA?: SparkDNA;
-}
-
-export interface SparkDNA {
-  nonNegotiables: string[];
-  premisePromise: string;
-  toneEnvelope: {
-    primary: string;
-    descriptors: string[];
-  };
-  genreSignals: string[];
-  playerAgencyBoundaries: string;
-  openVariables: string[];
-  existingPressures: string[];
-  assumptions: string[];
-  opportunitySpace: string[];
-  userRole: string | null;
-  franchise: string | null;
 }
 
 export type CanonFidelity = 'Strict' | 'Adjacent' | 'Riff';
@@ -114,6 +103,7 @@ export interface GenerationSettings {
   authorFlavor: AuthorFlavorConfig;
   allowOfflineFallback?: boolean;
   timeoutSeconds?: number;
+  modelSelection?: ModelSelection;
 }
 
 export interface GenerationApiError {
@@ -154,6 +144,11 @@ export interface CoreSection {
   theSituation: string;
   thePressure: string;
   theQuestion: string;
+  /** Legacy-compatible aliases retained for imported manuscripts. */
+  logline?: string;
+  synopsis?: string;
+  userRole?: string;
+  openingCrawl?: string;
   permanence: 'P';
 }
 
@@ -173,6 +168,9 @@ export interface WorldPhysicsSection {
   authorityCheck: string;
   powerCeiling: string;
   faultLines: string[];
+  /** Optional legacy fields retained when opening older manuscript versions. */
+  strangenessRationale?: string;
+  mundanityAnchors?: string;
   permanence: 'C';
 }
 
@@ -343,6 +341,10 @@ export interface LoreBibleDocument {
   aesthetic: AestheticSection;
   naming: NamingSection;
   pressures: Entry[];
+  /** Imported legacy sections; new documents may omit them. */
+  rulesOfEngagement?: Entry[];
+  sensoryPalette?: Entry[];
+  openLoops?: Entry[];
   proceduralRolls: ProceduralRollGroup[];
   opening: OpeningSection;
   expansionNotes: ExpansionNotesSection;

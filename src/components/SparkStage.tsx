@@ -3,6 +3,7 @@ import { rollCollision, generateNovelSparks, NovelSpark } from "../lib/wordBanks
 import { Dices, ArrowRight, RotateCcw, Feather, Sparkles, HelpCircle, Check, BookOpen, Sliders, ChevronDown, ChevronUp } from "lucide-react";
 import { GenerationSettings, AuthorId, DivergenceMode, GenerationQuality, AuthorFlavorStrength } from "../types";
 import { AUTHOR_PROFILES } from "../lib/authorProfiles";
+import { GenerationActivity, type GenerationActivityProps } from "./GenerationActivity";
 
 interface SparkStageProps {
   sparkText: string;
@@ -15,6 +16,7 @@ interface SparkStageProps {
   onOpenMargin?: () => void;
   settings?: GenerationSettings;
   onUpdateSettings?: (settings: GenerationSettings) => void;
+  generationActivity?: GenerationActivityProps;
 }
 
 export const SparkStage: React.FC<SparkStageProps> = ({
@@ -28,6 +30,7 @@ export const SparkStage: React.FC<SparkStageProps> = ({
   onOpenMargin,
   settings,
   onUpdateSettings,
+  generationActivity,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isTumbling, setIsTumbling] = useState(false);
@@ -504,20 +507,25 @@ export const SparkStage: React.FC<SparkStageProps> = ({
       </div>
 
       {/* Action Footer */}
-      <div className="flex items-center justify-between pt-4 border-t border-[var(--ink-soft)] sticky bottom-0 bg-[var(--vellum)]/95 backdrop-blur-xs py-3 z-10">
+      {generationActivity && <div className="mb-3"><GenerationActivity {...generationActivity} /></div>}
+      <div
+        data-spark-action-footer="true"
+        className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[var(--ink-soft)] sticky bottom-0 bg-[var(--vellum)]/95 backdrop-blur-xs py-3 z-20"
+        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      >
         <span className="text-xs text-[var(--graphite)] font-manuscript">
           Ready to extract fidelity anchors and forge 4 divergence angles.
         </span>
         <button
           id="proceed-to-divergence-btn"
           type="button"
-          disabled={!sparkText.trim() || isLoading}
-          onClick={onProceed}
-          className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs py-2 px-4 shadow-sm"
+          disabled={!sparkText.trim() && !isLoading}
+          onClick={isLoading ? generationActivity?.onCancel : onProceed}
+          className="btn-primary w-full sm:w-auto justify-center flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs py-2 px-4 shadow-sm shrink-0"
         >
           {isLoading ? (
             <>
-              <span className="inline-block animate-pulse">Scribing anchors…</span>
+              <span className="inline-block animate-pulse">Stop Generation</span>
             </>
           ) : (
             <>

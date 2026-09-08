@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { BuildLogItem, LoreBibleDocument } from "../types";
 import { CheckCircle2, Feather, ArrowRight, AlertTriangle } from "lucide-react";
 import { RuledLinesSkeleton } from "./RuledLinesSkeleton";
+import { GenerationActivity, type GenerationActivityProps } from "./GenerationActivity";
 
 interface ForgeStageProps {
   buildLogs: BuildLogItem[];
@@ -12,6 +13,7 @@ interface ForgeStageProps {
   workingTitle: string;
   forgeError?: string | null;
   onRetryForge?: () => void;
+  generationActivity?: GenerationActivityProps;
 }
 
 export const ForgeStage: React.FC<ForgeStageProps> = ({
@@ -23,6 +25,7 @@ export const ForgeStage: React.FC<ForgeStageProps> = ({
   workingTitle,
   forgeError,
   onRetryForge,
+  generationActivity,
 }) => {
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +76,8 @@ export const ForgeStage: React.FC<ForgeStageProps> = ({
           )}
         </div>
       </div>
+
+      {generationActivity && <GenerationActivity {...generationActivity} />}
 
       {/* Honest Error Banner if Forge failed */}
       {forgeError && (

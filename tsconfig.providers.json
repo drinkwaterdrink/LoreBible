@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": [
+    "tests/**/*.test.ts",
+    "src/lib/modelCatalog.ts",
+    "src/contracts/**/*.ts",
+    "server/model/**/*.ts",
+    "server/secrets/**/*.ts",
+    "server/routes/connections.ts"
+  ]
+}

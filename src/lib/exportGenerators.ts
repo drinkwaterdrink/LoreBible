@@ -42,16 +42,6 @@ export function generateMarkdownExport(doc: LoreBibleDocument): string {
   parts.push(`\`\`\`\n${doc.status.content}\n\`\`\``);
   parts.push(`*Settings:* ${doc.status.settings}\n`);
 
-  parts.push(`## 5. LOCATION SEEDS [C]`);
-  doc.locations.forEach((loc) => {
-    parts.push(`### ${loc.fields.name}`);
-    parts.push(`- **Function:** ${loc.fields.function}`);
-    parts.push(`- **Mood:** ${loc.fields.mood}`);
-    parts.push(`- **What's Wrong:** ${loc.fields.whatsWrong}`);
-    parts.push(`- **Keys:** \`${loc.keys.join(", ")}\``);
-  });
-  parts.push("");
-
   const omitted = doc.omittedSections || [];
 
   if (!omitted.includes("locations") && doc.locations && doc.locations.length > 0) {
@@ -442,10 +432,11 @@ export function generateCharacterCardExport(doc: LoreBibleDocument): string {
       character_book: {
         name: `${doc.core?.title || "Scenario"} Lorebook`,
         description: `Portable world-info generated for ${doc.core?.title || "Scenario"}`,
+        extensions: {},
         scan_depth: 4,
         token_budget: 2048,
         recursive_scanning: true,
-        entries: lorebookEntries,
+        entries: lorebookEntries.map((entry) => ({ ...entry, extensions: {} })),
       },
     },
   };
@@ -736,6 +727,8 @@ export function generateCharacterCardV3(doc: LoreBibleDocument): any {
     `${(doc.physics?.density || "standard").toLowerCase()}-world`,
   ].filter(Boolean);
 
+  const normalizedEntries = entries.map((entry) => ({ ...entry, extensions: entry.extensions || {} }));
+
   return {
     spec: "chara_card_v3",
     spec_version: "3.0",
@@ -756,11 +749,14 @@ export function generateCharacterCardV3(doc: LoreBibleDocument): any {
       character_book: {
         name: `${doc.core?.title || "Scenario"} Lorebook`,
         description: `Portable world lorebook generated for ${doc.core?.title || "Scenario"}`,
+        extensions: {},
         scan_depth: 4,
         token_budget: 2048,
         recursive_scanning: true,
-        entries,
+        entries: normalizedEntries,
       },
+      extensions: {},
+      group_only_greetings: [],
       assets: [],
     },
   };

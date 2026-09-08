@@ -17,7 +17,11 @@ import {
   Entry,
   ConsistencyFinding,
   VariantSlip,
+  GenerationSettings,
+  SemanticRerollType,
 } from "../types";
+import type { GenerationProgressEvent, GenerationStreamEvent, GenerationUsage } from "../contracts/generationProgress";
+import { consumeGenerationSse } from "./sseStream";
 
 export interface ParseSparkResult extends SparkParse {}
 
@@ -25,11 +29,12 @@ export interface DivergenceResult {
   takes: DivergenceTake[];
 }
 
-export async function parseSparkApi(sparkText: string): Promise<ParseSparkResult> {
+export async function parseSparkApi(sparkText: string, settings?: GenerationSettings, signal?: AbortSignal): Promise<ParseSparkResult> {
   const res = await fetch("/api/parse-spark", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sparkText }),
+    body: JSON.stringify({ sparkText, settings }),
+    signal,
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
@@ -43,22 +48,29 @@ export async function fetchDivergenceTakes(
   parse: SparkParse,
   canon: CanonConfig,
   pushInstruction?: string,
-  settings?: {
-    quality?: "Standard" | "Deep Craft";
-    divergenceMode?: "balanced" | "orthogonal" | "genre_bending" | "high_contrast";
-    authorFlavor?: string | null;
-  }
+  settings?: GenerationSettings,
+  options?: { signal?: AbortSignal; onEvent?: (event: GenerationStreamEvent) => void },
 ): Promise<DivergenceTake[]> {
   const res = await fetch("/api/divergence", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify({ sparkText, parse, canon, pushInstruction, settings }),
+    signal: options?.signal,
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.message || errorData.error || `Divergence failed with HTTP ${res.status}`);
   }
-  const data = await res.json();
+  const contentType = res.headers.get("Content-Type") || "";
+  let data: any;
+  if (contentType.includes("text/event-stream")) {
+    const terminal = await consumeGenerationSse(res, { signal: options?.signal, onEvent: (event) => options?.onEvent?.(event) });
+    if (terminal.type === "error") throw new Error(terminal.message);
+    if (terminal.type === "cancelled") throw new DOMException(terminal.message, "AbortError");
+    data = terminal.result;
+  } else {
+    data = await res.json();
+  }
   if (!data.takes || data.takes.length === 0) {
     throw new Error("Divergence endpoint returned zero takes.");
   }
@@ -72,12 +84,8 @@ export async function fetchSingleDivergenceTake(params: {
   targetAngle: string;
   currentTake?: DivergenceTake;
   steerInstruction?: string;
-  settings?: {
-    quality?: "Standard" | "Deep Craft";
-    divergenceMode?: "balanced" | "orthogonal" | "genre_bending" | "high_contrast";
-    authorFlavor?: string | null;
-    semanticRerollMode?: "reimagine" | "mutate" | "push_further";
-  };
+  settings?: GenerationSettings;
+  rerollType?: SemanticRerollType;
 }): Promise<DivergenceTake> {
   const res = await fetch("/api/divergence-single", {
     method: "POST",
@@ -100,6 +108,13 @@ export interface ForgeCallbacks {
   onSection: (sectionKey: string, data: any) => void;
   onComplete: (document: LoreBibleDocument) => void;
   onError: (error: string) => void;
+  onProgress?: (event: GenerationProgressEvent) => void;
+  onUsage?: (usage: GenerationUsage) => void;
+  onReasoning?: (delta: string, complete?: boolean) => void;
+  onHeartbeat?: () => void;
+  onProviderActivity?: (at: number) => void;
+  onOutputDelta?: (characters: number) => void;
+  onCancelled?: (message: string) => void;
 }
 
 export async function streamForgeDocument(
@@ -109,66 +124,41 @@ export async function streamForgeDocument(
     canon: CanonConfig;
     physics: PhysicsConfig;
     chosenTake: DivergenceTake;
+    settings?: GenerationSettings;
   },
-  callbacks: ForgeCallbacks
+  callbacks: ForgeCallbacks,
+  signal?: AbortSignal,
 ): Promise<void> {
   try {
     const res = await fetch("/api/forge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params),
+      signal,
     });
 
     if (!res.ok || !res.body) {
       throw new Error(`Forge request failed with HTTP ${res.status}`);
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n\n");
-      buffer = lines.pop() || "";
-
-      for (const block of lines) {
-        if (!block.trim()) continue;
-        let eventType = "message";
-        let dataStr = "";
-
-        for (const line of block.split("\n")) {
-          if (line.startsWith("event:")) {
-            eventType = line.replace("event:", "").trim();
-          } else if (line.startsWith("data:")) {
-            dataStr = line.replace("data:", "").trim();
-          }
-        }
-
-        if (dataStr) {
-          try {
-            const parsedData = JSON.parse(dataStr);
-            if (eventType === "log") {
-              callbacks.onLog(parsedData);
-            } else if (eventType === "section") {
-              callbacks.onSection(parsedData.key, parsedData.data);
-            } else if (eventType === "done") {
-              callbacks.onComplete(parsedData.document);
-            } else if (eventType === "error") {
-              callbacks.onError(parsedData.message || `Error in ${parsedData.stage || "generation"}`);
-            }
-          } catch (e) {
-            console.error("Failed to parse SSE event data:", e);
-          }
-        }
-      }
-    }
+    const terminal = await consumeGenerationSse(res, { signal, onEvent: (event) => {
+      if (event.type === "progress") callbacks.onProgress?.(event);
+      else if (event.type === "usage") callbacks.onUsage?.(event.usage);
+      else if (event.type === "reasoning") callbacks.onReasoning?.(event.delta, event.complete);
+      else if (event.type === "heartbeat") callbacks.onHeartbeat?.();
+      else if (event.type === "provider_activity") callbacks.onProviderActivity?.(event.at);
+      else if (event.type === "output_delta") callbacks.onOutputDelta?.(event.characters);
+      else if (event.type === "section") callbacks.onSection(event.key, event.data);
+    } });
+    if (terminal.type === "done") callbacks.onComplete((terminal.result as { document: LoreBibleDocument }).document);
+    else if (terminal.type === "cancelled") callbacks.onCancelled?.(terminal.message);
+    else callbacks.onError(terminal.message);
   } catch (err: any) {
-    console.error("Stream forge error:", err);
-    callbacks.onError(err.message || "Forge error");
+    if (err?.name === "AbortError") callbacks.onCancelled?.("Forge stopped.");
+    else {
+      console.error("Stream forge error:", err);
+      callbacks.onError(err.message || "Forge error");
+    }
   }
 }
 

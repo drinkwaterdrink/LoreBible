@@ -2,6 +2,7 @@ node_modules/
 build/
 dist/
 coverage/
+.superpowers/
 .DS_Store
 *.log
 .env*
