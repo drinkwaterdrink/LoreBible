@@ -6,6 +6,7 @@ import {
   PhysicsConfig,
   SparkParse,
   BuildLogItem,
+  GenerationProvenance,
   GenerationSettings,
 } from "./types";
 import {
@@ -29,15 +30,35 @@ import { ShortcutsReferenceCard } from "./components/ShortcutsReferenceCard";
 import { WaxSealStamp } from "./components/WaxSealStamp";
 import { NewScenarioModal } from "./components/NewScenarioModal";
 import { SettingsModal } from "./components/SettingsModal";
-import { createSavedProjectV2, parseProjectStorage, saveProjectToStore, serializeProjectStore } from "./lib/projectPersistence";
+import {
+  readProjectStore,
+  removeProjectFromStore,
+  saveProjectToStore,
+  writeProjectStore,
+  type SavedLoreBibleProjectV2,
+} from "./lib/projectPersistence";
 import type { GenerationProgressEvent, GenerationStreamEvent, GenerationTask, GenerationUsage } from "./contracts/generationProgress";
 import { appendBoundedReasoning } from "./lib/reasoningBuffer";
 import { readSparkDraft, writeSparkDraft } from "./lib/sparkDraft";
 import { createDraftScenarioDocument, DEFAULT_CANON, DEFAULT_PHYSICS } from "./lib/scenarioDraft";
+import { captureSavedProject, captureWorkspaceDraft, restoreSavedProject, restoreWorkspaceDraft } from "./lib/projectWorkspace";
+import { clearWorkspaceDraft, readWorkspaceDraft, writeWorkspaceDraft } from "./lib/workspacePersistence";
 import { Menu, Feather, X, PlusCircle, Save } from "lucide-react";
 import { AppVersionBadge } from "./components/AppVersionBadge";
+import { StorageRecoveryNotice } from "./components/StorageRecoveryNotice";
 
-const STORAGE_KEY_SCENARIOS = "lore_bible_saved_scenarios_v1";
+const DEFAULT_SETTINGS: GenerationSettings = {
+  quality: "Deep Craft",
+  divergenceMode: "Exploratory",
+  authorFlavor: {
+    mode: "Off",
+    strength: "Sprinkle",
+    autoBehavior: "Compatible",
+    manualAuthorId: null,
+    overdriveEnabled: false,
+  },
+  modelSelection: { profileId: null, modelId: null },
+};
 
 interface ActivityState {
   progress: GenerationProgressEvent | null;
@@ -74,15 +95,48 @@ function applyActivityEvent(state: ActivityState, event: GenerationStreamEvent):
   if (event.type === "done") return { ...state, status: "complete", progress: { task: event.task, phase: "complete", label: "Complete" }, lastEventAt: Date.now() };
   return state;
 }
-const STORAGE_KEY_SCENARIOS_V2 = "lore_bible_saved_projects_v2";
 const STORAGE_KEY_THEME = "lore_bible_theme_mode_v1";
 const STORAGE_KEY_MODEL_SELECTION = "lore_bible_model_selection_v1";
+
+function readGlobalModelSelection(storage: Storage): GenerationSettings["modelSelection"] {
+  try {
+    const saved = storage.getItem(STORAGE_KEY_MODEL_SELECTION);
+    if (!saved) return DEFAULT_SETTINGS.modelSelection;
+    const parsed: unknown = JSON.parse(saved);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return DEFAULT_SETTINGS.modelSelection;
+    const record = parsed as Record<string, unknown>;
+    return {
+      profileId: typeof record.profileId === "string" ? record.profileId : null,
+      modelId: typeof record.modelId === "string" ? record.modelId : null,
+    };
+  } catch {
+    return DEFAULT_SETTINGS.modelSelection;
+  }
+}
+
+function loadInitialPersistence(storage: Storage) {
+  const projects = readProjectStore(storage);
+  const workspace = readWorkspaceDraft(storage);
+  const active = workspace.draft ? restoreWorkspaceDraft(workspace.draft) : null;
+  return {
+    savedProjects: projects.store.projects,
+    active,
+    fallbackSparkText: active ? active.sparkText : workspace.warning ? "" : readSparkDraft(storage),
+    settings: active?.settings || { ...DEFAULT_SETTINGS, modelSelection: readGlobalModelSelection(storage) },
+    warning: [
+      projects.warning,
+      workspace.warning ? `${workspace.warning} Active autosave is paused until you open a saved project or start a new scenario.` : null,
+    ].filter(Boolean).join(" ") || null,
+    workspaceWriteBlocked: Boolean(workspace.warning),
+  };
+}
 
 export default function App() {
   // Theme state
   const [isDark, setIsDark] = useState<boolean>(() => {
     return localStorage.getItem(STORAGE_KEY_THEME) === "dark";
   });
+  const [initialPersistence] = useState(() => loadInitialPersistence(window.localStorage));
 
   useEffect(() => {
     const docEl = typeof window !== "undefined" && window.document ? window.document.documentElement : null;
@@ -98,43 +152,23 @@ export default function App() {
   }, [isDark]);
 
   // Wizard state
-  const [currentStage, setCurrentStage] = useState<1 | 2 | 3 | 4 | 5>(1);
-  const [maxUnlockedStage, setMaxUnlockedStage] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [currentStage, setCurrentStage] = useState<1 | 2 | 3 | 4 | 5>(initialPersistence.active?.currentStage || 1);
+  const [maxUnlockedStage, setMaxUnlockedStage] = useState<1 | 2 | 3 | 4 | 5>(initialPersistence.active?.maxUnlockedStage || 1);
 
   // Spark state
-  const [sparkText, setSparkText] = useState<string>(() => {
-    try { return readSparkDraft(window.localStorage); } catch { return ""; }
-  });
-  const [parse, setParse] = useState<SparkParse | null>(null);
+  const [sparkText, setSparkText] = useState<string>(initialPersistence.fallbackSparkText);
+  const [parse, setParse] = useState<SparkParse | null>(initialPersistence.active?.parse || null);
   const [isParsingSpark, setIsParsingSpark] = useState(false);
 
   // Canon state
-  const [canon, setCanon] = useState<CanonConfig>(DEFAULT_CANON);
+  const [canon, setCanon] = useState<CanonConfig>(initialPersistence.active?.canon || DEFAULT_CANON);
 
   // Generation Settings (Quality, Divergence Mode, Author Flavor)
-  const [settings, setSettings] = useState<GenerationSettings>({
-    quality: "Deep Craft",
-    divergenceMode: "Exploratory",
-    authorFlavor: {
-      mode: "Off",
-      strength: "Sprinkle",
-      autoBehavior: "Compatible",
-      manualAuthorId: null,
-      overdriveEnabled: false,
-    },
-    modelSelection: (() => {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY_MODEL_SELECTION);
-        if (!saved) return null;
-        const parsed = JSON.parse(saved);
-        return parsed && typeof parsed === "object" ? { profileId: typeof parsed.profileId === "string" ? parsed.profileId : null, modelId: typeof parsed.modelId === "string" ? parsed.modelId : null } : null;
-      } catch { return null; }
-    })(),
-  });
+  const [settings, setSettings] = useState<GenerationSettings>(initialPersistence.settings);
 
   // Divergence state
-  const [takes, setTakes] = useState<DivergenceTake[]>([]);
-  const [selectedTakeId, setSelectedTakeId] = useState<string | undefined>(undefined);
+  const [takes, setTakes] = useState<DivergenceTake[]>(initialPersistence.active?.takes || []);
+  const [selectedTakeId, setSelectedTakeId] = useState<string | undefined>(initialPersistence.active?.selectedTakeId || undefined);
   const [isLoadingDivergence, setIsLoadingDivergence] = useState(false);
   const [rerollingSingleId, setRerollingSingleId] = useState<string | null>(null);
   const [divergenceError, setDivergenceError] = useState<string | null>(null);
@@ -144,10 +178,11 @@ export default function App() {
   const divergenceControllerRef = useRef<AbortController | null>(null);
 
   // Physics state
-  const [physics, setPhysics] = useState<PhysicsConfig>(DEFAULT_PHYSICS);
+  const [physics, setPhysics] = useState<PhysicsConfig>(initialPersistence.active?.physics || DEFAULT_PHYSICS);
 
   // Document & Forge state
-  const [document, setDocument] = useState<LoreBibleDocument | null>(null);
+  const [document, setDocument] = useState<LoreBibleDocument | null>(initialPersistence.active?.document || null);
+  const [provenance, setProvenance] = useState<GenerationProvenance[]>(initialPersistence.active?.provenance || []);
   const [streamedSections, setStreamedSections] = useState<Record<string, any>>({});
   const [buildLogs, setBuildLogs] = useState<BuildLogItem[]>([]);
   const [isForging, setIsForging] = useState(false);
@@ -156,18 +191,9 @@ export default function App() {
   const forgeControllerRef = useRef<AbortController | null>(null);
 
   // Vault & Modals
-  const [savedScenarios, setSavedScenarios] = useState<LoreBibleDocument[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_SCENARIOS_V2) || localStorage.getItem(STORAGE_KEY_SCENARIOS);
-      const parsed = parseProjectStorage(raw);
-      if (parsed.recoveryJson) {
-        localStorage.setItem(`lore_bible_saved_projects_recovery_${Date.now()}`, parsed.recoveryJson);
-      }
-      return parsed.store.projects.map((project) => project.document);
-    } catch {
-      return [];
-    }
-  });
+  const [savedProjects, setSavedProjects] = useState<SavedLoreBibleProjectV2[]>(initialPersistence.savedProjects);
+  const [storageWarning, setStorageWarning] = useState<string | null>(initialPersistence.warning);
+  const [workspaceWriteBlocked, setWorkspaceWriteBlocked] = useState(initialPersistence.workspaceWriteBlocked);
   const [isVaultOpen, setIsVaultOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -215,9 +241,34 @@ export default function App() {
   }, [settings.modelSelection]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => writeSparkDraft(window.localStorage, sparkText), 250);
+    if (workspaceWriteBlocked) return;
+    const timer = window.setTimeout(() => {
+      try {
+        const hasActiveWork = Boolean(sparkText.trim() || document || takes.length > 0 || parse || currentStage > 1);
+        if (!hasActiveWork) {
+          clearWorkspaceDraft(window.localStorage);
+          return;
+        }
+        writeWorkspaceDraft(window.localStorage, captureWorkspaceDraft({
+          document,
+          currentStage,
+          maxUnlockedStage,
+          sparkText,
+          parse,
+          canon,
+          physics,
+          takes,
+          selectedTakeId,
+          settings,
+          provenance,
+        }));
+        writeSparkDraft(window.localStorage, "");
+      } catch (error) {
+        setStorageWarning(error instanceof Error ? error.message : "Could not save the active workspace.");
+      }
+    }, 300);
     return () => window.clearTimeout(timer);
-  }, [sparkText]);
+  }, [canon, currentStage, document, maxUnlockedStage, parse, physics, provenance, selectedTakeId, settings, sparkText, takes, workspaceWriteBlocked]);
 
   useEffect(() => () => {
     anchorControllerRef.current?.abort();
@@ -282,27 +333,41 @@ export default function App() {
     }
   };
 
-  // Explicit Save Scenario handler with wax seal animation
-  const handleSaveCurrentScenario = () => {
-    const title = workingTitle;
+  const commitProjectStore = (projects: SavedLoreBibleProjectV2[]): boolean => {
+    try {
+      writeProjectStore(window.localStorage, { schemaVersion: 2, projects });
+      setSavedProjects(projects);
+      return true;
+    } catch (error) {
+      setStorageWarning(error instanceof Error ? error.message : "Could not save the Vault.");
+      return false;
+    }
+  };
 
-    if (document) {
-      const updatedDoc: LoreBibleDocument = {
+  const buildSavedProject = (nextDocument: LoreBibleDocument, stage = currentStage, unlocked = maxUnlockedStage) => captureSavedProject({
+    document: nextDocument,
+    currentStage: stage,
+    maxUnlockedStage: unlocked,
+    sparkText,
+    parse,
+    canon,
+    physics,
+    takes,
+    selectedTakeId,
+    settings,
+    provenance,
+  });
+
+  // Explicit Save Scenario handler with wax seal animation
+  const handleSaveCurrentScenario = (): boolean => {
+    const title = workingTitle;
+    const nextDocument = document
+      ? {
         ...document,
         title,
         updatedAt: new Date().toISOString(),
-      };
-      setDocument(updatedDoc);
-      setSavedScenarios((prev) => {
-        const exists = prev.some((d) => d.id === updatedDoc.id);
-        if (exists) {
-          return prev.map((d) => (d.id === updatedDoc.id ? updatedDoc : d));
-        }
-        return [updatedDoc, ...prev];
-      });
-    } else {
-      // Save draft scenario from current stage
-      const draftDoc = createDraftScenarioDocument({
+      } as LoreBibleDocument
+      : createDraftScenarioDocument({
         sparkText,
         parse,
         canon,
@@ -311,11 +376,13 @@ export default function App() {
         takes,
         title,
       });
-      setDocument(draftDoc);
-      setSavedScenarios((prev) => [draftDoc, ...prev]);
-    }
+    const project = buildSavedProject(nextDocument);
+    const nextStore = saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, project);
+    if (!commitProjectStore(nextStore.projects)) return false;
+    setDocument(project.document);
     setIsWaxStampActive(true);
     triggerToast("Manuscript sealed & preserved in the Vault.");
+    return true;
   };
 
   // Start fresh scenario prompts
@@ -330,9 +397,15 @@ export default function App() {
 
   const handleStartFreshScenario = (saveFirst: boolean) => {
     if (saveFirst) {
-      handleSaveCurrentScenario();
+      if (!handleSaveCurrentScenario()) return;
     }
     writeSparkDraft(window.localStorage, "");
+    try {
+      clearWorkspaceDraft(window.localStorage);
+    } catch (error) {
+      setStorageWarning(error instanceof Error ? error.message : "Could not clear the active workspace draft.");
+    }
+    setWorkspaceWriteBlocked(false);
     setSparkText("");
     setParse(null);
     setCanon({
@@ -344,6 +417,9 @@ export default function App() {
     setTakes([]);
     setSelectedTakeId(undefined);
     setDocument(null);
+    setProvenance([]);
+    setStreamedSections({});
+    setBuildLogs([]);
     setPhysics(DEFAULT_PHYSICS);
     setCurrentStage(1);
     setMaxUnlockedStage(1);
@@ -392,35 +468,6 @@ export default function App() {
       // ignore
     }
   };
-
-  // Auto-save saved scenarios to localStorage
-  useEffect(() => {
-    try {
-      let store = parseProjectStorage(localStorage.getItem(STORAGE_KEY_SCENARIOS_V2)).store;
-      for (const savedDocument of savedScenarios) {
-        const project = createSavedProjectV2({
-          document: savedDocument,
-          workflow: {
-            stage: String(currentStage),
-            sparkParse: savedDocument.parse || null,
-            canon: savedDocument.canon,
-            physics: savedDocument.physics,
-            takes: savedDocument.takes || (savedDocument.chosenTake ? [savedDocument.chosenTake] : []),
-            selectedTakeId: savedDocument.chosenTake?.id || null,
-          },
-          generation: {
-            settings,
-            modelSelection: settings.modelSelection || { profileId: null, modelId: null },
-            provenance: [],
-          },
-        });
-        store = saveProjectToStore(store, project);
-      }
-      localStorage.setItem(STORAGE_KEY_SCENARIOS_V2, serializeProjectStore(store));
-    } catch {
-      // Vault persistence is best-effort; the active manuscript remains in memory.
-    }
-  }, [savedScenarios, currentStage, settings]);
 
   // Proceed from Stage 1 (SPARK) -> Stage 2 (DIVERGENCE)
   const handleProceedToDivergence = async () => {
@@ -738,11 +785,9 @@ export default function App() {
           setIsForging(false);
           setForgeActivity((state) => ({ ...state, status: "complete", progress: { task: "forge", phase: "complete", label: "Forge complete", completedSteps: 6, totalSteps: 6 } }));
           setMaxUnlockedStage(5);
-          // Auto-save to vault
-          setSavedScenarios((prev) => {
-            const filtered = prev.filter((item) => item.id !== doc.id);
-            return [doc, ...filtered];
-          });
+          const project = buildSavedProject(doc, 5, 5);
+          const nextStore = saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, project);
+          commitProjectStore(nextStore.projects);
         },
         onError: (err) => {
           console.error("Forge error:", err);
@@ -775,28 +820,40 @@ export default function App() {
   };
 
   // Vault Actions
-  const handleLoadScenario = (scenario: LoreBibleDocument) => {
-    setDocument(scenario);
-    setSparkText(scenario.sparkText || "");
-    if (scenario.parse) setParse(scenario.parse);
-    if (scenario.canon) setCanon(scenario.canon);
-    if (scenario.physics) setPhysics(scenario.physics);
-    if (scenario.chosenTake) {
-      setTakes([scenario.chosenTake]);
-      setSelectedTakeId(scenario.chosenTake.id);
+  const handleLoadProject = (project: SavedLoreBibleProjectV2) => {
+    const restored = restoreSavedProject(project);
+    try {
+      clearWorkspaceDraft(window.localStorage);
+    } catch (error) {
+      setStorageWarning(error instanceof Error ? error.message : "Could not replace the active workspace draft.");
     }
-    setCurrentStage(5);
-    setMaxUnlockedStage(5);
+    setWorkspaceWriteBlocked(false);
+    setDocument(restored.document);
+    setSparkText(restored.sparkText);
+    setParse(restored.parse);
+    setCanon(restored.canon);
+    setPhysics(restored.physics);
+    setTakes(restored.takes);
+    setSelectedTakeId(restored.selectedTakeId || undefined);
+    setSettings(restored.settings);
+    setProvenance(restored.provenance);
+    setStreamedSections({});
+    setBuildLogs([]);
+    setCurrentStage(restored.currentStage);
+    setMaxUnlockedStage(restored.maxUnlockedStage);
   };
 
-  const handleDeleteScenario = (id: string) => {
-    setSavedScenarios((prev) => prev.filter((item) => item.id !== id));
+  const handleDeleteProject = (id: string) => {
+    const next = removeProjectFromStore({ schemaVersion: 2, projects: savedProjects }, id);
+    if (commitProjectStore(next.projects)) triggerToast("Manuscript removed from the Vault.");
   };
 
-  const handleDuplicateScenario = (scenario: LoreBibleDocument) => {
+  const handleDuplicateProject = (project: SavedLoreBibleProjectV2) => {
+    const scenario = project.document;
+    const duplicateId = "doc-" + Date.now();
     const duplicated: LoreBibleDocument = {
       ...scenario,
-      id: "doc-" + Date.now(),
+      id: duplicateId,
       title: `${scenario.core?.title || scenario.title} (Copy)`,
       core: {
         ...scenario.core,
@@ -805,23 +862,33 @@ export default function App() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setSavedScenarios((prev) => [duplicated, ...prev]);
+    const duplicatedProject: SavedLoreBibleProjectV2 = {
+      ...project,
+      document: duplicated,
+      savedAt: duplicated.updatedAt,
+    };
+    const next = saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, duplicatedProject);
+    if (commitProjectStore(next.projects)) triggerToast("Manuscript duplicated.");
   };
 
-  const handleRenameScenario = (id: string, newTitle: string) => {
-    setSavedScenarios((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          return {
+  const handleRenameProject = (id: string, newTitle: string) => {
+    const renamedProjects = savedProjects.map((project) => {
+      const item = project.document;
+      if (item.id === id) {
+        return {
+          ...project,
+          savedAt: new Date().toISOString(),
+          document: {
             ...item,
             title: newTitle,
             core: { ...item.core, title: newTitle },
             updatedAt: new Date().toISOString(),
-          };
-        }
-        return item;
-      })
-    );
+          },
+        };
+      }
+      return project;
+    });
+    if (!commitProjectStore(renamedProjects)) return;
     if (document?.id === id) {
       setDocument((prev) =>
         prev
@@ -834,26 +901,6 @@ export default function App() {
           : null
       );
     }
-  };
-
-  const handleNewScenario = () => {
-    setSparkText("");
-    setParse({
-      franchise: null,
-      nonNegotiables: [],
-      registerWords: ["grounded"],
-      userRole: null,
-      openNegotiables: [],
-    });
-    setCanon(DEFAULT_CANON);
-    setTakes([]);
-    setSelectedTakeId(undefined);
-    setPhysics(DEFAULT_PHYSICS);
-    setDocument(null);
-    setStreamedSections({});
-    setBuildLogs([]);
-    setCurrentStage(1);
-    setMaxUnlockedStage(1);
   };
 
   return (
@@ -923,7 +970,7 @@ export default function App() {
             isDark={isDark}
             onToggleDark={() => setIsDark(!isDark)}
             onOpenVault={() => setIsVaultOpen(true)}
-            savedCount={savedScenarios.length}
+            savedCount={savedProjects.length}
             onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             onOpenShortcuts={() => setIsShortcutsOpen(true)}
             onOpenOnboarding={() => setIsOnboardingOpen(true)}
@@ -1079,9 +1126,23 @@ export default function App() {
               settings={settings}
               onUpdateDocument={(updated) => {
                 setDocument(updated);
-                setSavedScenarios((prev) =>
-                  prev.map((item) => (item.id === updated.id ? updated : item))
-                );
+                const existing = savedProjects.find((project) => project.document.id === updated.id);
+                if (existing) {
+                  const nextProject = captureSavedProject({
+                    document: updated,
+                    currentStage: 5,
+                    maxUnlockedStage,
+                    sparkText,
+                    parse,
+                    canon,
+                    physics,
+                    takes,
+                    selectedTakeId,
+                    settings,
+                    provenance,
+                  });
+                  commitProjectStore(saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, nextProject).projects);
+                }
               }}
               onOpenExport={() => setIsExportOpen(true)}
               onOpenConnections={() => setIsSettingsOpen(true)}
@@ -1155,7 +1216,7 @@ export default function App() {
                 setIsVaultOpen(true);
                 setIsMobileNavOpen(false);
               }}
-              savedCount={savedScenarios.length}
+              savedCount={savedProjects.length}
               onOpenCommandPalette={() => {
                 setIsCommandPaletteOpen(true);
                 setIsMobileNavOpen(false);
@@ -1190,11 +1251,11 @@ export default function App() {
       <VaultModal
         isOpen={isVaultOpen}
         onClose={() => setIsVaultOpen(false)}
-        savedScenarios={savedScenarios}
-        onLoadScenario={handleLoadScenario}
-        onDeleteScenario={handleDeleteScenario}
-        onDuplicateScenario={handleDuplicateScenario}
-        onRenameScenario={handleRenameScenario}
+        savedProjects={savedProjects}
+        onLoadProject={handleLoadProject}
+        onDeleteProject={handleDeleteProject}
+        onDuplicateProject={handleDuplicateProject}
+        onRenameProject={handleRenameProject}
         currentDocumentId={document?.id}
       />
 
@@ -1254,6 +1315,13 @@ export default function App() {
         onComplete={() => setIsWaxStampActive(false)}
         scenarioTitle={workingTitle}
       />
+
+      {storageWarning && (
+        <StorageRecoveryNotice
+          message={storageWarning}
+          onDismiss={() => setStorageWarning(null)}
+        />
+      )}
 
       {/* Tactile Manuscript Toast Notification */}
       {toastMessage && (

@@ -14,6 +14,7 @@ export interface SavedLoreBibleProjectV2 {
   document: LoreBibleDocument;
   workflow: {
     stage: string;
+    maxUnlockedStage?: string;
     sparkParse: SparkParse | null;
     canon: CanonConfig;
     physics: PhysicsConfig;
@@ -38,12 +39,47 @@ export interface ParsedProjectStorage {
   recoveryJson: string | null;
 }
 
+export interface ProjectStorageReadResult extends ParsedProjectStorage {
+  recoveryKey: string | null;
+  warning: string | null;
+}
+
+export interface ProjectStorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+export const PROJECT_STORE_V2_KEY = "lore_bible_saved_projects_v2";
+export const LEGACY_PROJECT_STORE_KEY = "lore_bible_saved_scenarios_v1";
+export const PROJECT_RECOVERY_KEY_PREFIX = "lore_bible_saved_projects_recovery_";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function isDocument(value: unknown): value is LoreBibleDocument {
   return isRecord(value) && typeof value.id === "string" && typeof value.title === "string" && isRecord(value.core) && isRecord(value.parse);
+}
+
+function isNullableString(value: unknown): boolean {
+  return value === null || typeof value === "string";
+}
+
+function isTake(value: unknown): value is DivergenceTake {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.title === "string"
+    && typeof value.pitch === "string"
+    && typeof value.genreTone === "string"
+    && typeof value.angle === "string"
+    && Array.isArray(value.retainedNonNegotiables);
+}
+
+function isSettings(value: unknown): value is GenerationSettings {
+  return isRecord(value)
+    && (value.quality === "Fast" || value.quality === "Balanced" || value.quality === "Deep Craft")
+    && (value.divergenceMode === "Faithful" || value.divergenceMode === "Exploratory" || value.divergenceMode === "Radical" || value.divergenceMode === "Unbound")
+    && isRecord(value.authorFlavor);
 }
 
 function defaultSettings(): GenerationSettings {
@@ -73,7 +109,24 @@ function migrateDocument(document: LoreBibleDocument): SavedLoreBibleProjectV2 {
 }
 
 function validateProject(value: unknown): value is SavedLoreBibleProjectV2 {
-  return isRecord(value) && value.schemaVersion === 2 && isDocument(value.document) && isRecord(value.workflow) && isRecord(value.generation);
+  if (!isRecord(value) || value.schemaVersion !== 2 || !isDocument(value.document) || !isRecord(value.workflow) || !isRecord(value.generation)) return false;
+  const workflow = value.workflow;
+  const generation = value.generation;
+  const selection = generation.modelSelection;
+  return typeof workflow.stage === "string"
+    && (workflow.maxUnlockedStage === undefined || typeof workflow.maxUnlockedStage === "string")
+    && (workflow.sparkParse === null || isRecord(workflow.sparkParse))
+    && isRecord(workflow.canon)
+    && isRecord(workflow.physics)
+    && Array.isArray(workflow.takes)
+    && workflow.takes.every(isTake)
+    && isNullableString(workflow.selectedTakeId)
+    && isSettings(generation.settings)
+    && isRecord(selection)
+    && isNullableString(selection.profileId)
+    && isNullableString(selection.modelId)
+    && Array.isArray(generation.provenance)
+    && typeof value.savedAt === "string";
 }
 
 export function createSavedProjectV2(input: Omit<SavedLoreBibleProjectV2, "schemaVersion" | "savedAt"> & { savedAt?: string }): SavedLoreBibleProjectV2 {
@@ -82,6 +135,46 @@ export function createSavedProjectV2(input: Omit<SavedLoreBibleProjectV2, "schem
 
 export function serializeProjectStore(store: SavedProjectStoreV2): string {
   return JSON.stringify(store);
+}
+
+export function readProjectStore(storage: ProjectStorageLike, now: () => number = Date.now): ProjectStorageReadResult {
+  let raw: string | null;
+  try {
+    raw = storage.getItem(PROJECT_STORE_V2_KEY) ?? storage.getItem(LEGACY_PROJECT_STORE_KEY);
+  } catch {
+    return {
+      store: { schemaVersion: 2, projects: [] },
+      recoveryJson: null,
+      recoveryKey: null,
+      warning: "Saved-project storage is unavailable. Existing in-memory work remains available.",
+    };
+  }
+  const parsed = parseProjectStorage(raw);
+  if (!parsed.recoveryJson) return { ...parsed, recoveryKey: null, warning: null };
+
+  const recoveryKey = `${PROJECT_RECOVERY_KEY_PREFIX}${now()}`;
+  try {
+    storage.setItem(recoveryKey, parsed.recoveryJson);
+    return {
+      ...parsed,
+      recoveryKey,
+      warning: "Saved project data was damaged. A recovery copy was preserved and the original data was left unchanged.",
+    };
+  } catch {
+    return {
+      ...parsed,
+      recoveryKey: null,
+      warning: "Saved project data was damaged and could not be copied. The original data was left unchanged.",
+    };
+  }
+}
+
+export function writeProjectStore(storage: ProjectStorageLike, store: SavedProjectStoreV2): void {
+  try {
+    storage.setItem(PROJECT_STORE_V2_KEY, serializeProjectStore(store));
+  } catch (error) {
+    throw new Error("Could not save projects. Existing in-memory work remains available.", { cause: error });
+  }
 }
 
 export function parseProjectStorage(raw: string | null): ParsedProjectStorage {

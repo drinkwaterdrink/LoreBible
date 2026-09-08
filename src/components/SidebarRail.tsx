@@ -247,7 +247,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
           </button>
         )}
 
-        <div className="flex items-center justify-between px-2 pt-2 text-[11px] text-[var(--graphite)]">
+        <div className="flex items-center px-2 pt-2 text-[11px] text-[var(--graphite)]">
           <button
             id="theme-toggle-btn"
             onClick={onToggleDark}
@@ -259,9 +259,6 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
               {isDark ? "Day" : "Night"}
             </span>
           </button>
-          <span className="text-[9px] font-mono-ui text-[var(--graphite)] opacity-70">
-            v3.2
-          </span>
         </div>
       </div>
     </aside>

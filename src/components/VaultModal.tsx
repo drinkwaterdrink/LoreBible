@@ -1,27 +1,28 @@
 import React, { useState } from "react";
-import { LoreBibleDocument } from "../types";
+import type { SavedLoreBibleProjectV2 } from "../lib/projectPersistence";
+import { restoredProjectStages } from "../lib/projectWorkspace";
 import { X, Copy, Trash2, Edit2, Check, FileText, Calendar, ExternalLink } from "lucide-react";
 import { HandDrawnEmptyState } from "./HandDrawnEmptyState";
 
 interface VaultModalProps {
   isOpen: boolean;
   onClose: () => void;
-  savedScenarios: LoreBibleDocument[];
-  onLoadScenario: (scenario: LoreBibleDocument) => void;
-  onDeleteScenario: (id: string) => void;
-  onDuplicateScenario: (scenario: LoreBibleDocument) => void;
-  onRenameScenario: (id: string, newTitle: string) => void;
+  savedProjects: SavedLoreBibleProjectV2[];
+  onLoadProject: (project: SavedLoreBibleProjectV2) => void;
+  onDeleteProject: (id: string) => void;
+  onDuplicateProject: (project: SavedLoreBibleProjectV2) => void;
+  onRenameProject: (id: string, newTitle: string) => void;
   currentDocumentId?: string;
 }
 
 export const VaultModal: React.FC<VaultModalProps> = ({
   isOpen,
   onClose,
-  savedScenarios,
-  onLoadScenario,
-  onDeleteScenario,
-  onDuplicateScenario,
-  onRenameScenario,
+  savedProjects,
+  onLoadProject,
+  onDeleteProject,
+  onDuplicateProject,
+  onRenameProject,
   currentDocumentId,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export const VaultModal: React.FC<VaultModalProps> = ({
 
   const handleSaveRename = (id: string) => {
     if (renameText.trim()) {
-      onRenameScenario(id, renameText.trim());
+      onRenameProject(id, renameText.trim());
     }
     setEditingId(null);
   };
@@ -73,7 +74,7 @@ export const VaultModal: React.FC<VaultModalProps> = ({
 
         {/* List of stacked paper sheets */}
         <div className="p-3 sm:p-6 overflow-y-auto overflow-x-hidden space-y-3 sm:space-y-4 flex-1 min-h-0 overscroll-contain">
-          {savedScenarios.length === 0 ? (
+          {savedProjects.length === 0 ? (
             <div className="py-8">
               <HandDrawnEmptyState
                 sketchType="codex"
@@ -83,7 +84,9 @@ export const VaultModal: React.FC<VaultModalProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
-              {savedScenarios.map((item) => {
+              {savedProjects.map((project) => {
+                const item = project.document;
+                const restoredStages = restoredProjectStages(project);
                 const isCurrent = item.id === currentDocumentId;
                 const isEditing = editingId === item.id;
                 const genre = item.core?.genreTone || item.chosenTake?.genreTone || "Unclassified";
@@ -142,6 +145,12 @@ export const VaultModal: React.FC<VaultModalProps> = ({
                           · {item.physics.density} World
                         </span>
                       )}
+                      <span
+                        aria-label={`Stage ${restoredStages.currentStage}, unlocked through ${restoredStages.maxUnlockedStage}`}
+                        className="text-[10px] font-mono-ui text-[var(--graphite)]"
+                      >
+                        Stage {restoredStages.currentStage} · Unlocked through {restoredStages.maxUnlockedStage}
+                      </span>
                     </div>
 
                     {/* Action buttons row with responsive wrap */}
@@ -159,7 +168,7 @@ export const VaultModal: React.FC<VaultModalProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => onDuplicateScenario(item)}
+                          onClick={() => onDuplicateProject(project)}
                           className="text-[var(--graphite)] hover:text-[var(--ink)] flex items-center gap-1 font-apparatus py-1 px-1.5 rounded transition-colors cursor-pointer shrink-0"
                           title="Duplicate manuscript"
                         >
@@ -169,7 +178,7 @@ export const VaultModal: React.FC<VaultModalProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => onDeleteScenario(item.id)}
+                          onClick={() => onDeleteProject(item.id)}
                           className="text-[var(--graphite)] hover:text-[var(--rubric)] flex items-center gap-1 font-apparatus py-1 px-1.5 rounded transition-colors cursor-pointer shrink-0"
                           title="Delete manuscript"
                         >
@@ -181,7 +190,7 @@ export const VaultModal: React.FC<VaultModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          onLoadScenario(item);
+                          onLoadProject(project);
                           onClose();
                         }}
                         className="btn-primary text-xs py-1.5 px-3.5 flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap shadow-xs cursor-pointer w-full sm:w-auto"

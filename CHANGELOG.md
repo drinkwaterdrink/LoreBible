@@ -4,6 +4,29 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.32 — 2026-09-08
+
+### Added
+
+- Full active-workspace recovery now preserves the current stage, unlocked stages, Spark analysis, canon settings, world physics, all Divergence angles and version history, the selected angle, model settings, and the current manuscript across browser reloads and mobile/Desktop Site mode switches.
+- The Vault now displays each project's saved stage and highest unlocked stage.
+- Corrupt or unavailable browser storage produces a visible recovery notice while keeping current in-memory work available.
+
+### Changed
+
+- The Vault now stores canonical V2 project records rather than flattening them into bare documents and rebuilding every project with whichever settings happen to be active.
+- Opening a project restores its exact saved workflow instead of always jumping to Stage 5.
+- Fully forged projects previously mislabeled as Stage 1 by the old global autosave are recognized as Refine-ready during restoration.
+- The compact application version label now reads `v0.32`.
+
+### Fixed
+
+- Deleting a Vault project now writes the complete resulting store immediately, preventing the removed project from being recreated by a later autosave pass.
+- Corrupt V2 data, including incomplete nested workflow records, is copied verbatim to a timestamped recovery key without replacing the original during load.
+- Failed Vault and workspace writes preserve the previous stored value and no longer report a successful save.
+- **Save and start new** no longer clears the active project when the Vault write fails.
+- Removed the unrelated legacy `v3.2` sidebar footer so the shared release badge is the only displayed application version.
+
 ## v0.31 — 2026-09-08
 
 ### Changed

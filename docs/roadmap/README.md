@@ -23,7 +23,8 @@ Application changes are summarized in the project-level [changelog](../../CHANGE
 | M0.1 Export-state safety | Complete | Temporary state is excluded from runtime lore/System Prompt while remaining in the manuscript source. |
 | M0.2 Neutral draft construction | Complete | New drafts preserve supplied material without legacy scenario-template content; verified across blank, domestic, social, and science-fiction fixtures. |
 | M0.3 Truthful generation failures | Complete | Creative routes preserve accepted work and report structured, actionable failures; local deterministic audits identify their source. |
-| M0.4 Project restoration | Next | Complete V2 save/load and draft lifecycle with workflow, settings, history, corruption, and mobile-reload coverage. |
+| M0.4 Project restoration | Complete | V2 projects and active drafts restore workflow, settings, angle history, and manuscripts; deletes persist; corrupt data is quarantined; mobile reloads retain work. |
+| M0.5 Divergence lineage | Next | Preserve immutable branch ancestry, target exact selected takes, and prevent index-based history mixing across rerolls. |
 
 ## Recommended order
 
@@ -44,6 +45,6 @@ Validation, provenance, mobile usability, and capability evidence begin in M0/M1
 
 ## Next work
 
-Implement M0.4 Project Restoration next: complete the V2 save/load and draft lifecycle, preserve workflow settings and generation history across reloads, surface recoverable corruption clearly, and add mobile-reload coverage. Then complete Divergence lineage and consolidate exports around a small internal representation before introducing the full Project Graph. Keep the existing manuscript interface working throughout.
+Implement M0.5 Divergence Lineage next: pass the exact selected take through reroll and steering requests, preserve immutable parent IDs, and prevent reroll-all from mixing histories by array index. Then consolidate exports around a small internal representation before introducing the full Project Graph. Keep the existing manuscript interface working throughout.
 
 No calendar promises are assigned to the ten milestones: fixture availability, migration findings, and measured generation behavior determine readiness. Each milestone must ship a useful vertical slice rather than a collection of disconnected scaffolds.
