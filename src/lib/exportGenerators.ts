@@ -196,20 +196,7 @@ function buildCleanContent(pairs: [string, string | undefined | null][]): string
 export function generateLorebookExport(doc: LoreBibleDocument): string {
   const entries: GenericLorebookEntry[] = [];
 
-  // 1. STATUS block [P] -> Constant: true, Order 50, Depth 4
-  if (doc.status?.content && !isSectionOmitted(doc, "status")) {
-    entries.push({
-      keys: [],
-      content: `[CURRENT WORLD STATE]\n${doc.status.content}`,
-      enabled: true,
-      constant: true,
-      insertionOrder: 50,
-      depth: 4,
-      comment: "Current World Status Block",
-    });
-  }
-
-  // 2. NPCs [C] -> Order band 100s
+  // 1. NPCs [C] -> Order band 100s
   if (!isSectionOmitted(doc, "npcs") && doc.npcs?.length) {
     doc.npcs.forEach((npc, i) => {
       const header = npc.fields?.name ? (npc.fields?.role ? `${npc.fields.name} — ${npc.fields.role}` : npc.fields.name) : "";
@@ -453,24 +440,7 @@ export function generateCharacterCardV3(doc: LoreBibleDocument): any {
   let entryId = 1;
   const entries: any[] = [];
 
-  // 1. Status Block
-  if (doc.status?.content && !isSectionOmitted(doc, "status")) {
-    entries.push({
-      id: entryId++,
-      keys: [],
-      secondary_keys: [],
-      comment: "Current World Status Block",
-      content: `[CURRENT WORLD STATE]\n${doc.status.content}`,
-      constant: true,
-      selective: false,
-      insertion_order: 50,
-      enabled: true,
-      position: "before_char",
-      use_regex: false,
-    });
-  }
-
-  // 2. World Physics Rules (band 200)
+  // 1. World Physics Rules (band 200)
   if (!isSectionOmitted(doc, "rules") && doc.worldPhysics?.rules?.length) {
     doc.worldPhysics.rules.forEach((rule, i) => {
       const content = buildCleanContent([
@@ -740,7 +710,7 @@ export function generateCharacterCardV3(doc: LoreBibleDocument): any {
       first_mes: doc.opening?.firstMessage || "",
       mes_example: "",
       creator_notes: `Generated with Lore Bible Scenario Authoring Studio for Lumiverse.\nPremise Spark: ${doc.sparkText || ""}\nWorld Density: ${doc.physics?.density || "Standard"}`,
-      system_prompt: (doc.opening as any)?.systemPrompt || doc.status?.content || "",
+      system_prompt: (doc.opening as any)?.systemPrompt || "",
       post_history_instructions: (doc.opening as any)?.postHistoryInstructions || "",
       alternate_greetings: [],
       tags: Array.from(new Set(tags)),
