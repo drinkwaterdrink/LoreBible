@@ -35,3 +35,23 @@ test("rejects malformed generation events", () => {
   expect(() => parseGenerationStreamEvent({ type: "reasoning", task: "forge", delta: 12 })).toThrow("reasoning");
   expect(() => parseGenerationStreamEvent({ type: "done", task: "forge" })).toThrow("result");
 });
+
+test("preserves actionable metadata on a streaming failure", () => {
+  expect(parseGenerationStreamEvent({
+    type: "error",
+    task: "forge",
+    message: "The provider timed out.",
+    code: "REQUEST_TIMEOUT",
+    action: "retry",
+    retryable: true,
+    retryAfterMs: 1500,
+  })).toEqual({
+    type: "error",
+    task: "forge",
+    message: "The provider timed out.",
+    code: "REQUEST_TIMEOUT",
+    action: "retry",
+    retryable: true,
+    retryAfterMs: 1500,
+  });
+});

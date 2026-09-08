@@ -32,7 +32,7 @@ export interface GenerationProgressEvent {
 export type GenerationTerminalEvent =
   | { type: "done"; task: GenerationTask; result: unknown }
   | { type: "cancelled"; task: GenerationTask; message: string }
-  | { type: "error"; task: GenerationTask; message: string; code?: string };
+  | { type: "error"; task: GenerationTask; message: string; code?: string; action?: "retry" | "change_model" | "open_connections"; retryable?: boolean; retryAfterMs?: number };
 
 export type GenerationStreamEvent =
   | ({ type: "progress" } & GenerationProgressEvent)
@@ -116,7 +116,14 @@ export function parseGenerationStreamEvent(value: unknown): GenerationStreamEven
   }
   if (eventType === "error") {
     if (typeof input.message !== "string") throw new TypeError("Generation error message is required.");
-    return { type: "error", task: eventTask, message: input.message, code: typeof input.code === "string" ? input.code : undefined };
+    const action = input.action === "retry" || input.action === "change_model" || input.action === "open_connections" ? input.action : undefined;
+    return {
+      type: "error", task: eventTask, message: input.message,
+      code: typeof input.code === "string" ? input.code : undefined,
+      action,
+      retryable: typeof input.retryable === "boolean" ? input.retryable : undefined,
+      retryAfterMs: optionalNumber(input.retryAfterMs, "retryAfterMs"),
+    };
   }
   throw new TypeError(`Unknown generation event type: ${eventType}`);
 }
