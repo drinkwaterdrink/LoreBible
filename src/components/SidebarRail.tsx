@@ -1,5 +1,6 @@
 import React from "react";
 import { BookOpen, Moon, Sun, Archive, Sparkles, X, HelpCircle, Feather, PlusCircle, Save, KeyRound } from "lucide-react";
+import { AppVersionBadge } from "./AppVersionBadge";
 
 interface SidebarRailProps {
   currentStage: 1 | 2 | 3 | 4 | 5;
@@ -63,7 +64,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
             </span>
             <div>
               <h1 className="text-xs font-semibold tracking-widest text-[var(--ink)] font-apparatus">
-                LORE BIBLE
+                LORE BIBLE <AppVersionBadge />
               </h1>
               <p className="text-[10px] text-[var(--graphite)] tracking-wide uppercase">
                 Scenario Studio

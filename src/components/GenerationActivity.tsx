@@ -14,6 +14,7 @@ export interface GenerationActivityProps {
   outputCharacters?: number;
   onCancel: () => void;
   onClearReasoning: () => void;
+  onOpenConnections?: () => void;
 }
 
 function taskLabel(task: GenerationTask): string {
@@ -31,7 +32,7 @@ function elapsedLabel(startedAt: number | null, now: number): string {
 }
 
 export const GenerationActivity: React.FC<GenerationActivityProps> = ({
-  task, progress, startedAt, usage, reasoning, reasoningTruncated, status, lastEventAt, lastProviderActivityAt, outputCharacters = 0, onCancel, onClearReasoning,
+  task, progress, startedAt, usage, reasoning, reasoningTruncated, status, lastEventAt, lastProviderActivityAt, outputCharacters = 0, onCancel, onClearReasoning, onOpenConnections,
 }) => {
   const [now, setNow] = useState(() => Date.now());
   const [reasoningOpen, setReasoningOpen] = useState(false);
@@ -59,6 +60,10 @@ export const GenerationActivity: React.FC<GenerationActivityProps> = ({
       {status === "cancelled" && <span className="text-[var(--graphite)]">Stopped</span>}
       {status === "active" && <button type="button" onClick={onCancel} className="ml-auto border border-[var(--rubric)] px-2 py-1 font-apparatus uppercase tracking-wider text-[var(--rubric)] hover:bg-[var(--rubric)] hover:text-white">{cancelLabel(task)}</button>}
     </div>
+    {status === "error" && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--rubric)]/40 pt-2 text-[10px]">
+      <span className="italic text-[var(--graphite)]">Your existing work was preserved.</span>
+      {onOpenConnections && <button type="button" onClick={onOpenConnections} className="btn-secondary px-2 py-1">Connections</button>}
+    </div>}
     {usageParts.length > 0 && <p className="mt-2 font-mono-ui text-[10px] text-[var(--graphite)]">Completed usage: {usageParts.join(" · ")}</p>}
     {status === "active" && outputCharacters > 0 && usage.outputTokens === undefined && <p className="mt-2 font-mono-ui text-[10px] text-[var(--graphite)]">~{Math.ceil(outputCharacters / 4).toLocaleString()} output tokens estimated from streamed characters</p>}
     <div className="mt-2 border-t border-[var(--ink-soft)] pt-2 text-[10px]">

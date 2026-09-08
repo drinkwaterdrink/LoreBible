@@ -22,7 +22,8 @@ Application changes are summarized in the project-level [changelog](../../CHANGE
 |---|---|---|
 | M0.1 Export-state safety | Complete | Temporary state is excluded from runtime lore/System Prompt while remaining in the manuscript source. |
 | M0.2 Neutral draft construction | Complete | New drafts preserve supplied material without legacy scenario-template content; verified across blank, domestic, social, and science-fiction fixtures. |
-| M0.3 Truthful generation failures | Next | Inventory and remove or explicitly isolate remaining deterministic creative fallbacks. |
+| M0.3 Truthful generation failures | Complete | Creative routes preserve accepted work and report structured, actionable failures; local deterministic audits identify their source. |
+| M0.4 Project restoration | Next | Complete V2 save/load and draft lifecycle with workflow, settings, history, corruption, and mobile-reload coverage. |
 
 ## Recommended order
 
@@ -43,6 +44,6 @@ Validation, provenance, mobile usability, and capability evidence begin in M0/M1
 
 ## Next work
 
-First remove temporary state from System Prompt and constant lore. Then finish neutral drafts and truthful failure handling, project restoration, and Divergence lineage. Consolidate exports around a small internal representation before introducing the full Project Graph. Keep the existing manuscript interface working throughout.
+Implement M0.4 Project Restoration next: complete the V2 save/load and draft lifecycle, preserve workflow settings and generation history across reloads, surface recoverable corruption clearly, and add mobile-reload coverage. Then complete Divergence lineage and consolidate exports around a small internal representation before introducing the full Project Graph. Keep the existing manuscript interface working throughout.
 
 No calendar promises are assigned to the ten milestones: fixture availability, migration findings, and measured generation behavior determine readiness. Each milestone must ship a useful vertical slice rather than a collection of disconnected scaffolds.

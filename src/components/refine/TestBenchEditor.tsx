@@ -6,6 +6,7 @@ import {
   GravityScores,
   VoiceCheckResult,
   OpeningAuditResult,
+  GenerationSettings,
 } from "../../types";
 import { testBenchTurnApi, voiceCheckApi, openingAuditApi } from "../../services/geminiService";
 import {
@@ -24,17 +25,22 @@ import {
 } from "lucide-react";
 import { HandDrawnEmptyState } from "../HandDrawnEmptyState";
 import { RuledLinesSkeleton } from "../RuledLinesSkeleton";
+import { GenerationFailureNotice } from "../GenerationFailureNotice";
 
 interface TestBenchEditorProps {
   document: LoreBibleDocument;
   onUpdateDocument: (doc: LoreBibleDocument) => void;
   sparkText?: string;
+  settings: GenerationSettings;
+  onOpenConnections: () => void;
 }
 
 export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
   document,
   onUpdateDocument,
   sparkText,
+  settings,
+  onOpenConnections,
 }) => {
   const npcs = document.npcs || [];
   const [subTab, setSubTab] = useState<"simulation" | "voiceCheck" | "openingAudit">("simulation");
@@ -43,6 +49,7 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
   const [selectedNpcId, setSelectedNpcId] = useState<string>(npcs[0]?.id || "");
   const [userInput, setUserInput] = useState<string>("");
   const [isTurnPending, setIsTurnPending] = useState<boolean>(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<TestBenchMessage[]>([]);
   const [currentGravity, setCurrentGravity] = useState<GravityScores>({
     modelVoice: 12,
@@ -96,6 +103,7 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
     setChatHistory(nextHistory);
     setUserInput("");
     setIsTurnPending(true);
+    setGenerationError(null);
 
     try {
       const res = await testBenchTurnApi({
@@ -105,6 +113,7 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
         history: nextHistory,
         userInput: textToSend,
         sparkText: sparkText || document.core?.title,
+        settings,
       });
 
       const npcMsg: TestBenchMessage = {
@@ -119,6 +128,7 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
       setCurrentGravity(res.gravity);
     } catch (err) {
       console.error("Test bench turn failed:", err);
+      setGenerationError(err instanceof Error ? err.message : "The Test Bench turn could not be generated.");
     } finally {
       setIsTurnPending(false);
     }
@@ -194,6 +204,7 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
 
   return (
     <div className="w-full space-y-6">
+      {generationError && <GenerationFailureNotice message={generationError} onOpenConnections={onOpenConnections} />}
       {/* Header Apparatus */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--ink-soft)] pb-4">
         <div>
@@ -530,7 +541,7 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
                   isVoiceCheckLoading ? "animate-pulse" : ""
                 }`}
               />
-              <span>{isVoiceCheckLoading ? "Evaluating Voice..." : "Run 5-Line Voice Check"}</span>
+              <span>{isVoiceCheckLoading ? "Evaluating Voice..." : "Run 5-Line Voice Check · Local heuristic"}</span>
             </button>
           </div>
 
@@ -638,7 +649,7 @@ export const TestBenchEditor: React.FC<TestBenchEditorProps> = ({
                     isAuditLoading ? "animate-pulse" : ""
                   }`}
                 />
-                <span>{isAuditLoading ? "Auditing Opening..." : "Audit Opening"}</span>
+                <span>{isAuditLoading ? "Auditing Opening..." : "Audit Opening · Local heuristic"}</span>
               </button>
 
               <button

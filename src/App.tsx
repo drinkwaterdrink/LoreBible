@@ -35,6 +35,7 @@ import { appendBoundedReasoning } from "./lib/reasoningBuffer";
 import { readSparkDraft, writeSparkDraft } from "./lib/sparkDraft";
 import { createDraftScenarioDocument, DEFAULT_CANON, DEFAULT_PHYSICS } from "./lib/scenarioDraft";
 import { Menu, Feather, X, PlusCircle, Save } from "lucide-react";
+import { AppVersionBadge } from "./components/AppVersionBadge";
 
 const STORAGE_KEY_SCENARIOS = "lore_bible_saved_scenarios_v1";
 
@@ -273,7 +274,7 @@ export default function App() {
         return;
       }
       console.error("Manual spark analyze error:", err);
-      setAnchorActivity((state) => ({ ...state, status: "error", progress: { task: "anchors", phase: "error", label: "Anchor analysis failed" } }));
+      setAnchorActivity((state) => ({ ...state, status: "error", progress: { task: "anchors", phase: "error", label: err?.message || "Anchor analysis failed" } }));
       triggerToast("Unable to reach AI analyzer; offline template preserved.");
     } finally {
       setIsParsingSpark(false);
@@ -872,7 +873,7 @@ export default function App() {
           className="flex items-center gap-1.5 text-xs font-apparatus font-semibold text-[var(--ink)]"
         >
           <Menu size={16} className="text-[var(--rubric)]" />
-          <span>§ LORE BIBLE</span>
+          <span className="flex items-baseline gap-1">§ LORE BIBLE <AppVersionBadge /></span>
         </button>
         <div className="flex items-center gap-1.5">
           <button
@@ -1019,6 +1020,7 @@ export default function App() {
                 task: isParsingSpark ? "anchors" : "divergence",
                 onCancel: isParsingSpark ? handleCancelAnchors : handleCancelDivergence,
                 onClearReasoning: () => isParsingSpark ? setAnchorActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) : setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })),
+                onOpenConnections: () => setIsSettingsOpen(true),
               } : undefined}
             />
           )}
@@ -1040,9 +1042,10 @@ export default function App() {
               sparkText={sparkText}
               divergenceError={divergenceError}
               onRetry={handleProceedToDivergence}
+              onOpenConnections={() => setIsSettingsOpen(true)}
               settings={settings}
               onUpdateSettings={setSettings}
-              generationActivity={divergenceActivity.status !== "idle" ? { ...divergenceActivity, task: "divergence", onCancel: handleCancelDivergence, onClearReasoning: () => setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) } : undefined}
+              generationActivity={divergenceActivity.status !== "idle" ? { ...divergenceActivity, task: "divergence", onCancel: handleCancelDivergence, onClearReasoning: () => setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
             />
           )}
 
@@ -1066,13 +1069,14 @@ export default function App() {
               workingTitle={workingTitle}
               forgeError={forgeError}
               onRetryForge={handleStartForge}
-              generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) } : undefined}
+              generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
             />
           )}
 
           {currentStage === 5 && document && (
             <RefineStage
               document={document}
+              settings={settings}
               onUpdateDocument={(updated) => {
                 setDocument(updated);
                 setSavedScenarios((prev) =>
@@ -1080,6 +1084,7 @@ export default function App() {
                 );
               }}
               onOpenExport={() => setIsExportOpen(true)}
+              onOpenConnections={() => setIsSettingsOpen(true)}
             />
           )}
         </main>

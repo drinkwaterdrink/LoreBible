@@ -5,6 +5,7 @@ import {
   LoreBibleDocument,
   RippleNotice,
   VariantSlip,
+  GenerationSettings,
 } from "../types";
 import { TableOfContents } from "./refine/TableOfContents";
 import { MarginInspector } from "./refine/MarginInspector";
@@ -22,18 +23,24 @@ import { RelationshipWeb } from "./visual/RelationshipWeb";
 import { PressureMap } from "./visual/PressureMap";
 import { ProceduralRollsEditor } from "./refine/ProceduralRollsEditor";
 import { TestBenchEditor } from "./refine/TestBenchEditor";
+import { GenerationFailureNotice } from "./GenerationFailureNotice";
 
 interface RefineStageProps {
   document: LoreBibleDocument;
   onUpdateDocument: (updated: LoreBibleDocument) => void;
   onOpenExport: () => void;
+  settings: GenerationSettings;
+  onOpenConnections: () => void;
 }
 
 export const RefineStage: React.FC<RefineStageProps> = ({
   document,
   onUpdateDocument,
   onOpenExport,
+  settings,
+  onOpenConnections,
 }) => {
+  const [operationError, setOperationError] = useState<string | null>(null);
   // Center Sheet View Tab: Manuscript vs Relationship Web vs Pressure Map vs Procedural Rolls vs Test Bench
   const [centerTab, setCenterTab] = useState<
     "manuscript" | "relationshipWeb" | "pressureMap" | "proceduralRolls" | "testBench"
@@ -265,7 +272,8 @@ export const RefineStage: React.FC<RefineStageProps> = ({
           updated,
           ref.sectionKey,
           ref.entryId,
-          `Align with updated details of ${notice.sourceName}`
+          `Align with updated details of ${notice.sourceName}`,
+          settings,
         );
         const list: Entry[] = (updated as any)[ref.sectionKey] || [];
         (updated as any)[ref.sectionKey] = list.map((e) => (e.id === ref.entryId ? fresh : e));
@@ -293,8 +301,9 @@ export const RefineStage: React.FC<RefineStageProps> = ({
 
   const handleRerollEntry = async (sectionKey: string, entryId: string, instruction?: string) => {
     setIsRerollingEntry(true);
+    setOperationError(null);
     try {
-      const updatedEntry = await rerollEntryApi(currentDoc, sectionKey, entryId, instruction);
+      const updatedEntry = await rerollEntryApi(currentDoc, sectionKey, entryId, instruction, settings);
       const list: Entry[] = (currentDoc as any)[sectionKey] || [];
       const updatedList = list.map((e) => (e.id === entryId ? updatedEntry : e));
       pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
@@ -304,6 +313,7 @@ export const RefineStage: React.FC<RefineStageProps> = ({
       if (name) checkRipplesForName(name, entryId);
     } catch (err: any) {
       console.error("Reroll entry error:", err);
+      setOperationError(err?.message || "The entry could not be regenerated.");
     } finally {
       setIsRerollingEntry(false);
     }
@@ -311,11 +321,13 @@ export const RefineStage: React.FC<RefineStageProps> = ({
 
   const handleFetchVariants = async (sectionKey: string, entryId: string) => {
     setIsLoadingVariants(true);
+    setOperationError(null);
     try {
-      const slips = await fetchVariantsApi(currentDoc, sectionKey, entryId);
+      const slips = await fetchVariantsApi(currentDoc, sectionKey, entryId, settings);
       setVariants(slips);
     } catch (err: any) {
       console.error("Variants error:", err);
+      setOperationError(err?.message || "Variants could not be generated.");
     } finally {
       setIsLoadingVariants(false);
     }
@@ -340,8 +352,9 @@ export const RefineStage: React.FC<RefineStageProps> = ({
 
   const handlePushEntry = async (sectionKey: string, entryId: string, instruction: string) => {
     setIsPushingEntry(true);
+    setOperationError(null);
     try {
-      const updatedEntry = await pushEntryApi(currentDoc, sectionKey, entryId, instruction);
+      const updatedEntry = await pushEntryApi(currentDoc, sectionKey, entryId, instruction, settings);
       const list: Entry[] = (currentDoc as any)[sectionKey] || [];
       const updatedList = list.map((e) => (e.id === entryId ? updatedEntry : e));
       pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
@@ -350,6 +363,7 @@ export const RefineStage: React.FC<RefineStageProps> = ({
       if (name) checkRipplesForName(name, entryId);
     } catch (err: any) {
       console.error("Push entry error:", err);
+      setOperationError(err?.message || "The entry could not be revised.");
     } finally {
       setIsPushingEntry(false);
     }
@@ -507,11 +521,13 @@ export const RefineStage: React.FC<RefineStageProps> = ({
 
   const handleRegenerateSection = async (sectionKey: string, addCount?: number) => {
     setRegeneratingSection(sectionKey);
+    setOperationError(null);
     try {
-      const nextEntries = await regenerateSectionApi(currentDoc, sectionKey, addCount);
+      const nextEntries = await regenerateSectionApi(currentDoc, sectionKey, addCount, settings);
       pushDocMutation({ ...currentDoc, [sectionKey]: nextEntries });
     } catch (err: any) {
       console.error(`Section regen failed for ${sectionKey}:`, err);
+      setOperationError(err?.message || "The section could not be regenerated.");
     } finally {
       setRegeneratingSection(null);
     }
@@ -714,6 +730,7 @@ export const RefineStage: React.FC<RefineStageProps> = ({
           </button>
         </div>
       </header>
+      {operationError && <div className="mx-3 sm:mx-4 mb-4"><GenerationFailureNotice message={operationError} onOpenConnections={onOpenConnections} /></div>}
 
       {/* 2. THE 3-COLUMN MANUSCRIPT WORKSPACE */}
       <div className="max-w-[1520px] mx-auto px-2 sm:px-4 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
@@ -871,6 +888,8 @@ export const RefineStage: React.FC<RefineStageProps> = ({
             <div className="space-y-6">
               <ProceduralRollsEditor
                 document={currentDoc}
+                settings={settings}
+                onOpenConnections={onOpenConnections}
                 onUpdateGroups={(groups) =>
                   pushDocMutation({ ...currentDoc, proceduralRolls: groups })
                 }
@@ -883,6 +902,8 @@ export const RefineStage: React.FC<RefineStageProps> = ({
             <div className="space-y-6">
               <TestBenchEditor
                 document={currentDoc}
+                settings={settings}
+                onOpenConnections={onOpenConnections}
                 onUpdateDocument={pushDocMutation}
                 sparkText={currentDoc.sparkText}
               />

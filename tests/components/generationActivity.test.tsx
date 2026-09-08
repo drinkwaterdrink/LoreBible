@@ -79,3 +79,20 @@ test("generation cancellation is displayed as a neutral stopped state", () => {
   expect(html).toContain("Stopped");
   expect(html).not.toContain("Cancel Generation");
 });
+
+test("generation errors explain preservation and expose Connections", () => {
+  const html = renderToString(<GenerationActivity
+    task="anchors"
+    progress={{ task: "anchors", phase: "error", label: "Choose a connection and model before generating." }}
+    startedAt={Date.now()}
+    usage={{}}
+    reasoning=""
+    reasoningTruncated={false}
+    status="error"
+    onCancel={() => undefined}
+    onClearReasoning={() => undefined}
+    onOpenConnections={() => undefined}
+  />);
+  expect(html).toContain("Your existing work was preserved.");
+  expect(html).toContain("Connections");
+});

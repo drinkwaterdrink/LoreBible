@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { parseSparkApi, streamForgeDocument } from "../../src/services/geminiService";
+import { GenerationRequestError } from "../../src/contracts/generationFailure";
 
 test("parseSparkApi forwards the caller abort signal", async () => {
   const originalFetch = globalThis.fetch;
@@ -12,6 +13,23 @@ test("parseSparkApi forwards the caller abort signal", async () => {
   try {
     await parseSparkApi("spark", undefined, controller.signal);
     expect(receivedSignal).toBe(controller.signal);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("parseSparkApi preserves structured recovery details", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    error: "generation_failed",
+    message: "Choose a model in Connections.",
+    code: "CREDENTIAL_MISSING",
+    action: "open_connections",
+    retryable: false,
+    operation: "parse-spark",
+  }), { status: 401, headers: { "Content-Type": "application/json" } })) as unknown as typeof fetch;
+  try {
+    const error = await parseSparkApi("spark").catch((caught) => caught);
+    expect(error).toBeInstanceOf(GenerationRequestError);
+    expect(error).toMatchObject({ code: "CREDENTIAL_MISSING", action: "open_connections", status: 401 });
   } finally { globalThis.fetch = originalFetch; }
 });
 

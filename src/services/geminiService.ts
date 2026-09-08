@@ -22,6 +22,18 @@ import {
 } from "../types";
 import type { GenerationProgressEvent, GenerationStreamEvent, GenerationUsage } from "../contracts/generationProgress";
 import { consumeGenerationSse } from "./sseStream";
+import { GenerationRequestError, parseGenerationFailurePayload } from "../contracts/generationFailure";
+
+async function throwResponseFailure(res: Response, fallback: string): Promise<never> {
+  const data = await res.json().catch(() => null);
+  try {
+    throw new GenerationRequestError(parseGenerationFailurePayload(data), res.status);
+  } catch (error) {
+    if (error instanceof GenerationRequestError) throw error;
+    const record = data && typeof data === "object" ? data as Record<string, unknown> : {};
+    throw new Error(typeof record.message === "string" ? record.message : typeof record.error === "string" ? record.error : fallback);
+  }
+}
 
 export interface ParseSparkResult extends SparkParse {}
 
@@ -37,8 +49,7 @@ export async function parseSparkApi(sparkText: string, settings?: GenerationSett
     signal,
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || errorData.error || `Parse failed with HTTP ${res.status}`);
+    return throwResponseFailure(res, `Parse failed with HTTP ${res.status}`);
   }
   return await res.json();
 }
@@ -58,14 +69,21 @@ export async function fetchDivergenceTakes(
     signal: options?.signal,
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || errorData.error || `Divergence failed with HTTP ${res.status}`);
+    return throwResponseFailure(res, `Divergence failed with HTTP ${res.status}`);
   }
   const contentType = res.headers.get("Content-Type") || "";
   let data: any;
   if (contentType.includes("text/event-stream")) {
     const terminal = await consumeGenerationSse(res, { signal: options?.signal, onEvent: (event) => options?.onEvent?.(event) });
-    if (terminal.type === "error") throw new Error(terminal.message);
+    if (terminal.type === "error") throw new GenerationRequestError({
+      error: "generation_failed",
+      message: terminal.message,
+      code: terminal.code as any || "INTERNAL_ERROR",
+      action: terminal.action || "retry",
+      retryable: terminal.retryable ?? false,
+      retryAfterMs: terminal.retryAfterMs,
+      operation: terminal.task,
+    }, 0);
     if (terminal.type === "cancelled") throw new DOMException(terminal.message, "AbortError");
     data = terminal.result;
   } else {
@@ -93,8 +111,7 @@ export async function fetchSingleDivergenceTake(params: {
     body: JSON.stringify(params),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || errorData.error || `Single divergence failed with HTTP ${res.status}`);
+    return throwResponseFailure(res, `Single divergence failed with HTTP ${res.status}`);
   }
   const data = await res.json();
   if (!data.take) {
@@ -367,16 +384,16 @@ export async function rerollEntryApi(
   document: LoreBibleDocument,
   sectionKey: string,
   entryId: string,
-  instruction?: string
+  instruction?: string,
+  settings?: GenerationSettings,
 ): Promise<Entry> {
   const res = await fetch("/api/refine/entry-reroll", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ document, sectionKey, entryId, instruction }),
+    body: JSON.stringify({ document, sectionKey, entryId, instruction, settings }),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Reroll failed with HTTP ${res.status}`);
+    return throwResponseFailure(res, `Reroll failed with HTTP ${res.status}`);
   }
   const data = await res.json();
   return data.updatedEntry;
@@ -385,16 +402,16 @@ export async function rerollEntryApi(
 export async function fetchVariantsApi(
   document: LoreBibleDocument,
   sectionKey: string,
-  entryId: string
+  entryId: string,
+  settings?: GenerationSettings,
 ): Promise<VariantSlip[]> {
   const res = await fetch("/api/refine/variants", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ document, sectionKey, entryId }),
+    body: JSON.stringify({ document, sectionKey, entryId, settings }),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to fetch variants with HTTP ${res.status}`);
+    return throwResponseFailure(res, `Failed to fetch variants with HTTP ${res.status}`);
   }
   const data = await res.json();
   return data.variants || [];
@@ -404,16 +421,16 @@ export async function pushEntryApi(
   document: LoreBibleDocument,
   sectionKey: string,
   entryId: string,
-  pushInstruction: string
+  pushInstruction: string,
+  settings?: GenerationSettings,
 ): Promise<Entry> {
   const res = await fetch("/api/refine/entry-push", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ document, sectionKey, entryId, pushInstruction }),
+    body: JSON.stringify({ document, sectionKey, entryId, pushInstruction, settings }),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Push failed with HTTP ${res.status}`);
+    return throwResponseFailure(res, `Push failed with HTTP ${res.status}`);
   }
   const data = await res.json();
   return data.updatedEntry;
@@ -422,16 +439,16 @@ export async function pushEntryApi(
 export async function regenerateSectionApi(
   document: LoreBibleDocument,
   sectionKey: string,
-  addCount?: number
+  addCount?: number,
+  settings?: GenerationSettings,
 ): Promise<Entry[]> {
   const res = await fetch("/api/refine/section-regen", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ document, sectionKey, addCount }),
+    body: JSON.stringify({ document, sectionKey, addCount, settings }),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Section regeneration failed with HTTP ${res.status}`);
+    return throwResponseFailure(res, `Section regeneration failed with HTTP ${res.status}`);
   }
   const data = await res.json();
   return data.entries || [];
@@ -456,6 +473,7 @@ export async function suggestRollsApi(params: {
   parse?: SparkParse;
   canon?: CanonConfig;
   physics?: PhysicsConfig;
+  settings?: GenerationSettings;
 }): Promise<ProceduralRollGroup[]> {
   const res = await fetch("/api/suggest-rolls", {
     method: "POST",
@@ -463,8 +481,7 @@ export async function suggestRollsApi(params: {
     body: JSON.stringify(params),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to fetch suggested rolls (${res.status})`);
+    return throwResponseFailure(res, `Failed to fetch suggested rolls (${res.status})`);
   }
   const data = await res.json();
   return data.proceduralRolls || [];
@@ -478,6 +495,7 @@ export async function testBenchTurnApi(params: {
   userInput: string;
   sparkText?: string;
   canon?: CanonConfig;
+  settings?: GenerationSettings;
 }): Promise<{ reply: string; gravity: GravityScores }> {
   const res = await fetch("/api/test-bench-turn", {
     method: "POST",
@@ -485,8 +503,7 @@ export async function testBenchTurnApi(params: {
     body: JSON.stringify(params),
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.error || `Test bench turn failed (${res.status})`);
+    return throwResponseFailure(res, `Test bench turn failed (${res.status})`);
   }
   return await res.json();
 }

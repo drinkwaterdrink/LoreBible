@@ -34,6 +34,7 @@ interface DivergenceStageProps {
   sparkText: string;
   divergenceError?: string | null;
   onRetry?: () => void;
+  onOpenConnections?: () => void;
   settings?: GenerationSettings;
   onUpdateSettings?: (settings: GenerationSettings) => void;
   generationActivity?: GenerationActivityProps;
@@ -73,6 +74,7 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
   sparkText,
   divergenceError,
   onRetry,
+  onOpenConnections,
   settings,
   onUpdateSettings: _onUpdateSettings,
   generationActivity,
@@ -224,6 +226,7 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
               </p>
             </div>
           </div>
+          <div className="flex shrink-0 gap-2">
           {onRetry && (
             <button
               type="button"
@@ -235,6 +238,8 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
               <span>Retry Generation</span>
             </button>
           )}
+          {onOpenConnections && <button type="button" onClick={onOpenConnections} className="btn-secondary text-xs cursor-pointer">Connections</button>}
+          </div>
         </div>
       )}
 

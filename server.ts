@@ -4,7 +4,7 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { GENERATOR_RULES, FORMAT_EXAMPLE, checkContamination, CREATIVE_CONSTITUTION_PROMPT } from "./src/lib/systemPrompt.js";
-import { cleanAngleLabel, generateSuggestedRollGroups, generateDeterministicBundle } from "./src/lib/deterministicBundles.js";
+import { cleanAngleLabel } from "./src/lib/deterministicBundles.js";
 import { calculateLocalGravityAudit, auditOpeningMessageLocal, performVoiceCheckLocal } from "./src/lib/testBenchService.js";
 import {
   UNIVERSAL_DIMENSIONS,
@@ -28,6 +28,7 @@ import { registerConnectionRoutes } from "./server/routes/connections.js";
 import { createModelGateway, ModelGatewayError, type ModelGateway } from "./server/model/gateway.js";
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
+import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
 
 dotenv.config();
 
@@ -73,17 +74,7 @@ function getAI(): GoogleGenAI | null {
   return aiClient;
 }
 
-const CANDIDATE_MODELS = [
-  process.env.GEMINI_MODEL,
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
-  "gemini-3.1-flash-lite",
-  "gemini-3.1-pro-preview",
-  "gemini-2.5-flash",
-].filter(Boolean) as string[];
-
-const dailyExhaustedModels = new Set<string>();
-const temporaryUnavailableCooldown = new Map<string, number>();
+const ENV_GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || null;
 
 function getRawErrorString(err: any): string {
   if (!err) return "";
@@ -127,7 +118,7 @@ function cleanErrorMessage(err: any): string {
   const raw = getRawErrorString(err);
 
   if (isHighDemandError(err)) {
-    return "The model service is currently experiencing high demand. Automatic failover active.";
+    return "The selected model service is currently experiencing high demand.";
   }
   if (isDailyQuotaExhausted(err)) {
     return "The daily free-tier quota has been reached for the active models. Please wait for the quota reset or configure an API key in Settings.";
@@ -156,24 +147,11 @@ async function callGeminiGenerate(
   signal?: AbortSignal,
 ): Promise<any> {
   let lastError: any = null;
-
-  const now = Date.now();
-  let availableModels = CANDIDATE_MODELS.filter((m) => {
-    if (dailyExhaustedModels.has(m)) return false;
-    const cooldownUntil = temporaryUnavailableCooldown.get(m);
-    if (cooldownUntil && cooldownUntil > now) return false;
-    return true;
-  });
-
-  if (availableModels.length === 0) {
-    dailyExhaustedModels.clear();
-    temporaryUnavailableCooldown.clear();
-    availableModels = [...CANDIDATE_MODELS];
+  if (!ENV_GEMINI_MODEL) {
+    throw new ModelGatewayError("Choose a connection and model before generating.", "CREDENTIAL_MISSING", 401);
   }
-
-  for (const model of availableModels) {
-    // Up to 2 attempts per model (for brief rate limit delays only)
-    for (let modelAttempt = 1; modelAttempt <= 2; modelAttempt++) {
+  const model = ENV_GEMINI_MODEL;
+  for (let modelAttempt = 1; modelAttempt <= 2; modelAttempt++) {
       try {
         signal?.throwIfAborted();
         const isGemini3 = model.startsWith("gemini-3.");
@@ -192,20 +170,6 @@ async function callGeminiGenerate(
         lastError = err;
         const raw = getRawErrorString(err);
 
-        // If daily quota exhausted for this model, mark it and failover immediately
-        if (isDailyQuotaExhausted(err)) {
-          dailyExhaustedModels.add(model);
-          console.log(`[Failover] Model ${model} daily quota exhausted. Switching to next model...`);
-          break;
-        }
-
-        // If 503 / UNAVAILABLE / high demand, mark short cooldown and failover immediately to next model
-        if (isHighDemandError(err)) {
-          temporaryUnavailableCooldown.set(model, Date.now() + 60_000);
-          console.log(`[Failover] Model ${model} is experiencing a demand spike (503). Switching to alternative model immediately...`);
-          break; // Break model attempts to immediately try the next model in availableModels!
-        }
-
         // If rate limit with short retry delay (<= 8s), wait and retry once
         const delayMs = parseRetryDelayMs(err);
         if (delayMs && delayMs <= 8000 && modelAttempt < 2) {
@@ -214,14 +178,10 @@ async function callGeminiGenerate(
           continue;
         }
 
-        // Otherwise advance to next candidate model
-        console.log(`[Failover] Model ${model} encountered an error, advancing to next model in pool...`);
         break;
       }
     }
-  }
-
-  throw new Error(cleanErrorMessage(lastError));
+  throw new ModelGatewayError(cleanErrorMessage(lastError), isDailyQuotaExhausted(lastError) ? "QUOTA_EXHAUSTED" : isHighDemandError(lastError) ? "PROVIDER_UNAVAILABLE" : "INTERNAL_ERROR", isDailyQuotaExhausted(lastError) ? 429 : isHighDemandError(lastError) ? 503 : 500, "gemini");
 }
 
 async function executeSelectedModelWithRetry<T>(params: {
@@ -302,7 +262,7 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     hasApiKey: !!process.env.GEMINI_API_KEY,
-    candidateModels: CANDIDATE_MODELS,
+    environmentModel: ENV_GEMINI_MODEL,
   });
 });
 
@@ -414,7 +374,7 @@ Tone: ${chosenTake.genreTone}`;
  * Execute Gemini call with 2 retries with backoff, JSON repair, and contamination blocklist check.
  */
 async function executeGeminiWithRetry<T>(params: {
-  ai: GoogleGenAI;
+  ai: GoogleGenAI | null;
   systemInstruction: string;
   userPrompt: string;
   responseSchema?: any;
@@ -468,6 +428,7 @@ async function executeGeminiWithRetry<T>(params: {
       onProviderActivity: params.onProviderActivity,
     });
   }
+  if (!ai) throw new ModelGatewayError("Choose a connection and model before generating.", "CREDENTIAL_MISSING", 401);
   let lastErr: any = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -500,8 +461,8 @@ async function executeGeminiWithRetry<T>(params: {
       onMetadata?.({
         provider: "gemini",
         profileId: "environment-gemini",
-        modelRequested: "gemini-auto",
-        modelReported: null,
+        modelRequested: ENV_GEMINI_MODEL,
+        modelReported: ENV_GEMINI_MODEL,
         repaired: false,
         offlineFallback: false,
         usage: {
@@ -688,7 +649,7 @@ function generateDeterministicDivergenceTakes(sparkText: string, parse?: any): a
 app.post("/api/parse-spark", async (req, res) => {
   const requestLifecycle = createRequestAbortSignal(req, res);
   try {
-    const { sparkText, settings, allowOfflineFallback = false } = req.body;
+    const { sparkText, settings } = req.body;
     if (!sparkText || typeof sparkText !== "string") {
       return res.status(400).json({ error: "Missing sparkText" });
     }
@@ -701,6 +662,10 @@ app.post("/api/parse-spark", async (req, res) => {
     }
     const ai = getAI();
     let parsed: any = null;
+
+    if (!ai && !modelSelection) {
+      return sendGenerationFailure(res, new ModelGatewayError("Choose a connection and model before generating.", "CREDENTIAL_MISSING", 401), { operation: "parse-spark" });
+    }
 
     if (ai || modelSelection) {
       try {
@@ -774,29 +739,19 @@ User spark:
       } catch (modelErr: any) {
         if (requestLifecycle.signal.aborted || (modelErr instanceof ModelGatewayError && modelErr.code === "CLIENT_DISCONNECTED")) return;
         console.warn("[Spark Parse Model Call Error]:", modelErr?.message || modelErr);
-        if (!allowOfflineFallback) {
-          const delayMs = parseRetryDelayMs(modelErr);
-          const isRateLimit = Boolean(delayMs) || getRawErrorString(modelErr).includes("429");
-          const status = modelErr instanceof ModelGatewayError ? modelErr.status : isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
-          return res.status(status).json({
-            code: modelErr instanceof ModelGatewayError ? modelErr.code : undefined,
-            error: cleanErrorMessage(modelErr),
-            retryDelayMs: delayMs || (isRateLimit ? 10000 : null),
-            isRateLimit,
-          });
-        }
+        return sendGenerationFailure(res, modelErr, { operation: "parse-spark" });
       }
     }
 
     if (!parsed || !parsed.nonNegotiables || parsed.nonNegotiables.length === 0) {
-      parsed = generateDeterministicSparkParse(sparkText);
+      return sendGenerationFailure(res, new ModelGatewayError("The selected model returned an incomplete Spark analysis.", "INVALID_STRUCTURED_OUTPUT", 502), { operation: "parse-spark" });
     }
 
     return res.json(parsed);
   } catch (err: any) {
     if (requestLifecycle.signal.aborted) return;
     console.error("Parse spark unhandled error:", err);
-    return res.status(500).json({ error: cleanErrorMessage(err) });
+    return sendGenerationFailure(res, err, { operation: "parse-spark" });
   } finally {
     requestLifecycle.dispose();
   }
@@ -825,7 +780,7 @@ app.post("/api/divergence", async (req, res) => {
     requestLifecycle?.dispose();
   };
   try {
-    const { sparkText, parse, canon, pushInstruction, settings, allowOfflineFallback = false } = req.body;
+    const { sparkText, parse, canon, pushInstruction, settings } = req.body;
     if (!sparkText) {
       if (wantsStream) {
         finishStream({ type: "error", task: "divergence", message: "Missing sparkText" });
@@ -846,6 +801,15 @@ app.post("/api/divergence", async (req, res) => {
     }
     const ai = getAI();
     let takes: any[] | null = null;
+
+    if (!ai && !modelSelection) {
+      const failure = normalizeGenerationFailure(new ModelGatewayError("Choose a connection and model before generating.", "CREDENTIAL_MISSING", 401), { operation: "divergence" });
+      if (wantsStream) {
+        finishStream({ type: "error", task: "divergence", message: failure.message, code: failure.code, action: failure.action, retryable: failure.retryable, retryAfterMs: failure.retryAfterMs });
+        return;
+      }
+      return sendGenerationFailure(res, failure, { operation: "divergence" });
+    }
 
     // Determine thinking level from GenerationSettings
     const quality = settings?.quality || "Balanced";
@@ -945,6 +909,9 @@ REQUIREMENTS:
           });
 
           const candidates = architectResult?.candidates || [];
+          if (!Array.isArray(candidates) || candidates.length < 6) {
+            throw new ModelGatewayError("The Divergence architect returned fewer than six usable candidates.", "INVALID_STRUCTURED_OUTPUT", 502);
+          }
 
           // Stage 2: Distinctiveness Critic & Selection
           console.log("[Deep Craft] Stage 2: Critic evaluating candidate branches for distinctiveness...");
@@ -990,7 +957,10 @@ TASK:
             ...selectedProviderEvents,
           });
 
-          const chosenIndices = criticResult?.selectedIndices || [0, 1, 2, 3];
+          const chosenIndices = criticResult?.selectedIndices;
+          if (!Array.isArray(chosenIndices) || new Set(chosenIndices).size !== 4) {
+            throw new ModelGatewayError("The Divergence critic did not select four distinct candidates.", "INVALID_STRUCTURED_OUTPUT", 502);
+          }
           const selectedCandidates = candidates.filter((c) => chosenIndices.includes(c.index)).slice(0, 4);
           if (selectedCandidates.length < 4) {
             selectedCandidates.push(...candidates.filter((c) => !chosenIndices.includes(c.index)).slice(0, 4 - selectedCandidates.length));
@@ -1175,27 +1145,22 @@ Emit strictly valid JSON matching the schema with 4 takes in the "takes" array.`
           return;
         }
         console.warn("[Divergence Model Call Error]:", modelErr?.message || modelErr);
-        if (!allowOfflineFallback) {
-          const delayMs = parseRetryDelayMs(modelErr);
-          const isRateLimit = Boolean(delayMs) || getRawErrorString(modelErr).includes("429");
-          const status = modelErr instanceof ModelGatewayError ? modelErr.status : isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
-          const payload = {
-            code: modelErr instanceof ModelGatewayError ? modelErr.code : undefined,
-            error: cleanErrorMessage(modelErr),
-            retryDelayMs: delayMs || (isRateLimit ? 10000 : null),
-            isRateLimit,
-          };
-          if (wantsStream) {
-            finishStream({ type: "error", task: "divergence", code: payload.code, message: payload.error });
-            return;
-          }
-          return res.status(status).json(payload);
+        const failure = normalizeGenerationFailure(modelErr, { operation: "divergence" });
+        if (wantsStream) {
+          finishStream({ type: "error", task: "divergence", message: failure.message, code: failure.code, action: failure.action, retryable: failure.retryable, retryAfterMs: failure.retryAfterMs });
+          return;
         }
+        return sendGenerationFailure(res, modelErr, { operation: "divergence" });
       }
     }
 
     if (!takes || takes.length === 0) {
-      takes = generateDeterministicDivergenceTakes(sparkText, parse);
+      const failure = normalizeGenerationFailure(new ModelGatewayError("The selected model returned no usable Divergence angles.", "INVALID_STRUCTURED_OUTPUT", 502), { operation: "divergence" });
+      if (wantsStream) {
+        finishStream({ type: "error", task: "divergence", message: failure.message, code: failure.code, action: failure.action, retryable: failure.retryable });
+        return;
+      }
+      return sendGenerationFailure(res, failure, { operation: "divergence" });
     }
 
     sendProgress("validating", "Validating and publishing angles", quality === "Deep Craft" ? 3 : 0, quality === "Deep Craft" ? 4 : 1);
@@ -1241,7 +1206,6 @@ app.post("/api/divergence-single", async (req, res) => {
       settings,
       authorFlavorId,
       authorFlavorStrength,
-      allowOfflineFallback = false,
     } = req.body;
 
     if (!sparkText) {
@@ -1256,6 +1220,9 @@ app.post("/api/divergence-single", async (req, res) => {
     }
     const ai = getAI();
     let take: any | null = null;
+    if (!ai && !modelSelection) {
+      return sendGenerationFailure(res, new ModelGatewayError("Choose a connection and model before generating.", "CREDENTIAL_MISSING", 401), { operation: "divergence-single" });
+    }
     const angleCategory = targetAngle || currentTake?.angle || "Dynamic Angle";
 
     const semanticGuidance = buildSemanticRerollGuidance(rerollType, currentTake);
@@ -1345,34 +1312,12 @@ REQUIREMENTS:
         }
       } catch (modelErr: any) {
         console.warn("[Divergence Single Model Call Error]:", modelErr?.message || modelErr);
-        if (!allowOfflineFallback) {
-          const delayMs = parseRetryDelayMs(modelErr);
-          const isRateLimit = Boolean(delayMs) || getRawErrorString(modelErr).includes("429");
-          const status = modelErr instanceof ModelGatewayError ? modelErr.status : isRateLimit ? 429 : isHighDemandError(modelErr) ? 503 : 500;
-          return res.status(status).json({
-            code: modelErr instanceof ModelGatewayError ? modelErr.code : undefined,
-            error: cleanErrorMessage(modelErr),
-            retryDelayMs: delayMs || (isRateLimit ? 10000 : null),
-            isRateLimit,
-          });
-        }
+        return sendGenerationFailure(res, modelErr, { operation: "divergence-single" });
       }
     }
 
     if (!take) {
-      const deterministicTakes = generateDeterministicDivergenceTakes(sparkText, parse);
-      const matched =
-        deterministicTakes.find((t) =>
-          t.angle.toLowerCase().includes(angleCategory.toLowerCase().slice(0, 5))
-        ) || deterministicTakes[0];
-      const now = Date.now();
-      take = {
-        ...matched,
-        id: `take-${now}`,
-        angle: angleCategory,
-        title: steerInstruction ? `${matched.title} (Steered)` : `${matched.title} (Refreshed)`,
-        pitch: steerInstruction ? `${matched.pitch} Driven by: ${steerInstruction}.` : `${matched.pitch}`,
-      };
+      return sendGenerationFailure(res, new ModelGatewayError("The selected model returned no usable Divergence angle.", "INVALID_STRUCTURED_OUTPUT", 502), { operation: "divergence-single" });
     }
 
     return res.json({
@@ -1383,13 +1328,13 @@ REQUIREMENTS:
     });
   } catch (err: any) {
     console.error("Divergence single unhandled error:", err);
-    return res.status(500).json({ error: cleanErrorMessage(err) });
+    return sendGenerationFailure(res, err, { operation: "divergence-single" });
   }
 });
 
 // 3. Document Forge endpoint (Sequential 6-Bundle Generation over SSE)
 app.post("/api/forge", async (req, res) => {
-  const { sparkText, parse, canon, physics, chosenTake, settings, allowOfflineFallback = false } = req.body;
+  const { sparkText, parse, canon, physics, chosenTake, settings } = req.body;
   const requestLifecycle = createRequestAbortSignal(req, res);
   const session = createSseSession(res, "forge");
   session.startHeartbeat();
@@ -1398,7 +1343,7 @@ app.post("/api/forge", async (req, res) => {
     if (event === "section") session.send({ type: "section", task: "forge", key: data.key, data: data.data });
     else if (event === "log") session.send({ type: "progress", task: "forge", phase: data.status === "done" ? "validating" : data.stage === "init" ? "requesting" : "forge_bundle", label: data.label });
     else if (event === "done") { session.finish({ type: "done", task: "forge", result: data }); cleanup(); }
-    else if (event === "error") { session.finish({ type: "error", task: "forge", message: data.message || "Forge generation failed.", code: data.code }); cleanup(); }
+    else if (event === "error") { session.finish({ type: "error", task: "forge", message: data.message || "Forge generation failed.", code: data.code, action: data.action, retryable: data.retryable, retryAfterMs: data.retryAfterMs }); cleanup(); }
   };
 
   let modelSelection: ModelSelection | null = null;
@@ -1411,11 +1356,9 @@ app.post("/api/forge", async (req, res) => {
 
   const ai = getAI();
   if (!ai && !modelSelection) {
-    sendEvent("error", {
-      stage: "Initialization",
-      message: "GEMINI_API_KEY is not configured on the server.",
-    });
-    return res.end();
+    const failure = normalizeGenerationFailure(new ModelGatewayError("Choose a connection and model before generating.", "CREDENTIAL_MISSING", 401), { operation: "forge" });
+    sendEvent("error", failure);
+    return;
   }
 
   sendEvent("log", { stage: "init", label: "Reading the spark and canonical registers…", status: "active" });
@@ -1910,83 +1853,26 @@ app.post("/api/forge", async (req, res) => {
   function sanitizeSectionEntries(sectionKey: string, entries: any[]): any[] {
     if (!Array.isArray(entries)) return [];
     if (entries.length === 0) return [];
-
-    return entries
-      .filter((e) => e && typeof e === "object")
-      .map((entry, idx) => {
-        const fields = { ...(entry.fields || {}) };
-        const keys = Array.isArray(entry.keys) && entry.keys.length > 0 ? entry.keys : ["LORE", "WORLD"];
-        const id = entry.id || `${sectionKey}-${idx + 1}`;
-        const permanence = entry.permanence || "C";
-        const locked = Boolean(entry.locked);
-
-        if (sectionKey === "rules") {
-          if (!fields.rule && !fields.name) fields.rule = "Physical limitation of the threshold";
-          if (!fields.profits) fields.profits = "Enforces survival compliance";
-          if (!fields.pays) fields.pays = "Exhaustion or material friction";
-        } else if (sectionKey === "locations") {
-          if (!fields.name) fields.name = keys[0] ? `${keys[0]} Facility` : `Location ${idx + 1}`;
-          if (!fields.function) fields.function = "Intake, surveillance, or staging perimeter";
-          if (!fields.mood) fields.mood = "Damp, quiet, and watchful";
-          if (!fields.whatsWrong) fields.whatsWrong = "The locks or seals show evidence of tampering";
-        } else if (sectionKey === "factions") {
-          if (!fields.name) fields.name = keys[0] ? `The ${keys[0]} Syndicate` : `Faction ${idx + 1}`;
-          if (!fields.publicFace) fields.publicFace = "Administrative compliance and mutual order";
-          if (!fields.trueAgenda) fields.trueAgenda = "Extracting leverage before seasonal audits";
-          if (!fields.independentWant) fields.independentWant = "Secure immunity from jurisdiction";
-          if (!fields.stanceTowardUser) fields.stanceTowardUser = "Wary neutrality or conditional leverage";
-        } else if (sectionKey === "npcs") {
-          if (!fields.name) fields.name = keys[0] || `Operative ${idx + 1}`;
-          if (!fields.role) fields.role = "Key Stakeholder";
-          if (!fields.wants) fields.wants = "To settle an old ledger without drawing attention";
-          if (!fields.body) fields.body = "Tense posture, observant gaze, worn outerwear";
-          if (!fields.voice) fields.voice = "Quiet, clipped, never repeats a warning";
-          if (!fields.notDefault) fields.notDefault = "Keeps a hidden ledger sewn into their collar";
-          if (!fields.holds) fields.holds = "A forged authorization token";
-          if (!fields.connection) fields.connection = "Owes a favor to the user's predecessor";
-        } else if (sectionKey === "relationshipWeb") {
-          if (!fields.source) fields.source = "User";
-          if (!fields.target) fields.target = "Contact";
-          if (!fields.bond) fields.bond = "Mutual debt";
-          if (!fields.pressure) fields.pressure = "Expiring timeline";
-          if (!fields.relation) fields.relation = `${fields.source} → ${fields.target}: ${fields.bond}`;
-        } else if (sectionKey === "knowledgeMap") {
-          if (!fields.truth) fields.truth = "The core constraint has already begun shifting";
-          if (!fields.knows) fields.knows = "Senior custodians";
-          if (!fields.suspects) fields.suspects = "Frontline witnesses";
-          if (!fields.surfacesWhen) fields.surfacesWhen = "The threshold condition is met";
-        } else if (sectionKey === "items") {
-          if (!fields.name) fields.name = keys[0] || `Apparatus ${idx + 1}`;
-          if (!fields.whatItDoes) fields.whatItDoes = "Bypasses standard checkpoints";
-          if (!fields.costOrLimit) fields.costOrLimit = "Exacts a cumulative physical toll on the user";
-          if (!fields.unfiredGun) fields.unfiredGun = "Triggers an alert if used twice in close succession";
-        } else if (sectionKey === "secrets") {
-          if (!fields.truth) fields.truth = "The foundational agreement was compromised at inception";
-          if (!fields.whoKeepsIt) fields.whoKeepsIt = "The primary custodian";
-          if (!fields.howKept) fields.howKept = "Secured under double lock and strict seal";
-          if (!fields.discoveryTrigger) fields.discoveryTrigger = "Cross-referencing conflicting records";
-          if (!fields.whatItChanges) fields.whatItChanges = "Invalidates all current bounties and agreements";
-        } else if (sectionKey === "history") {
-          if (!fields.event) fields.event = "The Silent Accord of Year 12";
-          if (!fields.era) fields.era = "Pre-Collapse";
-          if (!fields.consequence) fields.consequence = "Established the current boundary toll";
-        } else if (sectionKey === "pressures") {
-          if (!fields.name) fields.name = keys[0] || `Pressure ${idx + 1}`;
-          if (!fields.force) fields.force = "Impending seasonal foreclosure";
-          if (!fields.scope) fields.scope = "Structural";
-          if (!fields.clock) fields.clock = "3 intervals remaining";
-        }
-
-        return {
-          id,
-          fields,
-          keys,
-          permanence,
-          locked,
-          ...(entry.disabledUntilEarned !== undefined ? { disabledUntilEarned: entry.disabledUntilEarned } : {}),
-          ...(entry.note ? { note: entry.note } : {}),
-        };
-      });
+    const requiredFields: Record<string, string[]> = {
+      rules: ["rule", "profits", "pays"], locations: ["name", "function", "mood", "whatsWrong"],
+      factions: ["name", "publicFace", "trueAgenda", "independentWant", "stanceTowardUser"],
+      npcs: ["name", "role", "wants", "body", "voice", "notDefault", "holds", "connection"],
+      relationshipWeb: ["source", "target", "bond", "pressure", "relation"],
+      knowledgeMap: ["truth", "knows", "suspects", "surfacesWhen"],
+      items: ["name", "whatItDoes", "costOrLimit", "unfiredGun"],
+      secrets: ["truth", "whoKeepsIt", "howKept", "discoveryTrigger", "whatItChanges"],
+      history: ["event", "era", "consequence"], pressures: ["name", "force", "scope", "clock"],
+    };
+    return entries.map((entry, idx) => {
+      if (!entry || typeof entry !== "object" || !entry.fields || typeof entry.fields !== "object") {
+        throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} is malformed.`, "INVALID_STRUCTURED_OUTPUT", 502);
+      }
+      const missing = (requiredFields[sectionKey] || []).filter((field) => typeof entry.fields[field] !== "string" || !entry.fields[field].trim());
+      if (missing.length > 0 || !Array.isArray(entry.keys) || entry.keys.length === 0) {
+        throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} is missing required content.`, "INVALID_STRUCTURED_OUTPUT", 502);
+      }
+      return { ...entry, id: entry.id || `${sectionKey}-${idx + 1}`, locked: Boolean(entry.locked) };
+    });
   }
 
   try {
@@ -2050,28 +1936,10 @@ Emit strictly valid JSON matching the schema for this bundle.`;
           cleanup();
           return;
         }
-        if (modelSelection && !allowOfflineFallback) {
-          sendEvent("error", {
-            stage: bundle.name,
-            code: bundleErr instanceof ModelGatewayError ? bundleErr.code : "PROVIDER_UNAVAILABLE",
-            message: bundleErr instanceof Error ? bundleErr.message : "Selected provider generation failed.",
-          });
-          return res.end();
-        }
-        console.warn(`[Forge Fallback] Model generation hit quota/rate limit for ${bundle.name}, engaging thematic manuscript synthesis:`, bundleErr?.message || bundleErr);
-        sendEvent("log", {
-          stage: bundle.keys[0],
-          label: `${bundle.name} — high-fidelity synthesis active`,
-          status: "active",
-        });
-        bundleResult = generateDeterministicBundle(i + 1, {
-          sparkText,
-          parse,
-          canon,
-          chosenTake,
-          physics,
-          existingDoc: doc,
-        });
+        const failure = normalizeGenerationFailure(bundleErr, { operation: "forge" });
+        session.finish({ type: "error", task: "forge", message: failure.message, code: failure.code, action: failure.action, retryable: failure.retryable, retryAfterMs: failure.retryAfterMs });
+        cleanup();
+        return;
       }
 
       // Sanitize rules inside worldPhysics if present
@@ -2109,10 +1977,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
       return;
     }
     console.error("Forge pipeline error:", err);
-    sendEvent("error", {
-      stage: "The Forge",
-      message: err?.message || "Generation halted due to model error",
-    });
+    sendEvent("error", normalizeGenerationFailure(err, { operation: "forge" }));
   }
 });
 
@@ -2123,7 +1988,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
 // 1. Single Entry Reroll
 app.post("/api/refine/entry-reroll", async (req, res) => {
   try {
-    const { document, sectionKey, entryId, instruction } = req.body;
+    const { document, sectionKey, entryId, instruction, settings } = req.body;
     if (!document || !sectionKey || !entryId) {
       return res.status(400).json({ error: "Missing required document, sectionKey, or entryId" });
     }
@@ -2135,6 +2000,7 @@ app.post("/api/refine/entry-reroll", async (req, res) => {
     }
 
     const ai = getAI();
+    const modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
     const systemInstruction = `${CREATIVE_CONSTITUTION_PROMPT}
 
 You are the master scenario scribe in Lore Bible.
@@ -2157,10 +2023,7 @@ RULES:
 ${JSON.stringify(targetEntry, null, 2)}
 ${instruction ? `Specific Instruction: ${instruction}` : "Reroll with fresh details, holding tone and rules constant."}`;
 
-    let updatedEntry: any = null;
-    if (ai) {
-      try {
-        updatedEntry = await executeGeminiWithRetry<any>({
+    const updatedEntry: any = await executeGeminiWithRetry<any>({
           ai,
           systemInstruction,
           userPrompt,
@@ -2185,30 +2048,10 @@ ${instruction ? `Specific Instruction: ${instruction}` : "Reroll with fresh deta
           stageName: `Reroll Entry ${entryId}`,
           sparkText: document.sparkText,
           maxAttempts: 2,
+          modelSelection,
+          gateway: modelGateway,
         });
-      } catch (e) {
-        console.warn("Model reroll failed, using fallback variations:", e);
-      }
-    }
-
-    if (!updatedEntry || !updatedEntry.fields) {
-      // Deterministic variations based on existing entry
-      updatedEntry = {
-        ...targetEntry,
-        fields: {
-          ...targetEntry.fields,
-          ...(targetEntry.fields.whatsWrong
-            ? { whatsWrong: `Complicated further: ${targetEntry.fields.whatsWrong}` }
-            : {}),
-          ...(targetEntry.fields.voice
-            ? { voice: `Recalibrated cadence: ${targetEntry.fields.voice}` }
-            : {}),
-          ...(targetEntry.fields.trueAgenda
-            ? { trueAgenda: `Deepened motive: ${targetEntry.fields.trueAgenda}` }
-            : {}),
-        },
-      };
-    }
+    if (!updatedEntry?.fields) throw new ModelGatewayError("The selected model returned an invalid entry.", "INVALID_STRUCTURED_OUTPUT", 502);
 
     updatedEntry.id = targetEntry.id;
     updatedEntry.locked = targetEntry.locked;
@@ -2217,14 +2060,14 @@ ${instruction ? `Specific Instruction: ${instruction}` : "Reroll with fresh deta
     res.json({ updatedEntry });
   } catch (err: any) {
     console.error("Entry reroll error:", err);
-    res.status(500).json({ error: err.message || "Failed to reroll entry" });
+    sendGenerationFailure(res, err, { operation: "refine-entry-reroll" });
   }
 });
 
 // 2. Generate 3 Variants for an entry
 app.post("/api/refine/variants", async (req, res) => {
   try {
-    const { document, sectionKey, entryId } = req.body;
+    const { document, sectionKey, entryId, settings } = req.body;
     const currentList: any[] = document?.[sectionKey] || [];
     const targetEntry = currentList.find((e) => e.id === entryId);
     if (!targetEntry) {
@@ -2232,6 +2075,7 @@ app.post("/api/refine/variants", async (req, res) => {
     }
 
     const ai = getAI();
+    const modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
     const systemInstruction = `${CREATIVE_CONSTITUTION_PROMPT}
 
 You are the master scenario scribe in Lore Bible.
@@ -2248,10 +2092,7 @@ Each variant.entry must have the same field keys as the original entry.`;
 ${JSON.stringify(targetEntry, null, 2)}
 Manuscript: ${document.core?.title} · ${document.core?.genreTone} · ${document.core?.theRule}`;
 
-    let variants: any[] = [];
-    if (ai) {
-      try {
-        const response = await executeGeminiWithRetry<any>({
+    const response = await executeGeminiWithRetry<any>({
           ai,
           systemInstruction,
           userPrompt,
@@ -2292,70 +2133,23 @@ Manuscript: ${document.core?.title} · ${document.core?.genreTone} · ${document
           stageName: `Variants for ${entryId}`,
           sparkText: document.sparkText,
           maxAttempts: 2,
+          modelSelection,
+          gateway: modelGateway,
         });
-        if (response && Array.isArray(response.variants)) {
-          variants = response.variants;
-        }
-      } catch (e) {
-        console.warn("Variants generation fallback:", e);
-      }
-    }
-
-    if (variants.length === 0) {
-      variants = [
-        {
-          id: `var-1-${Date.now()}`,
-          label: "Practical Shift",
-          angle: "Alternative Practical Reality",
-          preview: `Re-anchors the entry in different material tools, physical limits, or craft requirements.`,
-          entry: {
-            ...targetEntry,
-            fields: {
-              ...targetEntry.fields,
-              name: targetEntry.fields.name ? `${targetEntry.fields.name} (Practical Focus)` : targetEntry.fields.truth,
-            },
-          },
-        },
-        {
-          id: `var-2-${Date.now()}`,
-          label: "Social Dynamic",
-          angle: "Alternative Social Dynamic",
-          preview: `Reframes the entry around competing obligations, personal loyalties, or community ties.`,
-          entry: {
-            ...targetEntry,
-            fields: {
-              ...targetEntry.fields,
-              name: targetEntry.fields.name ? `${targetEntry.fields.name} (Social Alignment)` : targetEntry.fields.truth,
-            },
-          },
-        },
-        {
-          id: `var-3-${Date.now()}`,
-          label: "Latent Discovery",
-          angle: "Alternative Latent Discovery",
-          preview: `Unveils an unexpected facet, historical trace, or emerging potential.`,
-          entry: {
-            ...targetEntry,
-            fields: {
-              ...targetEntry.fields,
-              name: targetEntry.fields.name ? `${targetEntry.fields.name} (Emergent Turn)` : targetEntry.fields.truth,
-            },
-          },
-        },
-      ];
-    }
+    const variants = Array.isArray(response?.variants) ? response.variants : [];
+    if (variants.length !== 3) throw new ModelGatewayError("The selected model did not return three usable variants.", "INVALID_STRUCTURED_OUTPUT", 502);
 
     res.json({ variants });
   } catch (err: any) {
     console.error("Variants error:", err);
-    res.status(500).json({ error: err.message || "Failed to generate variants" });
+    sendGenerationFailure(res, err, { operation: "refine-variants" });
   }
 });
 
 // 3. Push Entry With Handwritten Instruction
 app.post("/api/refine/entry-push", async (req, res) => {
   try {
-    const { document, sectionKey, entryId, pushInstruction } = req.body;
+    const { document, sectionKey, entryId, pushInstruction, settings } = req.body;
     const currentList: any[] = document?.[sectionKey] || [];
     const targetEntry = currentList.find((e) => e.id === entryId);
     if (!targetEntry) {
@@ -2363,6 +2157,7 @@ app.post("/api/refine/entry-push", async (req, res) => {
     }
 
     const ai = getAI();
+    const modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
     const systemInstruction = `${CREATIVE_CONSTITUTION_PROMPT}
 
 You are the master scenario scribe in Lore Bible.
@@ -2372,10 +2167,7 @@ Preserve the existing JSON structure and field names. Honor the world's native g
 
     const userPrompt = `Current Entry:\n${JSON.stringify(targetEntry, null, 2)}\nAuthor Note: "${pushInstruction}"`;
 
-    let updatedEntry: any = null;
-    if (ai) {
-      try {
-        updatedEntry = await executeGeminiWithRetry<any>({
+    const updatedEntry: any = await executeGeminiWithRetry<any>({
           ai,
           systemInstruction,
           userPrompt,
@@ -2398,21 +2190,10 @@ Preserve the existing JSON structure and field names. Honor the world's native g
           stageName: `Push ${entryId}`,
           sparkText: document.sparkText,
           maxAttempts: 2,
+          modelSelection,
+          gateway: modelGateway,
         });
-      } catch (e) {
-        console.warn("Push entry fallback:", e);
-      }
-    }
-
-    if (!updatedEntry || !updatedEntry.fields) {
-      updatedEntry = {
-        ...targetEntry,
-        fields: {
-          ...targetEntry.fields,
-          [Object.keys(targetEntry.fields)[1] || "notes"]: `${Object.values(targetEntry.fields)[1]} (${pushInstruction})`,
-        },
-      };
-    }
+    if (!updatedEntry?.fields) throw new ModelGatewayError("The selected model returned an invalid entry.", "INVALID_STRUCTURED_OUTPUT", 502);
 
     updatedEntry.id = targetEntry.id;
     updatedEntry.locked = targetEntry.locked;
@@ -2421,14 +2202,14 @@ Preserve the existing JSON structure and field names. Honor the world's native g
     res.json({ updatedEntry });
   } catch (err: any) {
     console.error("Push entry error:", err);
-    res.status(500).json({ error: err.message || "Failed to push entry" });
+    sendGenerationFailure(res, err, { operation: "refine-entry-push" });
   }
 });
 
 // 4. Section Regeneration / Add Entries
 app.post("/api/refine/section-regen", async (req, res) => {
   try {
-    const { document, sectionKey, addCount } = req.body;
+    const { document, sectionKey, addCount, settings } = req.body;
     const currentList: any[] = document?.[sectionKey] || [];
     const lockedEntries = currentList.filter((e) => e.locked);
     const standardFieldsBySection: Record<string, any> = {
@@ -2459,6 +2240,7 @@ app.post("/api/refine/section-regen", async (req, res) => {
     const countToGenerate = addCount ? Math.min(addCount, 5) : Math.max(currentList.length - lockedEntries.length, 1);
 
     const ai = getAI();
+    const modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
     const systemInstruction = `${CREATIVE_CONSTITUTION_PROMPT}
 
 You are the master scenario scribe in Lore Bible.
@@ -2467,10 +2249,7 @@ Manuscript: ${document.core?.title} · ${document.core?.theRule} · ${document.c
 Locked entries that MUST remain in the world:\n${JSON.stringify(lockedEntries, null, 2)}
 Ensure each generated entry honors the manuscript's native genre, tone, and physics, and follows the field structure.`;
 
-    let generatedEntries: any[] = [];
-    if (ai) {
-      try {
-        const response = await executeGeminiWithRetry<any>({
+    const response = await executeGeminiWithRetry<any>({
           ai,
           systemInstruction,
           userPrompt: `Generate ${countToGenerate} coherent entries for ${sectionKey}.`,
@@ -2503,29 +2282,11 @@ Ensure each generated entry honors the manuscript's native genre, tone, and phys
           stageName: `Regen Section ${sectionKey}`,
           sparkText: document.sparkText,
           maxAttempts: 2,
+          modelSelection,
+          gateway: modelGateway,
         });
-        if (response && Array.isArray(response.entries)) {
-          generatedEntries = response.entries;
-        }
-      } catch (e) {
-        console.warn("Section regen fallback:", e);
-      }
-    }
-
-    if (generatedEntries.length === 0) {
-      for (let i = 0; i < countToGenerate; i++) {
-        generatedEntries.push({
-          id: `${sectionKey}-${Date.now()}-${i}`,
-          fields: {
-            ...templateEntry.fields,
-            name: `${templateEntry.fields.name || "Seed"} ${i + 1}`,
-          },
-          keys: templateEntry.keys || ["Seed"],
-          permanence: "C",
-          locked: false,
-        });
-      }
-    }
+    const generatedEntries: any[] = Array.isArray(response?.entries) ? response.entries : [];
+    if (generatedEntries.length === 0) throw new ModelGatewayError("The selected model returned no usable section entries.", "INVALID_STRUCTURED_OUTPUT", 502);
 
 
     let finalEntries: any[] = [];
@@ -2550,7 +2311,7 @@ Ensure each generated entry honors the manuscript's native genre, tone, and phys
     res.json({ entries: finalEntries });
   } catch (err: any) {
     console.error("Section regen error:", err);
-    res.status(500).json({ error: err.message || "Failed to regenerate section" });
+    sendGenerationFailure(res, err, { operation: "refine-section-regen" });
   }
 });
 
@@ -2720,7 +2481,7 @@ app.post("/api/refine/consistency-audit", async (req, res) => {
       }
     }
 
-    res.json({ findings });
+    res.json({ findings, analysisSource: "local_heuristic" });
   } catch (err: any) {
     console.error("Consistency audit error:", err);
     res.status(500).json({ error: err.message || "Failed to audit consistency" });
@@ -2730,19 +2491,12 @@ app.post("/api/refine/consistency-audit", async (req, res) => {
 // 7. Suggested Procedural Rolls Endpoint
 app.post("/api/suggest-rolls", async (req, res) => {
   try {
-    const { sparkText, parse, canon, physics } = req.body;
+    const { sparkText, parse, canon, physics, settings } = req.body;
     const ai = getAI();
-    let proceduralRolls: any[] | null = null;
-
-    if (ai) {
-      try {
+    const modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
         const sharedContext = buildSharedContext({ sparkText, parse, canon, physics });
         const prompt = `PROCEDURAL ROLL GENERATOR:
-Generate 3 to 4 weighted, mutually-exclusive lorebook roll groups for dice rolling in this setting:
-1. Action Outcomes & Mechanical Friction
-2. Encounter / NPC Availability & Scrutiny
-3. Sector Atmosphere & Environmental Friction
-4. Social Leverage / Bureaucratic Audit
+Infer 3 to 4 weighted, mutually-exclusive lorebook roll groups that are actually useful for this specific setting. Do not introduce institutions, danger, factions, secrets, combat, or supernatural systems unless the supplied premise calls for them.
 
 ${sharedContext}
 
@@ -2793,38 +2547,30 @@ CRITICAL RULES:
           stageName: "Suggested Rolls",
           sparkText: sparkText || "Scenario",
           maxAttempts: 2,
+          modelSelection,
+          gateway: modelGateway,
         });
 
-        if (result && Array.isArray(result.proceduralRolls) && result.proceduralRolls.length > 0) {
-          proceduralRolls = result.proceduralRolls;
-        }
-      } catch (err: any) {
-        console.warn("[Suggest Rolls Fallback] Model call failed:", err?.message || err);
-      }
-    }
-
-    if (!proceduralRolls || proceduralRolls.length === 0) {
-      proceduralRolls = generateSuggestedRollGroups({ sparkText, parse, canon, physics });
-    }
+        const proceduralRolls = Array.isArray(result?.proceduralRolls) ? result.proceduralRolls : [];
+        if (proceduralRolls.length === 0) throw new ModelGatewayError("The selected model returned no usable procedural roll groups.", "INVALID_STRUCTURED_OUTPUT", 502);
 
     res.json({ proceduralRolls });
   } catch (err: any) {
     console.error("Suggest rolls error:", err);
-    res.json({ proceduralRolls: generateSuggestedRollGroups(req.body || {}) });
+    sendGenerationFailure(res, err, { operation: "suggest-rolls" });
   }
 });
 
 // 8. Test Bench Turn Endpoint
 app.post("/api/test-bench-turn", async (req, res) => {
   try {
-    const { npc, worldPhysics, status, history, userInput, sparkText, canon } = req.body;
+    const { npc, worldPhysics, status, history, userInput, sparkText, canon, settings } = req.body;
     if (!npc || !userInput) {
       return res.status(400).json({ error: "Missing npc or userInput" });
     }
 
     const ai = getAI();
-    let replyText = "";
-    let gravity = calculateLocalGravityAudit("", userInput);
+    const modelSelection = resolveRequestedModelSelection(settings?.modelSelection);
 
     const npcName = npc.fields?.name || npc.id || "The NPC";
     const role = npc.fields?.role || "Inhabitant";
@@ -2833,8 +2579,6 @@ app.post("/api/test-bench-turn", async (req, res) => {
     const holds = npc.fields?.holds || "Tangible leverage, skill, or resource";
     const notDefault = npc.fields?.notDefault || "A distinct personal quirk or habit";
 
-    if (ai) {
-      try {
         const systemPrompt = `${CREATIVE_CONSTITUTION_PROMPT}
 
 You are roleplaying strictly as "${npcName}", ${role} in this manuscript world.
@@ -2905,10 +2649,13 @@ Emit strictly valid JSON matching this schema:
           stageName: "Test Bench Turn",
           sparkText: sparkText || "Scenario",
           maxAttempts: 2,
+          modelSelection,
+          gateway: modelGateway,
         });
 
         if (result?.reply) {
-          replyText = result.reply;
+          const replyText = result.reply;
+          let gravity = calculateLocalGravityAudit(replyText, userInput);
           if (result.gravityAssessment) {
             gravity = {
               modelVoice: Math.min(100, Math.max(0, result.gravityAssessment.modelVoice || 10)),
@@ -2919,21 +2666,12 @@ Emit strictly valid JSON matching this schema:
               diagnosticNotes: result.gravityAssessment.diagnosticNotes || "Self-assessed anti-gravity stability.",
             };
           }
+          return res.json({ reply: replyText, gravity, analysisSource: "model" });
         }
-      } catch (err: any) {
-        console.warn("[Test Bench Turn Fallback]:", err?.message || err);
-      }
-    }
-
-    if (!replyText) {
-      replyText = `${npcName} looks up from their work, pausing a moment to take in your arrival. "I'm in the middle of something that requires attention," they say in a measured tone. "State what brings you here, and let's see where things stand."`;
-      gravity = calculateLocalGravityAudit(replyText, userInput);
-    }
-
-    res.json({ reply: replyText, gravity });
+        throw new ModelGatewayError("The selected model returned no usable Test Bench reply.", "INVALID_STRUCTURED_OUTPUT", 502);
   } catch (err: any) {
     console.error("Test bench turn error:", err);
-    res.status(500).json({ error: "Failed to generate test bench turn" });
+    sendGenerationFailure(res, err, { operation: "test-bench-turn" });
   }
 });
 
@@ -2945,62 +2683,8 @@ app.post("/api/voice-check", async (req, res) => {
       return res.status(400).json({ error: "Missing lines" });
     }
 
-    const ai = getAI();
-    let result = performVoiceCheckLocal(lines, npcName || "Character");
-
-    if (ai) {
-      try {
-        const prompt = `VOICE AUDIT:
-Analyze these 5 dialogue lines spoken by "${npcName || "The NPC"}" in this scenario.
-Flag ANY line that sounds like a generic, polite, helpful AI assistant (e.g. customer service greetings, therapeutic empathy, unearned eagerness to assist, "How can I help you?", "Certainly!").
-
-LINES:
-${lines.map((l: string, i: number) => `Line ${i + 1}: "${l}"`).join("\n")}
-
-Emit valid JSON matching the schema with an entry for each line, overallScore (0-100), and summary.`;
-
-        const voiceSchema = {
-          type: Type.OBJECT,
-          properties: {
-            lines: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                  isGenericAssistant: { type: Type.BOOLEAN },
-                  reason: { type: Type.STRING },
-                  proofreaderNote: { type: Type.STRING },
-                },
-                required: ["id", "text", "isGenericAssistant", "reason", "proofreaderNote"],
-              },
-            },
-            overallScore: { type: Type.INTEGER },
-            summary: { type: Type.STRING },
-          },
-          required: ["lines", "overallScore", "summary"],
-        };
-
-        const modelRes = await executeGeminiWithRetry<any>({
-          ai,
-          systemInstruction: "You are a strict prose style editor hunting down generic AI assistant voice and restoring authentic character grit.",
-          userPrompt: prompt,
-          responseSchema: voiceSchema,
-          stageName: "Voice Check",
-          sparkText: worldContext || "Scenario",
-          maxAttempts: 2,
-        });
-
-        if (modelRes && Array.isArray(modelRes.lines)) {
-          result = modelRes;
-        }
-      } catch (err) {
-        console.warn("[Voice Check Model Fallback]:", err);
-      }
-    }
-
-    res.json(result);
+    const result = performVoiceCheckLocal(lines, npcName || "Character");
+    res.json({ ...result, analysisSource: "local_heuristic" });
   } catch (err: any) {
     console.error("Voice check error:", err);
     res.status(500).json({ error: "Failed to perform voice check" });
@@ -3016,7 +2700,7 @@ app.post("/api/opening-audit", async (req, res) => {
     }
 
     const localAudit = auditOpeningMessageLocal(firstMessage, sparkText);
-    res.json(localAudit);
+    res.json({ ...localAudit, analysisSource: "local_heuristic" });
   } catch (err: any) {
     console.error("Opening audit error:", err);
     res.status(500).json({ error: "Failed to audit opening message" });

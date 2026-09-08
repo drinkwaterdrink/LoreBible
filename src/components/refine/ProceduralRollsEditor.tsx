@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ProceduralRollGroup, LoreBibleDocument } from "../../types";
+import { ProceduralRollGroup, LoreBibleDocument, GenerationSettings } from "../../types";
 import { suggestRollsApi } from "../../services/geminiService";
 import { Dice5, Copy, Check, Plus, Trash2, Sparkles, Wand2, Info } from "lucide-react";
 import { HandDrawnEmptyState } from "../HandDrawnEmptyState";
+import { GenerationFailureNotice } from "../GenerationFailureNotice";
 
 interface ProceduralRollsEditorProps {
   document: LoreBibleDocument;
   onUpdateGroups: (groups: ProceduralRollGroup[]) => void;
   sparkText?: string;
+  settings: GenerationSettings;
+  onOpenConnections: () => void;
 }
 
 const SEGMENT_COLORS = [
@@ -76,11 +79,14 @@ export const ProceduralRollsEditor: React.FC<ProceduralRollsEditorProps> = ({
   document,
   onUpdateGroups,
   sparkText,
+  settings,
+  onOpenConnections,
 }) => {
   const rollGroups = document.proceduralRolls || [];
   const [activeGroupId, setActiveGroupId] = useState<string>(rollGroups[0]?.id || "");
   const [copiedSettingsId, setCopiedSettingsId] = useState<string | null>(null);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef<{ dividerIndex: number; startX: number } | null>(null);
 
@@ -343,8 +349,10 @@ export const ProceduralRollsEditor: React.FC<ProceduralRollsEditorProps> = ({
   const handleSuggestRolls = async () => {
     try {
       setIsGeneratingSuggestions(true);
+      setGenerationError(null);
       const suggested = await suggestRollsApi({
         sparkText: sparkText || document.core?.title || "Scenario World",
+        settings,
       });
       if (suggested && suggested.length > 0) {
         onUpdateGroups(suggested);
@@ -352,6 +360,7 @@ export const ProceduralRollsEditor: React.FC<ProceduralRollsEditorProps> = ({
       }
     } catch (err) {
       console.error("Suggest rolls failed:", err);
+      setGenerationError(err instanceof Error ? err.message : "Procedural rolls could not be generated.");
     } finally {
       setIsGeneratingSuggestions(false);
     }
@@ -359,6 +368,7 @@ export const ProceduralRollsEditor: React.FC<ProceduralRollsEditorProps> = ({
 
   return (
     <div className="w-full space-y-6">
+      {generationError && <GenerationFailureNotice message={generationError} onRetry={handleSuggestRolls} onOpenConnections={onOpenConnections} />}
       {/* Header Apparatus */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--ink-soft)] pb-4">
         <div>

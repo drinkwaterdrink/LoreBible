@@ -50,7 +50,7 @@ export const ProofreaderHeader: React.FC<ProofreaderHeaderProps> = ({
           disabled={isAuditing}
           className="text-xs font-apparatus text-[var(--gold)] hover:text-[var(--ink)] font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer"
         >
-          {isAuditing ? "Auditing Manuscript..." : "Run Consistency Pass"}
+          {isAuditing ? "Auditing Manuscript..." : "Run Consistency Pass · Local heuristic"}
         </button>
 
         {unresolvedCount > 0 && (

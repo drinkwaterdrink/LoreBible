@@ -101,7 +101,6 @@ export interface GenerationSettings {
   quality: GenerationQuality;
   divergenceMode: DivergenceMode;
   authorFlavor: AuthorFlavorConfig;
-  allowOfflineFallback?: boolean;
   timeoutSeconds?: number;
   modelSelection?: ModelSelection;
 }
