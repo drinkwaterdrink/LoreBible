@@ -48,7 +48,8 @@ test("temporary status remains source-only in runtime exports", () => {
   const before = JSON.stringify(input);
   const card = generateCharacterCardV3(input);
 
-  expect(card.data.system_prompt).toBe("");
+  expect(card.data.system_prompt).toContain("Do not assign voluntary actions");
+  expect(card.data.system_prompt).not.toContain(marker);
   expect(JSON.stringify(card.data.character_book)).not.toContain(marker);
   expect(generateLorebookExport(input)).not.toContain(marker);
   expect(generateCharacterCardExport(input)).not.toContain(marker);
@@ -68,8 +69,9 @@ test("explicit runtime instructions and opening survive export", () => {
   input.opening.firstMessage = "The bakery opens for the morning.";
   const card = generateCharacterCardV3(input);
 
-  expect(card.data.system_prompt).toBe(input.opening.systemPrompt);
-  expect(card.data.post_history_instructions).toBe(input.opening.postHistoryInstructions);
+  expect(card.data.system_prompt).toContain(input.opening.systemPrompt);
+  expect(card.data.system_prompt).toContain("Do not assign voluntary actions");
+  expect(card.data.post_history_instructions).toContain(input.opening.postHistoryInstructions);
   expect(card.data.first_mes).toBe(input.opening.firstMessage);
   expect(card.data.character_book.entries.some(
     (entry: { content: string }) => entry.content.includes("The Archive"),
@@ -85,7 +87,8 @@ test("CHARX card.json excludes synthetic current-state injection", async () => {
   expect(file).not.toBeNull();
   const card = JSON.parse(await file!.async("string"));
 
-  expect(card.data.system_prompt).toBe("");
+  expect(card.data.system_prompt).toContain("Do not assign voluntary actions");
+  expect(card.data.system_prompt).not.toContain("TEMP_STATE_SENTINEL_9317");
   expect(JSON.stringify(card.data.character_book)).not.toContain("TEMP_STATE_SENTINEL_9317");
   expect(card.spec).toBe("chara_card_v3");
 });

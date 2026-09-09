@@ -1,6 +1,8 @@
 import { LoreBibleDocument, Entry } from "../types";
 import { compileLoreManifest } from "./artifacts/loreManifest";
 import { serializeNativeLumiverseWorldBook, serializePortableCharacterBook } from "./artifacts/loreSerializers";
+import { compileCharacterArtifact } from "./artifacts/characterArtifact";
+import { serializeCharacterCardV2, serializeCharacterCardV3 } from "./artifacts/cardSerializers";
 
 /**
  * 1. Markdown Export: Clean, readable, typeset manuscript representation.
@@ -404,7 +406,7 @@ export function generateLumiverseWorldBookExport(doc: LoreBibleDocument): string
  * 4. Character-Card JSON (V2 chara_card_v2 spec)
  * Routed per permanence: nothing volatile in scenario!
  */
-export function generateCharacterCardExport(doc: LoreBibleDocument): string {
+function generateLegacyCharacterCardExport(doc: LoreBibleDocument): string {
   // Build lorebook character_book entries from doc using cleaned generator
   const rawLorebook = JSON.parse(generateLorebookExport(doc)) as GenericLorebookEntry[];
   const lorebookEntries = rawLorebook.map((e, idx) => ({
@@ -448,7 +450,7 @@ export function generateCharacterCardExport(doc: LoreBibleDocument): string {
  * Specs: https://lumiverse.chat/guides/characters/?h=Char#quick-links
  * CharacterCardV3 in card.json packaged inside a .charx zip archive.
  */
-export function generateCharacterCardV3(doc: LoreBibleDocument): any {
+function generateLegacyCharacterCardV3(doc: LoreBibleDocument): any {
   let entryId = 1;
   const entries: any[] = [];
 
@@ -744,12 +746,30 @@ export function generateCharacterCardV3(doc: LoreBibleDocument): any {
   };
 }
 
+function compileRuntimeArtifacts(doc: LoreBibleDocument) {
+  const lore = compileLoreManifest(doc);
+  const portable = serializePortableCharacterBook(lore);
+  const card = compileCharacterArtifact(doc, lore);
+  return { lore, portable, card };
+}
+
+export function generateCharacterCardExport(doc: LoreBibleDocument): string {
+  const { portable, card } = compileRuntimeArtifacts(doc);
+  return JSON.stringify(serializeCharacterCardV2(card, portable), null, 2);
+}
+
+export function generateCharacterCardV3(doc: LoreBibleDocument) {
+  const { portable, card } = compileRuntimeArtifacts(doc);
+  return serializeCharacterCardV3(card, portable);
+}
+
 export async function generateCharXBundle(doc: LoreBibleDocument): Promise<Blob> {
   const JSZipModule = await import("jszip");
   const JSZip = JSZipModule.default;
   const zip = new JSZip();
 
-  const cardV3 = generateCharacterCardV3(doc);
+  const { lore, portable, card } = compileRuntimeArtifacts(doc);
+  const cardV3 = serializeCharacterCardV3(card, portable);
 
   // Lumiverse CharX bundle requires card.json at archive root
   zip.file("card.json", JSON.stringify(cardV3, null, 2));
@@ -765,6 +785,15 @@ export async function generateCharXBundle(doc: LoreBibleDocument): Promise<Blob>
     documentation: "https://lumiverse.chat/guides/characters/?h=Char#quick-links",
   };
   zip.file("lumiverse-manifest.json", JSON.stringify(lumiverseManifest, null, 2));
+  zip.file("lorebible-compilation.json", JSON.stringify({
+    artifact_profile: card.archetype,
+    lore_manifest_id: lore.id,
+    native_companion_available: true,
+    portable_omissions: portable.omissions,
+    evidence_status: "static_validated",
+    runtime_verified: false,
+    checks: ["card_ir_compiled", "portable_book_compiled", "charx_zip_created"],
+  }, null, 2));
 
   return await zip.generateAsync({
     type: "blob",
