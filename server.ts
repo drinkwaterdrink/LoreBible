@@ -25,6 +25,8 @@ import { parseCanonicalSparkDNA } from "./src/contracts/spark.js";
 import { createWindowsDpapiProtector } from "./server/secrets/dpapi.js";
 import { createProfileStore, resolveDefaultProfileStorePath, type ProfileStore } from "./server/secrets/profileStore.js";
 import { registerConnectionRoutes } from "./server/routes/connections.js";
+import { registerProjectRoutes } from "./server/routes/projects.js";
+import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./server/projects/projectRepository.js";
 import { createModelGateway, ModelGatewayError, type ModelGateway } from "./server/model/gateway.js";
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
@@ -37,6 +39,8 @@ const requestedPort = Number.parseInt(process.env.PORT || "3000", 10);
 const PORT = Number.isInteger(requestedPort) && requestedPort > 0 && requestedPort <= 65535 ? requestedPort : 3000;
 
 app.use(express.json({ limit: "5mb" }));
+
+registerProjectRoutes(app, { repository: createProjectRepository(resolveDefaultProjectRepositoryPath()) });
 
 // Connection profiles are persisted outside the repository and encrypted with
 // Windows DPAPI. The route layer is isolated so generation can report a
