@@ -239,6 +239,10 @@ export interface OpeningSection {
   firstChoice: string;
   style: string;
   firstMessage: string;
+  /** Optional authored runtime fields preserved from imported or edited projects. */
+  systemPrompt?: string;
+  postHistoryInstructions?: string;
+  exampleMessages?: string;
   permanence: 'T';
 }
 
