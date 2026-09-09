@@ -201,7 +201,7 @@ export async function streamForgeDocument(
 /**
  * Format document as clean Markdown conforming to Section 3 of the Generator System Prompt
  */
-export function exportToMarkdown(doc: LoreBibleDocument): string {
+function legacyExportToMarkdown(doc: LoreBibleDocument): string {
   let md = `# ${doc.core.title}\n\n`;
   md += `> ${doc.core.pitch}\n\n`;
 
@@ -315,7 +315,7 @@ export function exportToMarkdown(doc: LoreBibleDocument): string {
 /**
  * Format document for SillyTavern character card JSON v2 with World Info
  */
-export function exportToSillyTavern(doc: LoreBibleDocument): string {
+function legacyExportToSillyTavern(doc: LoreBibleDocument): string {
   const lorebookEntries = [
     ...doc.locations.map((loc, i) => ({
       uid: 250 + i,

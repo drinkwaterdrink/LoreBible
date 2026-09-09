@@ -4,6 +4,7 @@ import {
   generateMarkdownExport,
   generateJsonExport,
   generateLorebookExport,
+  generateLumiverseWorldBookExport,
   generateCharacterCardExport,
   generateCharacterCardV3,
   generateCharXBundle,
@@ -17,7 +18,7 @@ interface ExportDrawerProps {
   document: LoreBibleDocument;
 }
 
-type ExportTabKey = "charx" | "characterCard" | "markdown" | "json" | "lorebook" | "brief";
+type ExportTabKey = "charx" | "characterCard" | "markdown" | "json" | "nativeLorebook" | "portableLorebook" | "brief";
 
 export const ExportDrawer: React.FC<ExportDrawerProps> = ({
   isOpen,
@@ -60,11 +61,17 @@ export const ExportDrawer: React.FC<ExportDrawerProps> = ({
       mime: "application/json",
       label: "Full JSON",
     },
-    lorebook: {
-      content: generateLorebookExport(document),
-      filename: `${baseTitle}-lorebook.json`,
+    nativeLorebook: {
+      content: generateLumiverseWorldBookExport(document),
+      filename: `${baseTitle}-lumiverse-world-book.json`,
       mime: "application/json",
-      label: "Lorebook JSON",
+      label: "Lumiverse World Book",
+    },
+    portableLorebook: {
+      content: generateLorebookExport(document),
+      filename: `${baseTitle}-portable-lorebook.json`,
+      mime: "application/json",
+      label: "Portable Lorebook",
     },
     brief: {
       content: generatePlainTextBrief(document),
@@ -150,7 +157,8 @@ export const ExportDrawer: React.FC<ExportDrawerProps> = ({
               { id: "characterCard", label: "Character Card (V2)" },
               { id: "markdown", label: "Markdown" },
               { id: "json", label: "Full JSON" },
-              { id: "lorebook", label: "Lorebook JSON" },
+              { id: "nativeLorebook", label: "Lumiverse World Book" },
+              { id: "portableLorebook", label: "Portable Lorebook" },
               { id: "brief", label: "Plain-Text Brief" },
             ] as { id: ExportTabKey; label: string }[]
           ).map((tab) => {
@@ -182,9 +190,13 @@ export const ExportDrawer: React.FC<ExportDrawerProps> = ({
                   <strong>Lumiverse CharX Bundle:</strong> CharacterCardV3 specification with embedded lorebook inside a ready-to-import <code className="bg-[var(--vellum-raised)] px-1 py-0.5 rounded border border-[var(--ink-soft)]">.charx</code> ZIP archive.
                 </span>
               </span>
-            ) : activeTab === "lorebook" ? (
+            ) : activeTab === "nativeLorebook" ? (
               <span className="italic">
-                *Portable World-Info: routed by permanence ([P] constant, [C] keyed, [T] excluded). Generic format, light adaptation may be needed per frontend.
+                *Native Lumiverse World Book: preserves the observed activation, placement, priority, recursion, timing, group, and vector fields. Structurally validated against supplied native schema evidence; verify runtime behavior with Lumiverse Dry Run and Diagnostics.
+              </span>
+            ) : activeTab === "portableLorebook" ? (
+              <span className="italic">
+                *Portable Lorebook: preserves focused content, keys, enabled state, order, and depth. Advanced native controls are not equivalent and are intentionally omitted; use the Lumiverse World Book for full fidelity.
               </span>
             ) : activeTab === "characterCard" ? (
               <span className="italic">
