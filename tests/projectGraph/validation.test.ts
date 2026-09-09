@@ -24,7 +24,7 @@ test("rejects duplicate stable IDs and missing references with paths", () => {
   value.canon[0].subjectId = "entity:missing";
   const result = parseProjectGraph(value);
   expect(result.ok).toBe(false);
-  if (!result.ok) {
+  if ("issues" in result) {
     expect(result.issues.some((issue) => issue.path === "entities[1].id")).toBe(true);
     expect(result.issues.some((issue) => issue.path === "canon[0].subjectId")).toBe(true);
   }
@@ -35,7 +35,7 @@ test("rejects an incomplete agency reservation set", () => {
   value.agency.reserved = ["actions"];
   const result = parseProjectGraph(value);
   expect(result.ok).toBe(false);
-  if (!result.ok) expect(result.issues.some((issue) => issue.path === "agency.reserved")).toBe(true);
+  if ("issues" in result) expect(result.issues.some((issue) => issue.path === "agency.reserved")).toBe(true);
 });
 
 test("requires directional relationships and valid knowledge endpoints", () => {
@@ -44,7 +44,7 @@ test("requires directional relationships and valid knowledge endpoints", () => {
   value.knowledge = [{ id: "knowledge:one", factId: "fact:missing", entityId: "entity:one", state: "believes", origin: "generated" }];
   const result = parseProjectGraph(value);
   expect(result.ok).toBe(false);
-  if (!result.ok) {
+  if ("issues" in result) {
     expect(result.issues.some((issue) => issue.path === "relationships[0].targetEntityId")).toBe(true);
     expect(result.issues.some((issue) => issue.path === "knowledge[0].factId")).toBe(true);
   }

@@ -11,7 +11,11 @@ test("rejects values that cannot be preserved as JSON", () => {
   const cyclic: any = { a: 1 };
   cyclic.self = cyclic;
   expect(() => canonicalizeJson(cyclic)).toThrow("JSON-serializable");
-  expect(() => canonicalizeJson({ missing: undefined })).toThrow("JSON-serializable");
+  expect(() => canonicalizeJson({ invalid: 1n })).toThrow("JSON-serializable");
+});
+
+test("matches persisted JSON semantics for optional undefined values", () => {
+  expect(canonicalizeJson({ kept: 1, missing: undefined, array: [undefined] })).toBe('{"array":[null],"kept":1}');
 });
 
 test("produces a known SHA-256 digest", () => {
