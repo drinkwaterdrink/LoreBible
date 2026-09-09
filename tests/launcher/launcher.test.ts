@@ -19,3 +19,16 @@ test("shortcut installer targets the launcher and does not pass a provider secre
   expect(installer).toContain("-NoProfile -ExecutionPolicy Bypass -File");
   expect(installer).not.toContain("apiKey");
 });
+
+test("test launcher uses an isolated port and the server accepts a configured port", async () => {
+  const launcher = await readFile(join(root, "scripts", "Start-LoreBible-Test.ps1"), "utf8");
+  const server = await readFile(join(root, "server.ts"), "utf8");
+
+  expect(launcher).toContain('$testPort = 3001');
+  expect(launcher).toContain('$env:PORT = "$testPort"');
+  expect(launcher).toContain('http://localhost:$testPort');
+  expect(launcher).toContain('LoreBible\\test-logs');
+  expect(server).toContain("process.env.PORT");
+  expect(server).not.toContain("const PORT = 3000;");
+  expect(launcher).not.toContain("GEMINI_API_KEY");
+});

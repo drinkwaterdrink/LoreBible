@@ -4,6 +4,23 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.37 — 2026-09-09
+
+### Added
+
+- A dedicated `Start-LoreBible-Test.ps1` launcher runs the GitHub `test` worktree independently on port 3001 with separate logs under `%LOCALAPPDATA%\LoreBible\test-logs`.
+- A separately verified Windows desktop shortcut, **LoreBible Test**, points directly at the test-worktree launcher without replacing the normal LoreBible shortcut.
+- Launcher regression coverage confirms the test port, test URL, separate logs, configurable server port, and absence of provider credentials in launcher arguments.
+
+### Changed
+
+- The server now accepts a valid `PORT` environment value and safely defaults to port 3000, allowing normal and test versions to run side by side.
+- The compact application version label now reads `v0.37`.
+
+### Why
+
+- A branch-specific shortcut must not silently open whichever LoreBible instance already owns port 3000. Port isolation makes the visible test version deterministic while preserving the normal running app.
+
 ## v0.36 — 2026-09-09
 
 ### Added

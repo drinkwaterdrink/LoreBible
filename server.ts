@@ -33,7 +33,8 @@ import { normalizeGenerationFailure, sendGenerationFailure } from "./server/gene
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const requestedPort = Number.parseInt(process.env.PORT || "3000", 10);
+const PORT = Number.isInteger(requestedPort) && requestedPort > 0 && requestedPort <= 65535 ? requestedPort : 3000;
 
 app.use(express.json({ limit: "5mb" }));
 
