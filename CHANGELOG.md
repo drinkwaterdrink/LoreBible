@@ -4,6 +4,24 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.36 — 2026-09-09
+
+### Added
+
+- A Windows GitHub Actions quality gate now runs on every push and pull request with Bun 1.3.14, frozen dependencies, the full test suite, TypeScript checking, and the production build.
+- A deterministic workflow-contract test prevents the CI release commands, pinned Bun version, or Windows runner from disappearing unnoticed.
+- Mobile regression coverage now verifies the Divergence proceed action alongside the existing Spark, Connections, Export, and Vault reachability safeguards.
+- SSE lifecycle coverage now verifies that completion and cancellation emit exactly one terminal event, late server output is refused, late client events are ignored, caller cancellation aborts promptly, and premature EOF remains an error.
+
+### Changed
+
+- The selected Divergence proceed action is full-width on mobile, returns to intrinsic width on larger screens, and includes bottom safe-area padding for phone browser controls.
+- The compact application version label now reads `v0.36`.
+
+### Why
+
+- M0.8 turns LoreBible's manual release checks into an automatic repository gate and protects the mobile navigation and generation-stream behavior that previously caused missing controls, apparent stalls, and ambiguous completion.
+
 ## v0.35 — 2026-09-09
 
 ### Added
