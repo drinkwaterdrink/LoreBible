@@ -4,6 +4,28 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.38 — 2026-09-09
+
+### Added
+
+- A versioned Project Graph v1 contract for projects, canon facts, entities, directional relationships, knowledge claims, temporal snapshots, ownership, source evidence, dependencies, artifacts, builds, findings, decisions, and unresolved items.
+- Runtime graph validation with path-specific findings for duplicate stable IDs, missing entity/fact/artifact references, invalid relationship endpoints, malformed ledgers, and incomplete player-agency protection.
+- A deterministic `SavedProjectV2` migration that preserves the canonical serialized source and SHA-256 checksum, produces stable semantic IDs, and records migration decisions, warnings, counts, and validation status.
+- Regression coverage for source preservation, unknown V2 fields, non-mutation, stable IDs, one-way relationships, belief-versus-truth separation, opening/current temporal routing, and credential-shaped field rejection.
+
+### Changed
+
+- The compact application version label now reads `v0.38`.
+- M1 Project Graph is now explicitly in progress; V2 remains the only live editor/save authority until the transactional repository slice is complete.
+
+### Why
+
+- LoreBible needs one structured source of truth before Blueprint, resumable Forge, activation engineering, and full-fidelity publishing can safely share canon. An additive migration foundation protects existing projects while those later systems are introduced incrementally.
+
+### Validation boundary
+
+- Automated checks establish deterministic structure and migration behavior only. v0.38 does not automatically migrate saves, replace browser persistence, or establish Lumiverse runtime behavior.
+
 ## v0.37 — 2026-09-09
 
 ### Added
