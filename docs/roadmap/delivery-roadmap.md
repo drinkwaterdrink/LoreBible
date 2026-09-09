@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 6 of 17 ordered roadmap items complete (M0.1–M0.6); 11 remain. M0.7 is next. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 7 of 17 ordered roadmap items complete (M0.1–M0.7); 10 remain. M0.8 is next. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 
@@ -45,8 +45,8 @@ Milestone numbers M0–M9 correspond broadly to user phases 1–10, with the add
 | M0.4 | Complete | Complete V2 save/load and draft lifecycle; `src/App.tsx`, `src/lib/projectPersistence.ts` | Per-project workflow/settings/history restore; delete does not resurrect; corruption recovery; reload/mobile mode switch |
 | M0.5 | Complete | Correct branch lineage and steering; App handlers, divergence contracts/services | Selected take sent; immutable parent IDs; reroll-all no index-based history mixing; failure/cancel retains board |
 | M0.6 | Complete | Capability-aware model discovery and shared gateway coverage; `server/model`, connection routes/UI | Provider-scoped normalization; text-capability filtering; custom IDs; stale catalog race; discovery deadline; Refine uses selected route |
-| M0.7 | Next | Consolidate active exporters around minimal typed IR; retire duplicates in `src/services/geminiService.ts` after caller audit | Golden outputs/round trips; documented omissions; no serializer-generated canon |
-| M0.8 | Pending | CI and mobile workflow regression gate; `.github/workflows`, existing tests/components | Frozen install, `bun test`, typecheck, build; mobile dialogs/actions; exact terminal SSE behavior |
+| M0.7 | Complete | Canonical narrator Card IR and Lore Manifest; native Lumiverse World Book plus portable serializers; shared V2/V3/CHARX compilation; explicit fidelity receipt | Sanitized native-schema parser fixture; stable UIDs; state/secret/agency checks; cross-format parity; no serializer-generated canon; live runtime explicitly untested |
+| M0.8 | Next | CI and mobile workflow regression gate; `.github/workflows`, existing tests/components | Frozen install, `bun test`, typecheck, build; mobile dialogs/actions; exact terminal SSE behavior |
 
 Use [M0.1's detailed plan](../superpowers/plans/2026-09-07-production-studio-export-state-safety.md) first. Each subsequent row gets a bounded implementation plan with a reproduced failure before product-code changes.
 

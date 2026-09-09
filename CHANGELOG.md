@@ -4,6 +4,33 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.35 — 2026-09-09
+
+### Added
+
+- A typed narrator-card IR and canonical Lore Manifest now sit between authored project data and runtime serializers.
+- Native Lumiverse World Book export uses a strictly validated v1 envelope and complete observed entry field types derived from a sanitized structural fixture.
+- The Export Drawer now offers separate **Lumiverse World Book** and **Portable Lorebook** downloads with distinct filenames and fidelity guidance.
+- CHARX bundles include `lorebible-compilation.json`, recording artifact profile, portable omissions, performed structural checks, and the unverified runtime boundary.
+- Deterministic tests cover stable entry UIDs, temporary-state exclusion, disabled secrets, key normalization, field ownership, player agency instructions, cross-format parity, native parsing, portability reporting, and export labels.
+
+### Changed
+
+- Character Card V2, Character Card V3, and CHARX now compile the same card fields and embedded lore from one shared artifact model.
+- Narrator-world cards now use deliberate field ownership: durable world scope in Description, narrative behavior in Personality, starting framework in Scenario, authored prose in First Message, and supporting facts in conditional lore.
+- Every narrator-world card receives a genre-neutral world-director contract that protects `{{user}}` agency, NPC autonomy, knowledge boundaries, secrets, continuity, and ordinary-life coverage.
+- Explicit project-authored System Prompt and post-history instructions are preserved beneath LoreBible's durable safeguards instead of replacing or being discarded by them.
+- Example Messages remain empty when none were authored and produce a transparent finding instead of serializer-invented dialogue.
+- Advanced activation controls default off unless supported by authored source intent; settings from the supplied example lorebook are not copied as universal defaults.
+- Legacy service-layer export helpers are no longer part of the public service API.
+- The compact application version label now reads `v0.35`.
+
+### Fidelity and validation
+
+- The native serializer is grounded in the user-supplied `___St_Greed_2_0_lumiverse.json` as read-only schema evidence; none of that file's creative content is included in LoreBible.
+- Portable Character Books preserve compatible content, keys, state, order, and depth but report omitted native priority, selective, recursion, timing, group, probability, scan-depth, and vector controls.
+- Automated checks establish deterministic structure and cross-format agreement. Live Lumiverse import, Dry Run, Diagnostics, embedding behavior, and roleplay runtime behavior were not performed and are not claimed.
+
 ## v0.34 — 2026-09-08
 
 ### Added
