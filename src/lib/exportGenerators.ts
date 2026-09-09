@@ -1,4 +1,6 @@
 import { LoreBibleDocument, Entry } from "../types";
+import { compileLoreManifest } from "./artifacts/loreManifest";
+import { serializeNativeLumiverseWorldBook, serializePortableCharacterBook } from "./artifacts/loreSerializers";
 
 /**
  * 1. Markdown Export: Clean, readable, typeset manuscript representation.
@@ -193,7 +195,7 @@ function buildCleanContent(pairs: [string, string | undefined | null][]): string
     .join("\n");
 }
 
-export function generateLorebookExport(doc: LoreBibleDocument): string {
+function generateLegacyLorebookExport(doc: LoreBibleDocument): string {
   const entries: GenericLorebookEntry[] = [];
 
   // 1. NPCs [C] -> Order band 100s
@@ -386,6 +388,16 @@ export function generateLorebookExport(doc: LoreBibleDocument): string {
   }
 
   return JSON.stringify(entries, null, 2);
+}
+
+export function generateLorebookExport(doc: LoreBibleDocument): string {
+  const portable = serializePortableCharacterBook(compileLoreManifest(doc));
+  return JSON.stringify(portable.entries, null, 2);
+}
+
+export function generateLumiverseWorldBookExport(doc: LoreBibleDocument): string {
+  const native = serializeNativeLumiverseWorldBook(compileLoreManifest(doc));
+  return JSON.stringify(native, null, 2);
 }
 
 /**
