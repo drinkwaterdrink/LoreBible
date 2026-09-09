@@ -3,6 +3,7 @@ build/
 dist/
 coverage/
 .superpowers/
+.worktrees/
 .DS_Store
 *.log
 .env*
