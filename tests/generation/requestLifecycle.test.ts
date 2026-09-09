@@ -44,4 +44,26 @@ test("SSE session emits exactly one terminal event", () => {
   expect(writes.filter((value) => value.includes("event: done"))).toHaveLength(1);
   expect(writes.some((value) => value.includes("event: error"))).toBe(false);
   expect(session.isFinished).toBe(true);
+  expect(session.send({ type: "heartbeat", task: "forge" })).toBe(false);
+  expect(session.send({ type: "section", task: "forge", key: "late", data: {} })).toBe(false);
+  expect(writes).toHaveLength(1);
+});
+
+test("SSE cancellation is terminal and cannot be replaced by a late success", () => {
+  const writes: string[] = [];
+  const res = {
+    writableEnded: false,
+    setHeader() {},
+    flushHeaders() {},
+    write(value: string) { writes.push(value); },
+    end() { this.writableEnded = true; },
+  } as any;
+  const session = createSseSession(res, "divergence");
+
+  session.finish({ type: "cancelled", task: "divergence", message: "Stopped by user." });
+  session.finish({ type: "done", task: "divergence", result: { takes: [] } });
+
+  expect(writes.filter((value) => value.includes("event: cancelled"))).toHaveLength(1);
+  expect(writes.some((value) => value.includes("event: done"))).toBe(false);
+  expect(res.writableEnded).toBe(true);
 });

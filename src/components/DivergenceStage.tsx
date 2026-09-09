@@ -698,7 +698,10 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
       </div>
 
       {/* Stage Proceed Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 border-t border-[var(--ink-soft)]">
+      <div
+        data-divergence-action-footer="true"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 border-t border-[var(--ink-soft)] [padding-bottom:max(1.5rem,env(safe-area-inset-bottom))]"
+      >
         <div>
           {selectedTake ? (
             <span className="text-xs text-[var(--ink)] font-manuscript">
@@ -721,7 +724,7 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
           type="button"
           disabled={!selectedTakeId || isLoading}
           onClick={onProceed}
-          className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed self-end sm:self-auto cursor-pointer"
+          className="btn-primary w-full sm:w-auto justify-center flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed self-stretch sm:self-auto cursor-pointer"
         >
           <span>Calibrate Physics</span>
           <ArrowRight size={13} />

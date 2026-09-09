@@ -41,3 +41,14 @@ test("SSE client honors caller cancellation", async () => {
   controller.abort();
   await expect(pending).rejects.toMatchObject({ name: "AbortError" });
 });
+
+test("SSE client stops dispatching after the first terminal event", async () => {
+  const events: Array<{ type?: string }> = [];
+  const terminal = await consumeGenerationSse(chunkedResponse([
+    "event: done\ndata: {\"type\":\"done\",\"task\":\"anchors\",\"result\":{}}\n\n",
+    "event: progress\ndata: {\"type\":\"progress\",\"task\":\"anchors\",\"phase\":\"complete\",\"label\":\"late\"}\n\n",
+  ]), { onEvent: (event) => events.push(event) });
+
+  expect(terminal.type).toBe("done");
+  expect(events.map((event) => event.type)).toEqual(["done"]);
+});
