@@ -4,6 +4,28 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.39 — 2026-09-09
+
+### Added
+
+- Revision-safe Project Graph commands for entity renames and canon-fact updates, with stable IDs, alias preservation, optimistic conflicts, non-mutation on failure, and change/blast-radius receipts.
+- A transactional per-user Project Repository under LoreBible's local application-data directory, using encoded project paths, per-project write serialization, staged verification, backups, explicit recovery, and corrupt-primary preservation.
+- Internal graph repository APIs for summaries, create/load, revisioned commands, recovery inspection, and explicit backup restoration.
+- Regression coverage for competing writes, restart reloads, path containment, corruption, backup preconditions, credential rejection, safe HTTP errors, and graph change semantics.
+
+### Changed
+
+- The compact version label now reads `v0.39`.
+- M1 is still in progress; the current Vault remains on V2 browser storage until the M1.3 migration/edit/compile/restart vertical slice proves the repository end to end.
+
+### Why
+
+- Blueprint and resumable Forge need one durable write authority that rejects stale edits and preserves recoverable project state rather than overwriting whole documents opportunistically.
+
+### Validation boundary
+
+- Tests cover real temporary-directory persistence and in-process concurrency. Cross-process locking, power-loss guarantees, live Vault migration, and Lumiverse runtime behavior remain unproven.
+
 ## v0.38 — 2026-09-09
 
 ### Added
