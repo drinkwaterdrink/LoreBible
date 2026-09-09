@@ -2,11 +2,13 @@ import type { Application, Request, Response as ExpressResponse } from "express"
 import { isProviderId, type ProviderId } from "../../src/contracts/generation.js";
 import { getCatalogForProvider } from "../../src/lib/modelCatalog.js";
 import { ProfileStoreError, type ProfileStore } from "../secrets/profileStore.js";
+import { fetchProviderModels, ModelDiscoveryTimeoutError, normalizeProviderModels } from "../model/modelDiscovery.js";
 
 interface ConnectionRouteDependencies {
   store: ProfileStore;
   fetchImpl?: (input: string, init?: RequestInit) => Promise<globalThis.Response>;
   environmentGeminiKey?: string;
+  discoveryTimeoutMs?: number;
 }
 
 function errorResponse(res: ExpressResponse, error: unknown): void {
@@ -46,6 +48,7 @@ function environmentProfile(key: string | undefined) {
 
 export function registerConnectionRoutes(app: Application, dependencies: ConnectionRouteDependencies): void {
   const fetchImpl = dependencies.fetchImpl || fetch;
+  const discoveryTimeoutMs = dependencies.discoveryTimeoutMs ?? 8_000;
   const getProfile = async (id: string) => id === "environment-gemini" ? environmentProfile(dependencies.environmentGeminiKey) : dependencies.store.getMetadata(id);
   const getSecret = async (id: string) => id === "environment-gemini" ? dependencies.environmentGeminiKey || null : dependencies.store.getSecret(id);
 
@@ -87,7 +90,7 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
     if (!key) return res.status(400).json({ code: "CREDENTIAL_MISSING", message: "This connection profile has no API key." });
     if (req.params.id === "environment-gemini") return res.json({ status: "available", provider: profile.provider, modelCount: 0 });
     try {
-      const response = await fetchImpl(`${profile.baseUrl}/models`, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
+      const response = await fetchProviderModels(fetchImpl, `${profile.baseUrl}/models`, { Authorization: `Bearer ${key}`, Accept: "application/json" }, discoveryTimeoutMs);
       if (response.status === 401 || response.status === 403) {
         if (req.params.id !== "environment-gemini") await dependencies.store.setTestStatus(req.params.id, "error");
         return res.status(401).json({ code: "AUTHENTICATION_FAILED", message: "The provider rejected this API key." });
@@ -111,14 +114,10 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
     const key = await getSecret(req.params.id);
     if (!key) return res.status(400).json({ code: "CREDENTIAL_MISSING", message: "This connection profile has no API key." });
     try {
-      const response = await fetchImpl(`${profile.baseUrl}/models`, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
+      const response = await fetchProviderModels(fetchImpl, `${profile.baseUrl}/models`, { Authorization: `Bearer ${key}`, Accept: "application/json" }, discoveryTimeoutMs);
       if (!response.ok) return res.status(503).json({ code: response.status === 401 || response.status === 403 ? "AUTHENTICATION_FAILED" : "PROVIDER_UNAVAILABLE", message: "Unable to retrieve provider models." });
       const payload: unknown = await response.json();
-      const available = new Set(payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown }).data)
-        ? (payload as { data: Array<{ id?: unknown }> }).data
-          .map((model) => typeof model.id === "string" ? normalizeProviderModelId(model.id.trim()) : "")
-          .filter((id) => id.length > 0 && id.length <= 200 && !/\p{Cc}/u.test(id))
-        : []);
+      const available = new Set(normalizeProviderModels(profile.provider, payload));
       const curatedIds = new Set(catalog.map((model) => model.id));
       const customIds = new Set(profile.customModelIds.map(normalizeProviderModelId));
       const custom = profile.customModelIds
@@ -128,6 +127,11 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
         .filter((id) => !curatedIds.has(id) && !customIds.has(id))
         .map((id) => ({ id, label: id, reasoning: "optional" as const, available: true, providerReported: true }));
       res.json({ models: [...catalog.map((model) => ({ ...model, available: available.has(model.id) })), ...custom, ...providerReported] });
-    } catch { res.status(503).json({ code: "PROVIDER_UNAVAILABLE", message: "Unable to retrieve provider models." }); }
+    } catch (error) {
+      if (error instanceof ModelDiscoveryTimeoutError) {
+        return res.status(504).json({ code: "MODEL_DISCOVERY_TIMEOUT", message: "Model discovery timed out. Retry, or add the exact model ID as a custom model." });
+      }
+      res.status(503).json({ code: "PROVIDER_UNAVAILABLE", message: "Unable to retrieve provider models." });
+    }
   });
 }

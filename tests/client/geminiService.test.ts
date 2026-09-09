@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fetchDivergenceTakes, parseSparkApi, streamForgeDocument } from "../../src/services/geminiService";
+import { fetchDivergenceTakes, fetchVariantsApi, parseSparkApi, pushEntryApi, regenerateSectionApi, rerollEntryApi, streamForgeDocument } from "../../src/services/geminiService";
 import { GenerationRequestError } from "../../src/contracts/generationFailure";
 
 test("parseSparkApi forwards the caller abort signal", async () => {
@@ -100,5 +100,37 @@ test("push-further sends the exact selected take and operation to the server", a
       retainedNonNegotiables: ["Keep this"],
     });
     expect(requestBody?.operation).toBe("push_further");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("every model-backed Refine request forwards the selected connection route", async () => {
+  const originalFetch = globalThis.fetch;
+  const bodies: Array<Record<string, any>> = [];
+  const settings = {
+    quality: "Balanced",
+    divergenceMode: "Exploratory",
+    authorFlavor: { mode: "Off", strength: "Sprinkle", autoBehavior: "Compatible" },
+    modelSelection: { profileId: "profile-refine", modelId: "vendor/refine-model" },
+  } as const;
+  const document = { id: "doc" } as any;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    const url = String(input);
+    const payload = url.endsWith("variants") ? { variants: [] }
+      : url.endsWith("section-regen") ? { entries: [] }
+      : { updatedEntry: { id: "entry", fields: {}, keys: [], permanence: "C", locked: false } };
+    return new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await rerollEntryApi(document, "npcs", "entry", undefined, settings as any);
+    await fetchVariantsApi(document, "npcs", "entry", settings as any);
+    await pushEntryApi(document, "npcs", "entry", "change it", settings as any);
+    await regenerateSectionApi(document, "npcs", 2, settings as any);
+    expect(bodies.map((body) => body.settings.modelSelection)).toEqual([
+      settings.modelSelection,
+      settings.modelSelection,
+      settings.modelSelection,
+      settings.modelSelection,
+    ]);
   } finally { globalThis.fetch = originalFetch; }
 });

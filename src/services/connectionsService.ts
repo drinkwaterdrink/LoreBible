@@ -64,8 +64,23 @@ export async function testConnection(id: string): Promise<{ status: string; prov
   return readJson(await fetch(`/api/connections/${encodeURIComponent(id)}/test`, { method: "POST" }));
 }
 
-export async function listConnectionModels(id: string): Promise<AvailableModel[]> {
-  return (await readJson<{ models: AvailableModel[] }>(await fetch(`/api/connections/${encodeURIComponent(id)}/models`))).models;
+export async function listConnectionModels(id: string, signal?: AbortSignal): Promise<AvailableModel[]> {
+  return (await readJson<{ models: AvailableModel[] }>(await fetch(`/api/connections/${encodeURIComponent(id)}/models`, { signal }))).models;
+}
+
+export interface CatalogRequestTracker {
+  begin(): number;
+  isCurrent(token: number): boolean;
+  invalidate(): void;
+}
+
+export function createCatalogRequestTracker(): CatalogRequestTracker {
+  let current = 0;
+  return {
+    begin: () => ++current,
+    isCurrent: (token) => token === current,
+    invalidate: () => { current += 1; },
+  };
 }
 
 export function isCompleteModelSelection(selection: ModelSelection | null): selection is { profileId: string; modelId: string } {

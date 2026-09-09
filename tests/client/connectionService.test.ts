@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { listConnections, saveConnection } from "../../src/services/connectionsService";
+import { createCatalogRequestTracker, listConnectionModels, listConnections, saveConnection } from "../../src/services/connectionsService";
 
 test("connection service refuses a response containing secret fields", async () => {
   const originalFetch = globalThis.fetch;
@@ -43,5 +43,27 @@ test("connection service sends an explicit custom model list", async () => {
   try {
     await saveConnection({ id: "p1", name: "OpenRouter", provider: "openrouter", customModelIds: ["vendor/custom"] });
     expect((body as Record<string, unknown> | null)?.customModelIds).toEqual(["vendor/custom"]);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("model discovery forwards cancellation and rejects stale request tokens", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | null | undefined;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    receivedSignal = init?.signal;
+    return new Response(JSON.stringify({ models: [] }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    await listConnectionModels("profile-a", controller.signal);
+    expect(receivedSignal).toBe(controller.signal);
+
+    const tracker = createCatalogRequestTracker();
+    const first = tracker.begin();
+    const second = tracker.begin();
+    expect(tracker.isCurrent(first)).toBe(false);
+    expect(tracker.isCurrent(second)).toBe(true);
+    tracker.invalidate();
+    expect(tracker.isCurrent(second)).toBe(false);
   } finally { globalThis.fetch = originalFetch; }
 });

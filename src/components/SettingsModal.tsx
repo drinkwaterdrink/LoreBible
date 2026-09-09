@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, KeyRound, Loader2, Plus, Save, Trash2, X, Zap } from "lucide-react";
 import type { ModelSelection, ProviderId } from "../contracts/generation";
 import {
   deleteConnection,
+  createCatalogRequestTracker,
   isCompleteModelSelection,
   listConnectionModels,
   listConnections,
@@ -49,9 +50,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   const [models, setModels] = useState<AvailableModel[]>([]);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const catalogRequests = useRef(createCatalogRequestTracker());
 
   const selectedProfile = useMemo(() => profiles.find((profile) => profile.id === draft.id) || null, [profiles, draft.id]);
 
@@ -82,11 +85,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
 
   useEffect(() => {
     if (!isOpen || !draft.id || draft.id === "environment-gemini") {
+      catalogRequests.current.invalidate();
       setModels([]);
+      setIsLoadingModels(false);
       return;
     }
+    const requestToken = catalogRequests.current.begin();
+    const controller = new AbortController();
     setModels([]);
-    void listConnectionModels(draft.id).then(setModels).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load models."));
+    setIsLoadingModels(true);
+    void listConnectionModels(draft.id, controller.signal)
+      .then((nextModels) => {
+        if (catalogRequests.current.isCurrent(requestToken)) setModels(nextModels);
+      })
+      .catch((cause) => {
+        if (controller.signal.aborted || !catalogRequests.current.isCurrent(requestToken)) return;
+        setError(cause instanceof Error ? cause.message : "Unable to load models.");
+      })
+      .finally(() => {
+        if (catalogRequests.current.isCurrent(requestToken)) setIsLoadingModels(false);
+      });
+    return () => controller.abort();
   }, [isOpen, draft.id]);
 
   if (!isOpen) return null;
@@ -178,7 +197,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
             <label className="block mt-4 text-[11px] uppercase tracking-wider text-[var(--graphite)]">API key {selectedProfile?.hasSecret && <span className="normal-case tracking-normal">(leave blank to keep the saved key)</span>}<input disabled={draft.id === "environment-gemini"} type="password" autoComplete="off" value={draft.apiKey} onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })} className="mt-1 w-full input-paper font-mono-ui" placeholder={draft.id === "environment-gemini" ? "Configured outside the app" : selectedProfile?.hasSecret ? "Saved securely · enter only to replace" : "Paste provider key"} /></label>
             <p className="mt-2 text-[11px] text-[var(--graphite)] flex items-start gap-1.5"><Zap size={12} className="mt-0.5 text-[var(--gold)] shrink-0" />Only a short key hint is returned to the UI. The full key is encrypted with Windows DPAPI and never written to localStorage.</p>
             <div className="mt-6 border-t border-[var(--ink-soft)] pt-4">
-              <div className="flex items-center justify-between mb-2"><h3 className="text-xs font-apparatus uppercase tracking-widest">Model for generation</h3>{busy && <Loader2 size={14} className="animate-spin text-[var(--rubric)]" />}</div>
+              <div className="flex items-center justify-between mb-2"><h3 className="text-xs font-apparatus uppercase tracking-widest">Model for generation</h3>{(busy || isLoadingModels) && <Loader2 size={14} className="animate-spin text-[var(--rubric)]" />}</div>
               {draft.id === "environment-gemini" ? <p className="text-xs text-[var(--graphite)]">Gemini environment credentials are available to the server but do not use the curated OpenRouter/NanoGPT catalog.</p> : draft.id ? <div className="space-y-1">{models.map((model) => <label key={model.id} className={`flex items-start gap-2 px-2 py-2 border ${model.available === false ? "opacity-45" : "border-transparent hover:border-[var(--ink-soft)]"}`}><input type="radio" name="model" disabled={model.available === false} checked={selectedModelId === model.id} onChange={() => onSelectionChange({ profileId: draft.id!, modelId: model.id })} className="mt-1" /><span className="min-w-0"><span className="block text-xs font-mono-ui break-all">{model.id}</span><span className="block text-[10px] text-[var(--graphite)]">{model.custom ? "Custom model" : model.providerReported ? "Provider model" : model.reasoning === "required" ? "Reasoning model" : "Standard model"}{model.available === false ? " · not reported by provider" : ""}</span></span></label>)}{models.length === 0 && <p className="text-xs text-[var(--graphite)]">Save a profile to load its model catalog.</p>}<button type="button" onClick={() => onSelectionChange(null)} className="mt-2 text-[10px] uppercase tracking-wider text-[var(--graphite)] hover:text-[var(--ink)]">Use default Gemini/offline path</button></div> : <p className="text-xs text-[var(--graphite)]">Create or select a provider profile to choose a curated or provider-reported model.</p>}
             </div>
             {draft.id !== "environment-gemini" && <div className="mt-6 border-t border-[var(--ink-soft)] pt-4"><h3 className="text-xs font-apparatus uppercase tracking-widest">Custom models</h3><p className="mt-1 text-[11px] text-[var(--graphite)]">Add the exact model ID accepted by this provider.</p><div className="mt-2 flex gap-2"><input id="custom-model-id" value={customModelInput} onChange={(event) => setCustomModelInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleAddCustomModel(); } }} className="input-paper min-w-0 flex-1 font-mono-ui text-xs" placeholder="provider/model-id:thinking" /><button type="button" onClick={handleAddCustomModel} className="btn-secondary shrink-0 px-3 py-2 text-[10px] uppercase tracking-wider">Add model</button></div>{draft.customModelIds.length > 0 && <div className="mt-3 space-y-1">{draft.customModelIds.map((id) => <div key={id} className="flex items-center gap-2 border border-[var(--ink-soft)] px-2 py-1.5"><span className="min-w-0 flex-1 break-all font-mono-ui text-[11px]">{id}</span><span className="text-[9px] uppercase tracking-wider text-[var(--gold)]">Custom</span><button type="button" onClick={() => handleRemoveCustomModel(id)} aria-label={`Remove custom model ${id}`} className="p-1 text-[var(--graphite)] hover:text-red-700"><X size={12} /></button></div>)}</div>}<p className="mt-2 text-[10px] text-[var(--graphite)]">Save the connection after changing this list.</p></div>}

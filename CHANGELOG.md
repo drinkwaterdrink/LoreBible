@@ -4,6 +4,25 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.34 — 2026-09-08
+
+### Added
+
+- Provider-aware model discovery normalizes OpenAI-compatible and Gemini model-list responses into one catalog boundary.
+- Model listing has an eight-second deadline and returns a specific recovery message when a provider stalls.
+- Regression coverage verifies provider capability filtering, discovery cancellation, stale-request rejection, custom-model preservation, and selected-model routing across Refine operations.
+
+### Changed
+
+- Models explicitly reported as image-only, embedding-only, or otherwise lacking text generation are excluded from LoreBible's generation picker; models without capability metadata remain visible rather than being guessed unusable.
+- Switching connection profiles cancels the prior catalog request and ignores any late result, preventing one provider's models from appearing under another profile.
+- Custom model IDs remain selectable user overrides even when provider discovery omits them.
+- The compact application version label now reads `v0.34`.
+
+### Verified
+
+- Entry reroll, variants, entry push, and section regeneration all forward the active connection profile and exact selected model.
+
 ## v0.33 — 2026-09-08
 
 ### Added

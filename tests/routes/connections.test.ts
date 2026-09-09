@@ -8,11 +8,11 @@ const protector: SecretProtector = {
   async unprotect(value) { return Buffer.from(value.slice("cipher:".length), "base64").toString("utf8"); },
 };
 
-async function withApp(fetchImpl: (input: string, init?: RequestInit) => Promise<Response>, callback: (baseUrl: string) => Promise<void>) {
+async function withApp(fetchImpl: (input: string, init?: RequestInit) => Promise<Response>, callback: (baseUrl: string) => Promise<void>, discoveryTimeoutMs?: number) {
   const path = `${process.env.TEMP || process.cwd()}\\lore-bible-route-test-${crypto.randomUUID()}.json`;
   const app = express();
   app.use(express.json());
-  registerConnectionRoutes(app, { store: createProfileStore(path, protector), fetchImpl });
+  registerConnectionRoutes(app, { store: createProfileStore(path, protector), fetchImpl, discoveryTimeoutMs });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   const address = server.address();
@@ -133,4 +133,25 @@ test("Gemini AI Studio profiles test and discover models through the compatibili
     expect(requests.every((request) => request.url === "https://generativelanguage.googleapis.com/v1beta/openai/models")).toBe(true);
     expect(requests.every((request) => request.authorization === "Bearer gemini-secret")).toBe(true);
   });
+});
+
+test("model discovery returns an actionable deadline error when a provider stalls", async () => {
+  const stalled = async (_input: string, init?: RequestInit): Promise<Response> => {
+    await new Promise<void>((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true }));
+    throw new Error("unreachable");
+  };
+  await withApp(stalled, async (baseUrl) => {
+    const created = await fetch(`${baseUrl}/api/connections`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Slow provider", provider: "openrouter", apiKey: "sk-secret" }),
+    });
+    const profile = (await created.json()).profile;
+    const response = await fetch(`${baseUrl}/api/connections/${profile.id}/models`);
+    expect(response.status).toBe(504);
+    expect(await response.json()).toEqual({
+      code: "MODEL_DISCOVERY_TIMEOUT",
+      message: "Model discovery timed out. Retry, or add the exact model ID as a custom model.",
+    });
+  }, 10);
 });
