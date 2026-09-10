@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 8 of 17 ordered roadmap items complete (M0.1–M0.8); 9 remain. M1 Project Graph and persistence foundation is in progress: M1.1 contracts/migration and M1.2 commands/repository are complete; the M1.3 UI migration/edit/compile/restart vertical slice remains. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 9 of 17 ordered roadmap items complete (M0.1–M1); 8 remain. M1 Project Graph and persistence foundation is complete through the opt-in migration/edit/compile/restart vertical slice. M2 Blueprint Studio is next. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 
@@ -58,7 +58,7 @@ Use [M0.1's detailed plan](../superpowers/plans/2026-09-07-production-studio-exp
 
 **Depends on:** M0 state/export safety. **Outcome:** a small project survives migration, editing, restart, and compilation through one authority.
 
-**Progress:** M1.1 complete in v0.38: versioned graph contracts, validation, and deterministic V2 migration. M1.2 complete in v0.39: revision-safe commands, transactional per-user `ProjectRepository`, backups, explicit recovery, and internal APIs. M1 remains open. Next is M1.3: connect one selected V2 project through migration, controlled edit, basic compilation, restart, and exact-state comparison before changing the live Vault authority.
+**Progress:** Complete. M1.1 shipped in v0.38 with versioned graph contracts, validation, and deterministic V2 migration. M1.2 shipped in v0.39 with revision-safe commands, transactional per-user `ProjectRepository`, backups, explicit recovery, and internal APIs. M1.3 shipped in v0.40 with opt-in Vault preparation, controlled entity editing, graph-native card/lore preview, and exact fresh-repository equivalence coverage. V2 remains the live authority until a later, separately approved transition.
 
 Build versioned contracts for project, canon, entities, directional relationships, knowledge, temporal snapshots, ownership, source evidence, dependency edges, findings, artifact/build records. Add runtime validators and a command/change-set API with revision conflicts. Implement ProjectRepository and the Windows transactional-storage spike, recovery backups, asset references, and migration receipts.
 

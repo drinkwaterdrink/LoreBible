@@ -4,6 +4,28 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.40 — 2026-09-09
+
+### Added
+
+- An opt-in Vault action that prepares or reopens a Project Graph beta while leaving the original V2 project unchanged.
+- A mobile-safe Project Graph panel with graph counts, revision-aware entity renaming, preserved conflict input, change receipts, and explicit reload.
+- A graph-native preview compiler for character-card and Lumiverse World Book structures, including ownership routing, disabled secret lore, temporal-state exclusion, stable entry IDs, and parser validation.
+- Idempotent V2 migration and compile-preview APIs plus restart-equivalence regression coverage.
+
+### Changed
+
+- The compact version label now reads `v0.40`.
+- M1 is complete: 9 of 17 ordered roadmap items are complete and 8 remain. M2 Blueprint Studio is next.
+
+### Why
+
+- Blueprint needs a proven path from an existing user project into durable structured truth and back into inspectable artifacts before it can safely plan larger, more expensive Forge builds.
+
+### Validation boundary
+
+- Local tests prove selected-project migration, controlled editing, structural compilation, parser acceptance, and fresh repository reload for fixtures. The V2 Vault remains authoritative; live Lumiverse import/runtime behavior and cross-process concurrency are not claimed.
+
 ## v0.39 — 2026-09-09
 
 ### Added
