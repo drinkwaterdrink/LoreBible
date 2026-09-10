@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import type { SavedLoreBibleProjectV2 } from "../lib/projectPersistence";
 import { restoredProjectStages } from "../lib/projectWorkspace";
-import { X, Copy, Trash2, Edit2, Check, FileText, Calendar, ExternalLink } from "lucide-react";
+import { X, Copy, Trash2, Edit2, Check, Calendar, ExternalLink, Network } from "lucide-react";
+import type { PreparedProjectGraphSummary } from "../services/projectGraphService";
 import { HandDrawnEmptyState } from "./HandDrawnEmptyState";
 
 interface VaultModalProps {
@@ -13,6 +14,10 @@ interface VaultModalProps {
   onDuplicateProject: (project: SavedLoreBibleProjectV2) => void;
   onRenameProject: (id: string, newTitle: string) => void;
   currentDocumentId?: string;
+  preparedGraphs?: PreparedProjectGraphSummary[];
+  preparingProjectId?: string | null;
+  onPrepareGraph?: (project: SavedLoreBibleProjectV2) => void;
+  onOpenGraph?: (graphId: string) => void;
 }
 
 export const VaultModal: React.FC<VaultModalProps> = ({
@@ -24,6 +29,7 @@ export const VaultModal: React.FC<VaultModalProps> = ({
   onDuplicateProject,
   onRenameProject,
   currentDocumentId,
+  preparedGraphs = [], preparingProjectId, onPrepareGraph, onOpenGraph,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
@@ -90,6 +96,7 @@ export const VaultModal: React.FC<VaultModalProps> = ({
                 const isCurrent = item.id === currentDocumentId;
                 const isEditing = editingId === item.id;
                 const genre = item.core?.genreTone || item.chosenTake?.genreTone || "Unclassified";
+                const preparedGraph = preparedGraphs.find((graph) => graph.legacyDocumentId === item.id);
 
                 return (
                   <div
@@ -184,6 +191,9 @@ export const VaultModal: React.FC<VaultModalProps> = ({
                         >
                           <Trash2 size={12} />
                           <span>Delete</span>
+                        </button>
+                        <button type="button" disabled={preparingProjectId===item.id} onClick={()=>preparedGraph?onOpenGraph?.(preparedGraph.id):onPrepareGraph?.(project)} className="text-[var(--rubric)] flex items-center gap-1 font-apparatus py-1 px-1.5 rounded shrink-0" title="Opt-in Project Graph beta">
+                          <Network size={12}/><span>{preparingProjectId===item.id?"Preparing…":preparedGraph?`Open Graph r${preparedGraph.revision}`:"Prepare Graph (Beta)"}</span>
                         </button>
                       </div>
 

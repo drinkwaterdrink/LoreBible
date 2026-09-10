@@ -46,3 +46,31 @@ test("Vault identifies a fully forged legacy project as Refine-ready", () => {
   />);
   expect(html).toContain('aria-label="Stage 5, unlocked through 5"');
 });
+
+test("Vault exposes the opt-in Project Graph beta without replacing the V2 project", () => {
+  const document = {
+    id: "doc-graph", title: "Graph Candidate", createdAt: "2026-01-01", updatedAt: "2026-01-02", sparkText: "Premise",
+    parse: {}, canon: {}, physics: { density: "Standard" }, core: { title: "Graph Candidate", pitch: "Premise" },
+  } as any;
+  const project = createSavedProjectV2({
+    document,
+    workflow: { stage: "2", sparkParse: null, canon: {} as any, physics: document.physics, takes: [], selectedTakeId: null },
+    generation: { settings: {} as any, modelSelection: { profileId: null, modelId: null }, provenance: [] },
+  });
+  const prepareHtml = renderToString(<VaultModal
+    isOpen onClose={() => undefined} savedProjects={[project]}
+    onLoadProject={() => undefined} onDeleteProject={() => undefined}
+    onDuplicateProject={() => undefined} onRenameProject={() => undefined}
+    onPrepareGraph={() => undefined}
+  />);
+  expect(prepareHtml).toContain("Prepare Graph (Beta)");
+
+  const openHtml = renderToString(<VaultModal
+    isOpen onClose={() => undefined} savedProjects={[project]}
+    onLoadProject={() => undefined} onDeleteProject={() => undefined}
+    onDuplicateProject={() => undefined} onRenameProject={() => undefined}
+    preparedGraphs={[{ id: "graph-doc-graph", name: "Graph Candidate", revision: 3, status: "active", legacyDocumentId: "doc-graph" }]}
+    onOpenGraph={() => undefined}
+  />);
+  expect(openHtml).toContain("Open Graph r3");
+});

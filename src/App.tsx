@@ -47,6 +47,10 @@ import { appendDivergenceVersion, initializeDivergenceBoard, initializePushedBoa
 import { Menu, Feather, X, PlusCircle, Save } from "lucide-react";
 import { AppVersionBadge } from "./components/AppVersionBadge";
 import { StorageRecoveryNotice } from "./components/StorageRecoveryNotice";
+import { ProjectGraphPanel } from "./components/ProjectGraphPanel";
+import { compileGraphPreview, listPreparedProjectGraphs, loadProjectGraph, prepareProjectGraph, renameGraphEntity, type PreparedProjectGraphSummary } from "./services/projectGraphService";
+import type { ProjectGraphV1 } from "./contracts/projectGraph";
+import type { ProjectGraphArtifactPreview } from "./lib/projectGraph/artifactCompiler";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -196,6 +200,10 @@ export default function App() {
   const [storageWarning, setStorageWarning] = useState<string | null>(initialPersistence.warning);
   const [workspaceWriteBlocked, setWorkspaceWriteBlocked] = useState(initialPersistence.workspaceWriteBlocked);
   const [isVaultOpen, setIsVaultOpen] = useState(false);
+  const [preparedGraphs, setPreparedGraphs] = useState<PreparedProjectGraphSummary[]>([]);
+  const [preparingGraphId, setPreparingGraphId] = useState<string | null>(null);
+  const [activeGraph, setActiveGraph] = useState<ProjectGraphV1 | null>(null);
+  const [graphPreview, setGraphPreview] = useState<ProjectGraphArtifactPreview | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => {
@@ -865,6 +873,64 @@ export default function App() {
     }
   };
 
+  const refreshPreparedGraphs = async () => {
+    const summaries = await listPreparedProjectGraphs();
+    setPreparedGraphs(summaries);
+  };
+
+  useEffect(() => {
+    if (!isVaultOpen) return;
+    void refreshPreparedGraphs().catch((error) => {
+      triggerToast(error instanceof Error ? error.message : "Could not load Project Graphs.");
+    });
+  }, [isVaultOpen]);
+
+  const handlePrepareGraph = async (project: SavedLoreBibleProjectV2) => {
+    setPreparingGraphId(project.document.id);
+    try {
+      const result = await prepareProjectGraph(project);
+      setActiveGraph(result.graph);
+      setGraphPreview(null);
+      setIsVaultOpen(false);
+      await refreshPreparedGraphs();
+      triggerToast(result.status === "already_prepared" ? "Existing Project Graph opened." : "Project Graph prepared. The V2 project is unchanged.");
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : "Could not prepare the Project Graph.");
+    } finally {
+      setPreparingGraphId(null);
+    }
+  };
+
+  const handleOpenGraph = async (projectId: string) => {
+    try {
+      setActiveGraph(await loadProjectGraph(projectId));
+      setGraphPreview(null);
+      setIsVaultOpen(false);
+    } catch (error) {
+      triggerToast(error instanceof Error ? error.message : "Could not open the Project Graph.");
+    }
+  };
+
+  const handleRenameGraphEntity = async (entityId: string, name: string) => {
+    if (!activeGraph) throw new Error("No Project Graph is open.");
+    const result = await renameGraphEntity(activeGraph.project.id, activeGraph.project.revision, entityId, name);
+    setActiveGraph(result.graph);
+    setGraphPreview(null);
+    await refreshPreparedGraphs();
+    return result;
+  };
+
+  const handleReloadGraph = async () => {
+    if (!activeGraph) return;
+    setActiveGraph(await loadProjectGraph(activeGraph.project.id));
+    setGraphPreview(null);
+  };
+
+  const handleCompileGraph = async () => {
+    if (!activeGraph) return;
+    setGraphPreview(await compileGraphPreview(activeGraph.project.id));
+  };
+
   return (
     <div className="h-screen h-[100dvh] w-full flex flex-col relative bg-[var(--vellum)] text-[var(--ink)] overflow-hidden">
       {/* Paper texture overlay (fixed SVG grain + laid lines) */}
@@ -1219,7 +1285,25 @@ export default function App() {
         onDuplicateProject={handleDuplicateProject}
         onRenameProject={handleRenameProject}
         currentDocumentId={document?.id}
+        preparedGraphs={preparedGraphs}
+        preparingProjectId={preparingGraphId}
+        onPrepareGraph={handlePrepareGraph}
+        onOpenGraph={handleOpenGraph}
       />
+
+      {activeGraph && (
+        <ProjectGraphPanel
+          graph={activeGraph}
+          preview={graphPreview}
+          onClose={() => {
+            setActiveGraph(null);
+            setGraphPreview(null);
+          }}
+          onRename={handleRenameGraphEntity}
+          onReload={handleReloadGraph}
+          onCompile={handleCompileGraph}
+        />
+      )}
 
       <SettingsModal
         isOpen={isSettingsOpen}
