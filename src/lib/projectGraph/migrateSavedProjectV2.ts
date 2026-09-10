@@ -109,7 +109,7 @@ export function migrateSavedProjectV2ToGraph(source: SavedLoreBibleProjectV2, op
     ownership, sources: [{ id: sourceEvidenceId, kind: "saved_project", locator: "SavedLoreBibleProjectV2", checksum: sha256Hex(sourceCanonicalJson), observedAt: options.migratedAt }], dependencies: [], artifacts: [], builds: [],
     validation: { status: "not_run", findings: [], lastRun: null },
     decisions: [{ id: stableId("decision", projectId, "migration-authority"), question: "How should uncertain V2 authored material be classified?", decision: "Preserve as provisional approved-project material until reviewed.", status: "accepted", origin: "approved_project" }],
-    unresolved, extensions: { legacySourceSchema: 2 },
+    unresolved, extensions: { legacySourceSchema: 2, legacyDocumentId: source.document.id, migrationReceipt: { sourceSha256: sha256Hex(sourceCanonicalJson), migratedAt: options.migratedAt, warningCount: unresolved.length } },
   };
   const parsed = parseProjectGraph(graph);
   const validationStatus = parsed.ok ? "pass" : "blocked";

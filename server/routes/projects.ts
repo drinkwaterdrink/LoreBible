@@ -1,6 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { ProjectGraphCommandError } from "../../src/lib/projectGraph/commands.js";
 import { ProjectRepositoryError, type ProjectRepository } from "../projects/projectRepository.js";
+import { migrateSavedProjectV2ToGraph } from "../../src/lib/projectGraph/migrateSavedProjectV2.js";
+import { compileProjectGraphArtifacts } from "../../src/lib/projectGraph/artifactCompiler.js";
 
 function failure(res:Response,error:unknown){
   if(error instanceof ProjectGraphCommandError){const status=error.code==="missing_target"?404:error.code==="credential_rejected"?422:error.code==="revision_conflict"||error.code==="no_change"?409:400;return res.status(status).json({error:{code:error.code,message:error.message,expectedRevision:error.expectedRevision,actualRevision:error.actualRevision}});}
@@ -10,6 +12,8 @@ function failure(res:Response,error:unknown){
 export function registerProjectRoutes(app:Express,{repository}:{repository:ProjectRepository}){
   app.get("/api/projects/graph",async(_req,res)=>{try{res.json({projects:await repository.list()});}catch(e){failure(res,e);}});
   app.post("/api/projects/graph",async(req,res)=>{try{res.status(201).json({graph:await repository.create(req.body)});}catch(e){failure(res,e);}});
+  app.post("/api/projects/graph/migrate-v2",async(req,res)=>{try{const migrated=migrateSavedProjectV2ToGraph(req.body,{migratedAt:new Date().toISOString()});const existing=await repository.load(migrated.graph.project.id);if(existing){const prior=(existing.extensions.migrationReceipt as any)?.sourceSha256;if(existing.project.revision===1&&prior===migrated.receipt.sourceSha256)return res.status(200).json({status:"already_prepared",graph:existing,receipt:migrated.receipt});return res.status(409).json({error:{code:"graph_exists_modified",message:"A prepared graph already exists and has different source or edits."}});}const graph=await repository.create(migrated.graph);res.status(201).json({status:"prepared",graph,receipt:migrated.receipt});}catch(e){failure(res,e);}});
+  app.get("/api/projects/graph/:projectId/compile-preview",async(req,res)=>{try{const graph=await repository.load(req.params.projectId);if(!graph)return res.status(404).json({error:{code:"missing",message:"Project was not found."}});res.json(compileProjectGraphArtifacts(graph));}catch(e){failure(res,e);}});
   app.get("/api/projects/graph/:projectId",async(req,res)=>{try{const graph=await repository.load(req.params.projectId);if(!graph)return res.status(404).json({error:{code:"missing",message:"Project was not found."}});res.json({graph});}catch(e){failure(res,e);}});
   app.post("/api/projects/graph/:projectId/commands",async(req,res)=>{try{res.json(await repository.apply(req.params.projectId,req.body));}catch(e){failure(res,e);}});
   app.get("/api/projects/graph/:projectId/recovery",async(req,res)=>{try{res.json({recovery:await repository.inspectRecovery(req.params.projectId)});}catch(e){failure(res,e);}});
