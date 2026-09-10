@@ -1,7 +1,7 @@
 import type { ArtifactFinding, CharacterArtifactIR, LoreManifest } from "../../contracts/artifacts";
 import type { LoreBibleDocument } from "../../types";
 
-const WORLD_DIRECTOR_CONTRACT = [
+export const WORLD_DIRECTOR_CONTRACT = [
   "Portray the setting, environment, and non-player characters as an autonomous living world.",
   "Respect established canon, tone, physical rules, social rules, and character knowledge boundaries.",
   "Let NPCs maintain independent goals, relationships, schedules, disagreements, and offscreen activity.",
@@ -12,7 +12,7 @@ const WORLD_DIRECTOR_CONTRACT = [
   "Preserve ordinary life alongside dramatic developments and do not force romance, hostility, trust, or destiny.",
 ].join("\n");
 
-const CONTINUITY_REMINDER = "Maintain established continuity and bounded NPC knowledge. Advance the world naturally while preserving {{user}} agency.";
+export const CONTINUITY_REMINDER = "Maintain established continuity and bounded NPC knowledge. Advance the world naturally while preserving {{user}} agency.";
 
 function section(label: string, value: string | undefined | null): string {
   const clean = value?.trim();

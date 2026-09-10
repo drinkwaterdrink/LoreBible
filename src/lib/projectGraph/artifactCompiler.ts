@@ -1,0 +1,30 @@
+import { createHash } from "node:crypto";
+import type { ArtifactFinding, CharacterArtifactIR, LoreCategory, LoreEntryIR, LoreManifest } from "../../contracts/artifacts";
+import type { ProjectGraphV1 } from "../../contracts/projectGraph";
+import { parseProjectGraph } from "./validation";
+import { WORLD_DIRECTOR_CONTRACT, CONTINUITY_REMINDER } from "../artifacts/characterArtifact";
+import { serializeCharacterCardV3 } from "../artifacts/cardSerializers";
+import { serializeNativeLumiverseWorldBook, serializePortableCharacterBook } from "../artifacts/loreSerializers";
+import { parseNativeLumiverseWorldBookV1 } from "../../contracts/lumiverseWorldBook";
+
+export interface ProjectGraphArtifactPreview{sourceProjectId:string;sourceRevision:number;card:CharacterArtifactIR;lore:LoreManifest;cardV3:unknown;nativeWorldBook:unknown;findings:ArtifactFinding[];validation:{graph:"pass";cardV3:"pass"|"blocked";nativeWorldBook:"pass"|"blocked"}}
+const text=(v:unknown)=>typeof v==="string"?v.trim():JSON.stringify(v);
+const uid=(id:string)=>{const h=createHash("sha256").update(id).digest("hex");return`${h.slice(0,8)}-${h.slice(8,12)}-5${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`;};
+const category=(type:string):LoreCategory=>type==="character"?"character":type==="location"?"location":type==="faction"||type==="organization"?"faction":type==="item"?"item":"world_rule";
+
+export function compileProjectGraphArtifacts(graph:ProjectGraphV1,clock:()=>number=()=>Date.now()):ProjectGraphArtifactPreview{
+  const parsed=parseProjectGraph(graph);if("issues"in parsed)throw new TypeError("Project Graph is invalid.");
+  const findings:ArtifactFinding[]=[];const owner=new Map(graph.ownership.map(x=>[x.factId,x.owner]));
+  const select=(surface:string)=>graph.canon.filter(f=>owner.get(f.id)===surface&&f.visibility!=="secret"&&f.temporalClass!=="current"&&f.temporalClass!=="future_possible").map(f=>text(f.value)).filter(Boolean);
+  const description=select("character_description").join("\n\n");const personality=select("character_personality").join("\n\n");const scenario=select("scenario").join("\n\n");const openings=select("first_message");const examples=select("example_messages").join("\n\n");
+  if(!personality)findings.push({code:"graph.card.personality_missing",severity:"note",message:"Personality remains empty because no graph fact owns that field."});
+  if(openings.length>1)findings.push({code:"graph.card.multiple_openings",severity:"major",message:"Multiple first-message facts require review."});
+  if(!openings.length)findings.push({code:"graph.card.opening_missing",severity:"note",message:"First Message remains empty because none is authored."});
+  const entries:LoreEntryIR[]=[];
+  for(const fact of graph.canon){if(fact.temporalClass==="current"||fact.temporalClass==="future_possible")continue;if(fact.temporalClass==="initial"&&owner.get(fact.id)!=="world_book")continue;const entity=graph.entities.find(e=>e.id===fact.subjectId);if(!entity)continue;const keys=[entity.name,...entity.aliases].map(x=>x.trim()).filter(Boolean);const disabled=fact.visibility==="secret"||keys.length===0;if(keys.length===0)findings.push({code:"graph.lore.missing_keys",severity:"major",message:`${fact.predicate} has no viable entity keys.`,sourceId:fact.id});const content=`${fact.predicate}: ${text(fact.value)}`;entries.push({id:`lore:${fact.id}`,nativeUid:uid(fact.id),sourceId:entity.id,sourceFactIds:[fact.id],title:`${entity.name} — ${fact.predicate}`,category:fact.visibility==="secret"?"secret":category(entity.type),canonicalOwner:"worldBook",content,temporalClass:fact.temporalClass,visibility:fact.visibility,activation:{state:disabled?"disabled":"conditional",primaryKeys:keys,secondaryKeys:[],selective:false,selectiveLogic:"AND",caseSensitive:false,wholeWord:false,useRegex:false,scanDepth:null,useProbability:false,probability:100,sticky:0,cooldown:0,delay:0,group:"",groupOverride:false,groupWeight:100,preventRecursion:fact.visibility==="secret",excludeRecursion:false,delayUntilRecursion:false,vectorized:false,vectorDependency:"none"},injection:{position:0,depth:4,role:null,order:entries.length+100,priority:fact.visibility==="secret"?145:160},contentRationale:"Focused projection of one canonical graph fact.",activationRationale:disabled?"Disabled because the fact is secret or lacks safe keys.":"Uses stable entity names and aliases.",expectedActivationTests:keys.slice(0,1).map(k=>({kind:"positive",text:k,shouldActivate:true})),estimatedTokens:Math.ceil(content.length/4),findings:[]});}
+  for(const claim of graph.knowledge){const entry=entries.find(e=>e.sourceFactIds.includes(claim.factId));if(entry)entry.content+=`\nKnowledge: ${claim.entityId} ${claim.state} this claim.`;}
+  const lore:LoreManifest={id:`graph-lore:${graph.project.id}:${graph.project.revision}`,name:`${graph.project.name||"Untitled Project"} Lorebook`,description:`Graph-native lore at revision ${graph.project.revision}.`,entries,findings:[...findings],portabilityFindings:[]};
+  const card:CharacterArtifactIR={id:`graph-card:${graph.project.id}:${graph.project.revision}`,archetype:"narrator_world",fields:{name:graph.project.name||"Untitled Project",description,personality,scenario,firstMessage:openings[0]||"",exampleMessages:examples,systemPrompt:WORLD_DIRECTOR_CONTRACT,postHistoryInstructions:CONTINUITY_REMINDER,creatorNotes:`Compiled from Project Graph revision ${graph.project.revision}. Structurally validated only; Lumiverse runtime not tested.`},tags:["LoreBible","Narrator","World"],alternateGreetings:[],loreManifestId:lore.id,ownership:[],findings:[...findings]};
+  const portable=serializePortableCharacterBook(lore);const cardV3=serializeCharacterCardV3(card,portable);const nativeWorldBook=serializeNativeLumiverseWorldBook(lore,clock);parseNativeLumiverseWorldBookV1(nativeWorldBook);if((cardV3 as any).spec!=="chara_card_v3")throw new TypeError("Card V3 validation failed.");
+  return{sourceProjectId:graph.project.id,sourceRevision:graph.project.revision!,card,lore,cardV3,nativeWorldBook,findings,validation:{graph:"pass",cardV3:"pass",nativeWorldBook:"pass"}};
+}
