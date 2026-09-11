@@ -103,3 +103,16 @@ test("rejects hostile cyclic inputs without throwing", () => {
   expect(parseBlueprintPreviewRequest(cyclic)).toMatchObject({ ok: false });
   expect(parseBlueprintPlan({ ...validPlan, createdAt: "2026/09/10" })).toMatchObject({ ok: false });
 });
+
+test("rejects array-owned serializer and credential data without executing it", () => {
+  const genres = ["drama"] as string[] & { rawSource?: string; password?: string; toJSON?: () => unknown };
+  genres.rawSource = "forbidden";
+  genres.password = "forbidden";
+  genres.toJSON = () => ({ rawSource: "serializer output", password: "serializer secret" });
+  const hostile = { ...validRequest, context: { ...validRequest.context, selectedTake: { ...validRequest.context.selectedTake!, genres } } };
+  expect(parseBlueprintPreviewRequest(hostile)).toMatchObject({ ok: false });
+  const silentSerializer = ["drama"] as string[] & { toJSON?: () => unknown };
+  Object.defineProperty(silentSerializer, "toJSON", { value: () => ({ rawSource: "hidden" }), enumerable: false });
+  expect(parseBlueprintPreviewRequest({ ...validRequest, context: { ...validRequest.context, selectedTake: { ...validRequest.context.selectedTake!, genres: silentSerializer } } })).toMatchObject({ ok: false });
+  expect(parseBlueprintPlan({ ...validPlan, createdAt: "2026-02-30T00:00:00Z" })).toMatchObject({ ok: false });
+});

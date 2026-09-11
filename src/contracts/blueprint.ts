@@ -70,7 +70,7 @@ export type BlueprintParseIssue = { path: string; message: string };
 export type BlueprintParseResult<T> = { ok: true; value: T } | { ok: false; issues: BlueprintParseIssue[] };
 
 const MAX_STRING_LENGTH = 10_000;
-const credentialKey = /(?:^|[_-])(api[_-]?key|credentials?|access[_-]?token|secret|client[_-]?secret|refresh[_-]?token|private[_-]?key|authorization|bearer|token)(?:$|[_-])/i;
+const credentialKey = /(?:^|[_-])(api[_-]?key|password|credentials?|access[_-]?token|secret|client[_-]?secret|refresh[_-]?token|private[_-]?key|authorization|bearer|token)(?:$|[_-])/i;
 const artifactTargets = ["individual_character", "scenario_card", "narrator_world", "ensemble", "full_world", "full_world_package", "world_book_primary"] as const;
 const worldModes = ["arc", "sandbox", "hybrid"] as const;
 const intensities = ["lean", "rich", "deluxe", "obsessive"] as const;
@@ -117,7 +117,7 @@ function inspectSafety(value: unknown, path: string, issues: BlueprintParseIssue
   if (depth > 32 || ++state.nodes > 5_000) { issue(issues, path, "Input exceeds safe structural limits."); return; }
   if (typeof value === "string") { string(value, path, issues, false); return; }
   if (typeof value === "number" && !Number.isFinite(value)) { issue(issues, path, "Numbers must be finite."); return; }
-  if (Array.isArray(value)) { if (seen.has(value)) { issue(issues, path, "Cyclic input is not allowed."); return; } seen.add(value); value.forEach((item, index) => inspectSafety(item, `${path}[${index}]`, issues, seen, depth + 1, state)); return; }
+  if (Array.isArray(value)) { if (seen.has(value)) { issue(issues, path, "Cyclic input is not allowed."); return; } seen.add(value); for (const key of Reflect.ownKeys(value)) if (key !== "length" && (typeof key !== "string" || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)) issue(issues, path ? `${path}.${String(key)}` : String(key), "Array-owned fields are not allowed."); value.forEach((item, index) => inspectSafety(item, `${path}[${index}]`, issues, seen, depth + 1, state)); return; }
   if (!record(value)) return;
   if (seen.has(value)) { issue(issues, path, "Cyclic input is not allowed."); return; }
   seen.add(value);
@@ -185,7 +185,7 @@ function parseBlueprintPreviewRequestInternal(value: unknown): BlueprintParseRes
     if (context.knowledgeClaimCount !== undefined) nonnegativeInteger(context.knowledgeClaimCount, "context.knowledgeClaimCount", issues);
   }
   if (issues.length) return { ok: false, issues };
-  return { ok: true, value: JSON.parse(JSON.stringify(value)) as BlueprintPreviewRequestV1 };
+  return { ok: true, value: copyPreviewRequest(value) };
 }
 
 function parseSparkDna(value: unknown, path: string, issues: BlueprintParseIssue[]): void {
@@ -240,6 +240,38 @@ function parseBlueprintPlanInternal(value: unknown): BlueprintParseResult<Bluepr
   if (!closed(value.assessments, "assessments", ["ordinaryLife", "worldAutonomy"], issues)) issue(issues, "assessments", "Expected assessments."); else for (const key of ["ordinaryLife", "worldAutonomy"] as const) { const assessment = value.assessments[key]; const path = `assessments.${key}`; if (!closed(assessment, path, ["status", "evidenceRefs", "gaps", "explanation"], issues)) continue; enumValue(assessment.status, assessmentStatuses, `${path}.status`, issues); stringArray(assessment.evidenceRefs, `${path}.evidenceRefs`, issues); stringArray(assessment.gaps, `${path}.gaps`, issues); string(assessment.explanation, `${path}.explanation`, issues); }
   if (!closed(value.inventory, "inventory", ["nodes", "modelCalls", "artifacts"], issues)) issue(issues, "inventory", "Expected inventory estimates."); else { range(value.inventory.nodes, "inventory.nodes", issues); range(value.inventory.modelCalls, "inventory.modelCalls", issues); stringArray(value.inventory.artifacts, "inventory.artifacts", issues); }
   if (!Array.isArray(value.findings)) issue(issues, "findings", "Expected findings."); else { uniqueIds(value.findings, "findings", issues); value.findings.forEach((item, index) => { const path = `findings[${index}]`; if (!closed(item, path, ["id", "severity", "code", "message", "evidenceRefs"], issues)) return; string(item.code, `${path}.code`, issues); string(item.message, `${path}.message`, issues); enumValue(item.severity, findingSeverities, `${path}.severity`, issues); stringArray(item.evidenceRefs, `${path}.evidenceRefs`, issues); }); }
-  if (!string(value.createdAt, "createdAt", issues) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value.createdAt as string) || Number.isNaN(Date.parse(value.createdAt as string))) issue(issues, "createdAt", "Expected an ISO-8601 timestamp.");
-  return issues.length ? { ok: false, issues } : { ok: true, value: JSON.parse(JSON.stringify(value)) as BlueprintPlanV1 };
+  if (!string(value.createdAt, "createdAt", issues) || !isUtcIsoTimestamp(value.createdAt as string)) issue(issues, "createdAt", "Expected an ISO-8601 timestamp.");
+  return issues.length ? { ok: false, issues } : { ok: true, value: copyBlueprintPlan(value) };
+}
+
+function isUtcIsoTimestamp(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?Z$/.exec(value);
+  if (!match) return false;
+  const [year, month, day, hour, minute, second, milliseconds] = match.slice(1).map((part, index) => index === 6 && part === undefined ? 0 : Number(part));
+  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) return false;
+  const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second, milliseconds));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day && date.getUTCHours() === hour && date.getUTCMinutes() === minute && date.getUTCSeconds() === second && date.getUTCMilliseconds() === milliseconds;
+}
+
+function strings(value: unknown): string[] { return (value as string[]).map(item => item); }
+function pick(value: RecordValue, keys: readonly string[]): Record<string, unknown> { const copy: Record<string, unknown> = {}; for (const key of keys) if (value[key] !== undefined) copy[key] = value[key]; return copy; }
+function copyPreviewRequest(value: RecordValue): BlueprintPreviewRequestV1 {
+  const context = value.context as RecordValue;
+  const copy: BlueprintPlanningContextV1 = { projectId: context.projectId as string, projectRevision: context.projectRevision as number };
+  if (context.generationQuality !== undefined) copy.generationQuality = context.generationQuality as BlueprintGenerationQuality;
+  if (context.selectedTake !== undefined) { const take = context.selectedTake as RecordValue; copy.selectedTake = { id: take.id as string, title: take.title as string, pitch: take.pitch as string, angle: take.angle as string, genres: strings(take.genres), tone: strings(take.tone), retainedNonNegotiables: strings(take.retainedNonNegotiables) }; }
+  if (context.sparkDna !== undefined) { const spark = context.sparkDna as RecordValue; const tone = spark.toneEnvelope as RecordValue; copy.sparkDna = { nonNegotiables: strings(spark.nonNegotiables), premisePromise: spark.premisePromise as string, toneEnvelope: { primary: tone.primary as string, descriptors: strings(tone.descriptors) }, genreSignals: strings(spark.genreSignals), playerAgencyBoundaries: spark.playerAgencyBoundaries as string, openVariables: strings(spark.openVariables), existingPressures: strings(spark.existingPressures), assumptions: strings(spark.assumptions), opportunitySpace: strings(spark.opportunitySpace), userRole: spark.userRole as string | null, franchise: spark.franchise as string | null }; }
+  if (context.physicsConstraints !== undefined) copy.physicsConstraints = pick(context.physicsConstraints as RecordValue, ["density", "densityTokens", "strangeness", "mundanity", "genre", "subgenre", "violence", "horror", "romance", "humor", "pacing", "explicitContent", "playerDeath", "linguisticBase", "mustInclude", "mustAvoid"]) as BlueprintPhysicsConstraintsV1;
+  if (context.graphFacts !== undefined) copy.graphFacts = (context.graphFacts as RecordValue[]).map(fact => ({ id: fact.id as string, predicate: fact.predicate as string, value: Array.isArray(fact.value) ? strings(fact.value) : fact.value as BlueprintFactValue, status: fact.status as BlueprintPlanningContextV1["graphFacts"] extends Array<infer T> ? T extends { status: infer S } ? S : never : never, origin: fact.origin as any, visibility: fact.visibility as any, temporalClass: fact.temporalClass as any }));
+  if (context.graphEntities !== undefined) copy.graphEntities = (context.graphEntities as RecordValue[]).map(entity => ({ id: entity.id as string, type: entity.type as any, name: entity.name as string, importance: entity.importance as any, lifecycle: entity.lifecycle as any }));
+  if (context.relationshipCount !== undefined) copy.relationshipCount = context.relationshipCount as number;
+  if (context.knowledgeClaimCount !== undefined) copy.knowledgeClaimCount = context.knowledgeClaimCount as number;
+  return { expectedRevision: value.expectedRevision as number, context: copy };
+}
+function copyRecommendation<T>(value: RecordValue): BlueprintRecommendation<T> { return { value: value.value as T, status: "proposed", reason: value.reason as string, evidenceRefs: strings(value.evidenceRefs) }; }
+function copyRange(value: RecordValue): EstimateRange { return { min: value.min as number, ideal: value.ideal as number, max: value.max as number }; }
+function copyAssessment(value: RecordValue): BlueprintAssessment { return { status: value.status as BlueprintAssessmentStatus, evidenceRefs: strings(value.evidenceRefs), gaps: strings(value.gaps), explanation: value.explanation as string }; }
+function copyBlueprintPlan(value: RecordValue): BlueprintPlanV1 {
+  const source = value.source as RecordValue; const assessments = value.assessments as RecordValue; const inventory = value.inventory as RecordValue;
+  return { schema: BLUEPRINT_PLAN_SCHEMA, source: { projectId: source.projectId as string, projectRevision: source.projectRevision as number, inputSha256: source.inputSha256 as string, plannerVersion: "1" }, interfaceMode: "smart_auto", artifactTargets: (value.artifactTargets as RecordValue[]).map(item => copyRecommendation<ArtifactTarget>(item)), worldMode: copyRecommendation<BlueprintWorldMode>(value.worldMode as RecordValue), buildIntensity: copyRecommendation<BuildIntensity>(value.buildIntensity as RecordValue), generationQuality: copyRecommendation<BlueprintGenerationQuality>(value.generationQuality as RecordValue), runtimeBudget: copyRecommendation<RuntimeBudget>(value.runtimeBudget as RecordValue), categories: (value.categories as RecordValue[]).map(item => ({ id: item.id as string, label: item.label as string, purpose: item.purpose as string, justification: item.justification as string, status: item.status as BlueprintCategoryStatus, detail: item.detail as BlueprintDetail, ...(item.targetRange === undefined ? {} : { targetRange: copyRange(item.targetRange as RecordValue) }), likelyRuntimeRole: item.likelyRuntimeRole as BlueprintRuntimeRole, candidateArchitectures: (item.candidateArchitectures as RecordValue[]).map(candidate => copyRecommendation<string>(candidate)), userLocked: false, evidenceRefs: strings(item.evidenceRefs) })), mechanicPacks: (value.mechanicPacks as RecordValue[]).map(item => ({ id: item.id as string, label: item.label as string, status: item.status as MechanicPackStatus, reason: item.reason as string, evidenceRefs: strings(item.evidenceRefs) })), assessments: { ordinaryLife: copyAssessment(assessments.ordinaryLife as RecordValue), worldAutonomy: copyAssessment(assessments.worldAutonomy as RecordValue) }, inventory: { nodes: copyRange(inventory.nodes as RecordValue), modelCalls: copyRange(inventory.modelCalls as RecordValue), artifacts: strings(inventory.artifacts) }, findings: (value.findings as RecordValue[]).map(item => ({ id: item.id as string, severity: item.severity as BlueprintFindingSeverity, code: item.code as string, message: item.message as string, evidenceRefs: strings(item.evidenceRefs) })), createdAt: value.createdAt as string };
 }
