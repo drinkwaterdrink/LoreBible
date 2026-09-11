@@ -19,6 +19,13 @@ test("maps revision conflict and malformed input safely",async()=>{const h=await
 
 test("previews a sanitized Blueprint plan from the stored graph revision",async()=>{const h=await harness();try{await h.repo.create(graph());const response=await postBlueprint(h,blueprintRequest());expect(response.status).toBe(200);const body=await response.json() as any;expect(body.plan.source).toMatchObject({projectId:"route-project",projectRevision:1});const serialized=JSON.stringify(body);expect(serialized).not.toContain("legacyDocumentId");expect(serialized).not.toContain("apiKey");expect(await h.repo.load("route-project")).toEqual(graph());}finally{h.close();}});
 
+test("uses the stored graph identity for Blueprint provenance and checksums",async()=>{const h=await harness();try{await h.repo.create(graph());const before=await h.repo.load("route-project");const baselineResponse=await postBlueprint(h,blueprintRequest());expect(baselineResponse.status).toBe(200);const baseline=await baselineResponse.json() as any;const cases=[
+  {...blueprintRequest(),context:{...blueprintRequest().context,projectId:"spoofed-project"}},
+  {...blueprintRequest(),context:{...blueprintRequest().context,projectRevision:999}},
+];
+for(const request of cases){const response=await postBlueprint(h,request);expect(response.status).toBe(200);const body=await response.json() as any;expect(body.plan.source).toEqual({...baseline.plan.source,inputSha256:baseline.plan.source.inputSha256});expect(body.plan.source.inputSha256).toBe(baseline.plan.source.inputSha256);const serialized=JSON.stringify(body);expect(serialized).not.toContain("spoofed-project");expect(serialized).not.toContain('"projectRevision":999');expect(await h.repo.load("route-project")).toEqual(before);}}
+finally{h.close();}});
+
 test("rejects stale, credential-shaped, and malformed Blueprint previews without mutating the graph",async()=>{const h=await harness();try{await h.repo.create(graph());const before=await h.repo.load("route-project");const cases=[
   {request:blueprintRequest(9),status:409,code:"revision_conflict",details:{expectedRevision:9,actualRevision:1}},
   {request:{...blueprintRequest(),apiKey:"credential-value"},status:422,code:"credential_rejected"},
