@@ -74,6 +74,16 @@ test("screens comprehensive credential-shaped keys without rejecting estimatedTo
   if (estimatedTokens.ok === false) expect(estimatedTokens.issues.some(entry => entry.message.includes("Credential-shaped"))).toBe(false);
 });
 
+test("rejects enumerable own __proto__ fields during closed-schema validation", () => {
+  const hostile = { ...validRequest };
+  Object.defineProperty(hostile, "__proto__", { value: "unknown", enumerable: true });
+  expect(parseBlueprintPreviewRequest(hostile)).toMatchObject({
+    ok: false,
+    issues: [{ path: "__proto__", message: "Unknown field is not allowed." }],
+  });
+  expect(parseBlueprintPreviewRequest(validRequest)).toEqual({ ok: true, value: validRequest });
+});
+
 test("validates every planning-context collection and scalar shape", () => {
   const complete = {
     ...validRequest,

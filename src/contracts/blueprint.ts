@@ -144,7 +144,7 @@ function dataSnapshot(value: unknown, path: string, issues: BlueprintParseIssue[
   }
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) { issue(issues, path, "Expected a plain object."); return SNAPSHOT_FAILED; }
-  const copy: RecordValue = {};
+  const copy: RecordValue = Object.create(null);
   for (const key of Reflect.ownKeys(descriptors)) { if (typeof key !== "string") { issue(issues, path, "Symbol fields are not allowed."); return SNAPSHOT_FAILED; } const descriptor = descriptors[key]; if (!("value" in descriptor)) { issue(issues, path ? `${path}.${key}` : key, "Accessor fields are not allowed."); return SNAPSHOT_FAILED; } const child = dataSnapshot(descriptor.value, path ? `${path}.${key}` : key, issues, seen, depth + 1, state); if (child === SNAPSHOT_FAILED) return SNAPSHOT_FAILED; copy[key] = child; }
   return copy;
 }
