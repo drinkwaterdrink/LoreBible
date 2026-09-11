@@ -48,9 +48,12 @@ import { Menu, Feather, X, PlusCircle, Save } from "lucide-react";
 import { AppVersionBadge } from "./components/AppVersionBadge";
 import { StorageRecoveryNotice } from "./components/StorageRecoveryNotice";
 import { ProjectGraphPanel } from "./components/ProjectGraphPanel";
-import { compileGraphPreview, listPreparedProjectGraphs, loadProjectGraph, prepareProjectGraph, renameGraphEntity, type PreparedProjectGraphSummary } from "./services/projectGraphService";
+import { BlueprintPreviewPanel } from "./components/BlueprintPreviewPanel";
+import { compileGraphPreview, listPreparedProjectGraphs, loadProjectGraph, prepareProjectGraph, previewBlueprint, renameGraphEntity, type PreparedProjectGraphSummary } from "./services/projectGraphService";
 import type { ProjectGraphV1 } from "./contracts/projectGraph";
 import type { ProjectGraphArtifactPreview } from "./lib/projectGraph/artifactCompiler";
+import type { BlueprintPlanV1 } from "./contracts/blueprint";
+import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -204,6 +207,11 @@ export default function App() {
   const [preparingGraphId, setPreparingGraphId] = useState<string | null>(null);
   const [activeGraph, setActiveGraph] = useState<ProjectGraphV1 | null>(null);
   const [graphPreview, setGraphPreview] = useState<ProjectGraphArtifactPreview | null>(null);
+  const [blueprintPlan, setBlueprintPlan] = useState<BlueprintPlanV1 | null>(null);
+  const [blueprintError, setBlueprintError] = useState<string | null>(null);
+  const [blueprintBusy, setBlueprintBusy] = useState(false);
+  const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
+  const blueprintControllerRef = useRef<AbortController | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => {
@@ -885,11 +893,29 @@ export default function App() {
     });
   }, [isVaultOpen]);
 
+  useEffect(() => () => blueprintControllerRef.current?.abort(), []);
+
+  const acceptActiveGraph = (nextGraph: ProjectGraphV1) => {
+    const revision = nextGraph.project.revision ?? 1;
+    const activeRevision = activeGraph?.project.revision ?? 1;
+    const graphChanged = Boolean(activeGraph && (activeGraph.project.id !== nextGraph.project.id || activeRevision !== revision));
+    const planIsStale = Boolean(blueprintPlan && (blueprintPlan.source.projectId !== nextGraph.project.id || blueprintPlan.source.projectRevision !== revision));
+    if (graphChanged || planIsStale) {
+      blueprintControllerRef.current?.abort();
+      blueprintControllerRef.current = null;
+      setBlueprintBusy(false);
+      if (planIsStale) setBlueprintPlan(null);
+      setBlueprintError(null);
+      setIsBlueprintOpen(false);
+    }
+    setActiveGraph(nextGraph);
+  };
+
   const handlePrepareGraph = async (project: SavedLoreBibleProjectV2) => {
     setPreparingGraphId(project.document.id);
     try {
       const result = await prepareProjectGraph(project);
-      setActiveGraph(result.graph);
+      acceptActiveGraph(result.graph);
       setGraphPreview(null);
       setIsVaultOpen(false);
       await refreshPreparedGraphs();
@@ -903,7 +929,7 @@ export default function App() {
 
   const handleOpenGraph = async (projectId: string) => {
     try {
-      setActiveGraph(await loadProjectGraph(projectId));
+      acceptActiveGraph(await loadProjectGraph(projectId));
       setGraphPreview(null);
       setIsVaultOpen(false);
     } catch (error) {
@@ -914,7 +940,7 @@ export default function App() {
   const handleRenameGraphEntity = async (entityId: string, name: string) => {
     if (!activeGraph) throw new Error("No Project Graph is open.");
     const result = await renameGraphEntity(activeGraph.project.id, activeGraph.project.revision, entityId, name);
-    setActiveGraph(result.graph);
+    acceptActiveGraph(result.graph);
     setGraphPreview(null);
     await refreshPreparedGraphs();
     return result;
@@ -922,13 +948,51 @@ export default function App() {
 
   const handleReloadGraph = async () => {
     if (!activeGraph) return;
-    setActiveGraph(await loadProjectGraph(activeGraph.project.id));
+    acceptActiveGraph(await loadProjectGraph(activeGraph.project.id));
     setGraphPreview(null);
   };
 
   const handleCompileGraph = async () => {
     if (!activeGraph) return;
     setGraphPreview(await compileGraphPreview(activeGraph.project.id));
+  };
+
+  const handlePreviewBlueprint = async () => {
+    if (!activeGraph || blueprintBusy) return;
+    const summary = preparedGraphs.find((item) => item.id === activeGraph.project.id);
+    const sourceProject = summary?.legacyDocumentId ? savedProjects.find((item) => item.document.id === summary.legacyDocumentId) : undefined;
+    if (!sourceProject) {
+      setBlueprintError("The source V2 project is unavailable. Reopen the Vault and prepare this graph again.");
+      return;
+    }
+    blueprintControllerRef.current?.abort();
+    const controller = new AbortController();
+    blueprintControllerRef.current = controller;
+    setBlueprintBusy(true);
+    setBlueprintError(null);
+    try {
+      const revision = activeGraph.project.revision ?? 1;
+      const context = createBlueprintPlanningContext(sourceProject, { projectId: activeGraph.project.id, projectRevision: revision });
+      const plan = await previewBlueprint(activeGraph.project.id, { expectedRevision: revision, context }, controller.signal);
+      setBlueprintPlan(plan);
+      setIsBlueprintOpen(true);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const message = error instanceof Error ? error.message : "Blueprint preview failed.";
+      setBlueprintError(blueprintPlan ? `${message} The previous proposal is still available.` : message);
+    } finally {
+      if (blueprintControllerRef.current === controller) {
+        blueprintControllerRef.current = null;
+        setBlueprintBusy(false);
+      }
+    }
+  };
+
+  const closeBlueprint = () => {
+    blueprintControllerRef.current?.abort();
+    blueprintControllerRef.current = null;
+    setBlueprintBusy(false);
+    setIsBlueprintOpen(false);
   };
 
   return (
@@ -1295,7 +1359,13 @@ export default function App() {
         <ProjectGraphPanel
           graph={activeGraph}
           preview={graphPreview}
+          blueprintPlan={blueprintPlan}
+          blueprintBusy={blueprintBusy}
+          blueprintError={blueprintError}
+          onPreviewBlueprint={handlePreviewBlueprint}
+          onOpenBlueprint={() => setIsBlueprintOpen(true)}
           onClose={() => {
+            closeBlueprint();
             setActiveGraph(null);
             setGraphPreview(null);
           }}
@@ -1304,6 +1374,8 @@ export default function App() {
           onCompile={handleCompileGraph}
         />
       )}
+
+      {isBlueprintOpen && blueprintPlan && <BlueprintPreviewPanel plan={blueprintPlan} onClose={closeBlueprint} />}
 
       <SettingsModal
         isOpen={isSettingsOpen}
