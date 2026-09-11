@@ -1,0 +1,9 @@
+import { expect, test } from "bun:test";
+import { abortBlueprintRequest, findBlueprintSourceProject, getBlueprintFailure, shouldClearBlueprintPlan } from "../../src/lib/blueprint/previewLifecycle";
+import { ProjectGraphApiError } from "../../src/services/projectGraphService";
+
+const project=(id:string)=>({document:{id}} as any);
+test("selects the SavedProjectV2 identified by the graph summary legacyDocumentId",()=>{expect(findBlueprintSourceProject("graph-b",[{id:"graph-a",legacyDocumentId:"doc-a"},{id:"graph-b",legacyDocumentId:"doc-b"}] as any,[project("doc-a"),project("doc-b")])).toBeDefined();expect(findBlueprintSourceProject("graph-b",[{id:"graph-b",legacyDocumentId:"doc-b"}] as any,[project("doc-a")])).toBeUndefined();});
+test("marks coded revision conflicts as reload-required without discarding a prior proposal",()=>{expect(getBlueprintFailure(new ProjectGraphApiError("Newer","revision_conflict",409,3),true)).toEqual({message:"Newer The previous proposal is still available.",reloadRequired:true});expect(getBlueprintFailure(new Error("Offline"),false)).toEqual({message:"Offline",reloadRequired:false});});
+test("clears proposals only for a different graph or revision",()=>{const plan={source:{projectId:"p",projectRevision:2}} as any;expect(shouldClearBlueprintPlan(plan,{project:{id:"p",revision:2}} as any)).toBe(false);expect(shouldClearBlueprintPlan(plan,{project:{id:"p",revision:3}} as any)).toBe(true);expect(shouldClearBlueprintPlan(plan,{project:{id:"q",revision:2}} as any)).toBe(true);expect(shouldClearBlueprintPlan(null,{project:{id:"q",revision:2}} as any)).toBe(false);});
+test("aborts an active Blueprint request and safely accepts no request",()=>{const controller=new AbortController();abortBlueprintRequest(controller);expect(controller.signal.aborted).toBe(true);expect(()=>abortBlueprintRequest(null)).not.toThrow();});

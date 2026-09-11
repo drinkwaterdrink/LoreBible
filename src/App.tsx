@@ -54,6 +54,7 @@ import type { ProjectGraphV1 } from "./contracts/projectGraph";
 import type { ProjectGraphArtifactPreview } from "./lib/projectGraph/artifactCompiler";
 import type { BlueprintPlanV1 } from "./contracts/blueprint";
 import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext";
+import { abortBlueprintRequest, findBlueprintSourceProject, getBlueprintFailure, shouldClearBlueprintPlan } from "./lib/blueprint/previewLifecycle";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -209,6 +210,7 @@ export default function App() {
   const [graphPreview, setGraphPreview] = useState<ProjectGraphArtifactPreview | null>(null);
   const [blueprintPlan, setBlueprintPlan] = useState<BlueprintPlanV1 | null>(null);
   const [blueprintError, setBlueprintError] = useState<string | null>(null);
+  const [blueprintReloadRequired, setBlueprintReloadRequired] = useState(false);
   const [blueprintBusy, setBlueprintBusy] = useState(false);
   const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
   const blueprintControllerRef = useRef<AbortController | null>(null);
@@ -893,19 +895,20 @@ export default function App() {
     });
   }, [isVaultOpen]);
 
-  useEffect(() => () => blueprintControllerRef.current?.abort(), []);
+  useEffect(() => () => abortBlueprintRequest(blueprintControllerRef.current), []);
 
   const acceptActiveGraph = (nextGraph: ProjectGraphV1) => {
     const revision = nextGraph.project.revision ?? 1;
     const activeRevision = activeGraph?.project.revision ?? 1;
     const graphChanged = Boolean(activeGraph && (activeGraph.project.id !== nextGraph.project.id || activeRevision !== revision));
-    const planIsStale = Boolean(blueprintPlan && (blueprintPlan.source.projectId !== nextGraph.project.id || blueprintPlan.source.projectRevision !== revision));
+    const planIsStale = shouldClearBlueprintPlan(blueprintPlan, nextGraph);
     if (graphChanged || planIsStale) {
-      blueprintControllerRef.current?.abort();
+      abortBlueprintRequest(blueprintControllerRef.current);
       blueprintControllerRef.current = null;
       setBlueprintBusy(false);
       if (planIsStale) setBlueprintPlan(null);
       setBlueprintError(null);
+      setBlueprintReloadRequired(false);
       setIsBlueprintOpen(false);
     }
     setActiveGraph(nextGraph);
@@ -959,17 +962,17 @@ export default function App() {
 
   const handlePreviewBlueprint = async () => {
     if (!activeGraph || blueprintBusy) return;
-    const summary = preparedGraphs.find((item) => item.id === activeGraph.project.id);
-    const sourceProject = summary?.legacyDocumentId ? savedProjects.find((item) => item.document.id === summary.legacyDocumentId) : undefined;
+    const sourceProject = findBlueprintSourceProject(activeGraph.project.id, preparedGraphs, savedProjects);
     if (!sourceProject) {
       setBlueprintError("The source V2 project is unavailable. Reopen the Vault and prepare this graph again.");
       return;
     }
-    blueprintControllerRef.current?.abort();
+    abortBlueprintRequest(blueprintControllerRef.current);
     const controller = new AbortController();
     blueprintControllerRef.current = controller;
     setBlueprintBusy(true);
     setBlueprintError(null);
+    setBlueprintReloadRequired(false);
     try {
       const revision = activeGraph.project.revision ?? 1;
       const context = createBlueprintPlanningContext(sourceProject, { projectId: activeGraph.project.id, projectRevision: revision });
@@ -978,8 +981,9 @@ export default function App() {
       setIsBlueprintOpen(true);
     } catch (error) {
       if (controller.signal.aborted) return;
-      const message = error instanceof Error ? error.message : "Blueprint preview failed.";
-      setBlueprintError(blueprintPlan ? `${message} The previous proposal is still available.` : message);
+      const failure = getBlueprintFailure(error, Boolean(blueprintPlan));
+      setBlueprintError(failure.message);
+      setBlueprintReloadRequired(failure.reloadRequired);
     } finally {
       if (blueprintControllerRef.current === controller) {
         blueprintControllerRef.current = null;
@@ -988,8 +992,19 @@ export default function App() {
     }
   };
 
+  const handleReloadBlueprint = async () => {
+    if (!activeGraph) return;
+    try {
+      acceptActiveGraph(await loadProjectGraph(activeGraph.project.id));
+      setBlueprintError(null);
+      setBlueprintReloadRequired(false);
+    } catch (error) {
+      setBlueprintError(error instanceof Error ? error.message : "Could not reload the Project Graph.");
+    }
+  };
+
   const closeBlueprint = () => {
-    blueprintControllerRef.current?.abort();
+    abortBlueprintRequest(blueprintControllerRef.current);
     blueprintControllerRef.current = null;
     setBlueprintBusy(false);
     setIsBlueprintOpen(false);
@@ -1362,7 +1377,9 @@ export default function App() {
           blueprintPlan={blueprintPlan}
           blueprintBusy={blueprintBusy}
           blueprintError={blueprintError}
+          blueprintReloadRequired={blueprintReloadRequired}
           onPreviewBlueprint={handlePreviewBlueprint}
+          onReloadBlueprint={handleReloadBlueprint}
           onOpenBlueprint={() => setIsBlueprintOpen(true)}
           onClose={() => {
             closeBlueprint();
