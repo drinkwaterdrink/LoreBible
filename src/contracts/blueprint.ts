@@ -89,6 +89,7 @@ const temporalClasses = ["evergreen", "initial", "current", "historical", "futur
 const entityTypes = ["character", "location", "faction", "organization", "item", "system", "event", "culture", "species", "concept", "other"] as const;
 const importances = ["principal", "major", "supporting", "minor", "reference"] as const;
 const lifecycles = ["active", "historical", "future", "unknown"] as const;
+const SNAPSHOT_FAILED = Symbol("snapshot failed");
 
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): value is RecordValue => Boolean(value && typeof value === "object" && !Array.isArray(value) && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null));
@@ -126,6 +127,27 @@ function inspectSafety(value: unknown, path: string, issues: BlueprintParseIssue
     inspectSafety(child, path ? `${path}.${key}` : key, issues, seen, depth + 1, state);
   }
 }
+function dataSnapshot(value: unknown, path: string, issues: BlueprintParseIssue[], seen = new WeakSet<object>(), depth = 0, state = { nodes: 0 }): unknown | typeof SNAPSHOT_FAILED {
+  if (depth > 32 || ++state.nodes > 5_000) { issue(issues, path, "Input exceeds safe structural limits."); return SNAPSHOT_FAILED; }
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) { issue(issues, path, "Cyclic input is not allowed."); return SNAPSHOT_FAILED; }
+  seen.add(value);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Array.isArray(value)) {
+    if (Object.getPrototypeOf(value) !== Array.prototype) { issue(issues, path, "Expected a plain array."); return SNAPSHOT_FAILED; }
+    const length = descriptors.length?.value;
+    if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) { issue(issues, path, "Invalid array length."); return SNAPSHOT_FAILED; }
+    for (const key of Reflect.ownKeys(descriptors)) if (key !== "length" && (typeof key !== "string" || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= length)) { issue(issues, path ? `${path}.${String(key)}` : String(key), "Array-owned fields are not allowed."); return SNAPSHOT_FAILED; }
+    const copy: unknown[] = [];
+    for (let index = 0; index < length; index++) { const descriptor = descriptors[String(index)]; if (!descriptor || !("value" in descriptor)) { issue(issues, `${path}[${index}]`, "Array entries must be data properties."); return SNAPSHOT_FAILED; } const child = dataSnapshot(descriptor.value, `${path}[${index}]`, issues, seen, depth + 1, state); if (child === SNAPSHOT_FAILED) return SNAPSHOT_FAILED; copy.push(child); }
+    return copy;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) { issue(issues, path, "Expected a plain object."); return SNAPSHOT_FAILED; }
+  const copy: RecordValue = {};
+  for (const key of Reflect.ownKeys(descriptors)) { if (typeof key !== "string") { issue(issues, path, "Symbol fields are not allowed."); return SNAPSHOT_FAILED; } const descriptor = descriptors[key]; if (!("value" in descriptor)) { issue(issues, path ? `${path}.${key}` : key, "Accessor fields are not allowed."); return SNAPSHOT_FAILED; } const child = dataSnapshot(descriptor.value, path ? `${path}.${key}` : key, issues, seen, depth + 1, state); if (child === SNAPSHOT_FAILED) return SNAPSHOT_FAILED; copy[key] = child; }
+  return copy;
+}
 function closed(value: unknown, path: string, allowed: readonly string[], issues: BlueprintParseIssue[]): value is RecordValue {
   if (!record(value)) { issue(issues, path, "Expected a plain object."); return false; }
   for (const key of Object.keys(value)) if (!allowed.includes(key)) issue(issues, path ? `${path}.${key}` : key, "Unknown field is not allowed.");
@@ -162,7 +184,7 @@ function uniqueIds(items: unknown[], path: string, issues: BlueprintParseIssue[]
 }
 
 export function parseBlueprintPreviewRequest(value: unknown): BlueprintParseResult<BlueprintPreviewRequestV1> {
-  try { return parseBlueprintPreviewRequestInternal(value); } catch { return { ok: false, issues: [{ path: "", message: "Invalid Blueprint preview request." }] }; }
+  try { const issues: BlueprintParseIssue[] = []; const snapshot = dataSnapshot(value, "", issues); return snapshot === SNAPSHOT_FAILED ? { ok: false, issues } : parseBlueprintPreviewRequestInternal(snapshot); } catch { return { ok: false, issues: [{ path: "", message: "Invalid Blueprint preview request." }] }; }
 }
 function parseBlueprintPreviewRequestInternal(value: unknown): BlueprintParseResult<BlueprintPreviewRequestV1> {
   const issues: BlueprintParseIssue[] = [];
@@ -217,7 +239,7 @@ function parseGraphEntities(value: unknown, path: string, issues: BlueprintParse
 }
 
 export function parseBlueprintPlan(value: unknown): BlueprintParseResult<BlueprintPlanV1> {
-  try { return parseBlueprintPlanInternal(value); } catch { return { ok: false, issues: [{ path: "", message: "Invalid Blueprint plan." }] }; }
+  try { const issues: BlueprintParseIssue[] = []; const snapshot = dataSnapshot(value, "", issues); return snapshot === SNAPSHOT_FAILED ? { ok: false, issues } : parseBlueprintPlanInternal(snapshot); } catch { return { ok: false, issues: [{ path: "", message: "Invalid Blueprint plan." }] }; }
 }
 function parseBlueprintPlanInternal(value: unknown): BlueprintParseResult<BlueprintPlanV1> {
   const issues: BlueprintParseIssue[] = [];

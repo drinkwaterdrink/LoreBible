@@ -116,3 +116,21 @@ test("rejects array-owned serializer and credential data without executing it", 
   expect(parseBlueprintPreviewRequest({ ...validRequest, context: { ...validRequest.context, selectedTake: { ...validRequest.context.selectedTake!, genres: silentSerializer } } })).toMatchObject({ ok: false });
   expect(parseBlueprintPlan({ ...validPlan, createdAt: "2026-02-30T00:00:00Z" })).toMatchObject({ ok: false });
 });
+
+test("rejects changing accessors before validation and copying", () => {
+  let reads = 0;
+  const hostile: Record<string, unknown> = { expectedRevision: 7 };
+  Object.defineProperty(hostile, "context", { enumerable: true, get: () => { reads++; return reads === 1 ? validRequest.context : { rawSource: "forbidden" }; } });
+  expect(parseBlueprintPreviewRequest(hostile)).toMatchObject({ ok: false });
+  expect(reads).toBe(0);
+});
+
+test("rejects Array subclasses with overridden traversal methods", () => {
+  class HostileArray extends Array<string> {
+    override forEach(callbackfn: (value: string, index: number, array: string[]) => void, thisArg?: unknown) { throw new Error("must not run"); }
+    override map<U>(callbackfn: (value: string, index: number, array: string[]) => U, thisArg?: unknown): U[] { throw new Error("must not run"); }
+  }
+  const genres = new HostileArray("drama");
+  expect(() => parseBlueprintPreviewRequest({ ...validRequest, context: { ...validRequest.context, selectedTake: { ...validRequest.context.selectedTake!, genres } } })).not.toThrow();
+  expect(parseBlueprintPreviewRequest({ ...validRequest, context: { ...validRequest.context, selectedTake: { ...validRequest.context.selectedTake!, genres } } })).toMatchObject({ ok: false });
+});
