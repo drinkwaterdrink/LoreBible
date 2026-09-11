@@ -1,8 +1,8 @@
 # Blueprint Planning Foundation Design
 
-**Date:** 2026-09-10  
-**Planned release:** LoreBible v0.41  
-**Roadmap:** M2.1, first slice of M2 Blueprint Studio  
+**Date:** 2026-09-10
+**Planned release:** LoreBible v0.41
+**Roadmap:** M2.1, first slice of M2 Blueprint Studio
 **Evidence target:** deterministic structural and fixture validation; no model-quality or Lumiverse-runtime claim
 
 ## 1. Purpose

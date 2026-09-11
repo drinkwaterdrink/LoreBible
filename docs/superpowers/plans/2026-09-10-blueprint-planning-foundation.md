@@ -47,7 +47,7 @@ expect(parseBlueprintPreviewRequest({ ...validRequest, apiKey: "forbidden" })).t
 
 - [ ] **Step 2: Run the contract test and verify RED**
 
-Run: `bun test tests/blueprint/contract.test.ts`  
+Run: `bun test tests/blueprint/contract.test.ts`
 Expected: FAIL because `src/contracts/blueprint.ts` does not exist.
 
 - [ ] **Step 3: Implement the exact contract**
@@ -96,7 +96,7 @@ Validate recursively against credential-shaped keys, require finite nonnegative 
 
 - [ ] **Step 4: Run the contract test and typecheck**
 
-Run: `bun test tests/blueprint/contract.test.ts && bun run typecheck`  
+Run: `bun test tests/blueprint/contract.test.ts && bun run typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Commit Task 1**
@@ -136,7 +136,7 @@ expect(createBlueprintPlanningContext({ ...project, workflow: { ...project.workf
 
 - [ ] **Step 2: Run the adapter test and verify RED**
 
-Run: `bun test tests/blueprint/planningContext.test.ts`  
+Run: `bun test tests/blueprint/planningContext.test.ts`
 Expected: FAIL because the adapter module does not exist.
 
 - [ ] **Step 3: Implement explicit field picking**
@@ -165,7 +165,7 @@ Do not spread any source object. Missing SparkDNA fields remain null/empty accor
 
 - [ ] **Step 4: Run adapter, persistence, and type tests**
 
-Run: `bun test tests/blueprint/planningContext.test.ts tests/persistence/projectPersistence.test.ts tests/lib/projectWorkspace.test.ts && bun run typecheck`  
+Run: `bun test tests/blueprint/planningContext.test.ts tests/persistence/projectPersistence.test.ts tests/lib/projectWorkspace.test.ts && bun run typecheck`
 Expected: PASS with old save/restore behavior unchanged.
 
 - [ ] **Step 5: Commit Task 2**
@@ -211,7 +211,7 @@ Also assert that every recommended/required category and mechanic has evidence r
 
 - [ ] **Step 2: Run planner tests and verify RED**
 
-Run: `bun test tests/blueprint/planner.test.ts`  
+Run: `bun test tests/blueprint/planner.test.ts`
 Expected: FAIL because planner and signal modules do not exist.
 
 - [ ] **Step 3: Implement signal collection**
@@ -241,7 +241,7 @@ Category ranges come from named category profiles selected by evidence strength 
 
 - [ ] **Step 5: Run planner and graph validation tests**
 
-Run: `bun test tests/blueprint/planner.test.ts tests/projectGraph/validation.test.ts tests/projectGraph/migrateSavedProjectV2.test.ts && bun run typecheck`  
+Run: `bun test tests/blueprint/planner.test.ts tests/projectGraph/validation.test.ts tests/projectGraph/migrateSavedProjectV2.test.ts && bun run typecheck`
 Expected: PASS.
 
 - [ ] **Step 6: Commit Task 3**
@@ -278,7 +278,7 @@ Post revision 9 and expect HTTP 409 `revision_conflict` with actual revision 1. 
 
 - [ ] **Step 2: Run route test and verify RED**
 
-Run: `bun test tests/routes/projects.test.ts`  
+Run: `bun test tests/routes/projects.test.ts`
 Expected: FAIL with 404 for the missing Blueprint route.
 
 - [ ] **Step 3: Implement the endpoint before the generic project-ID route**
@@ -300,7 +300,7 @@ Do not persist the plan or mutate the graph. Route errors through safe domain me
 
 - [ ] **Step 4: Run route, planner, repository, and type tests**
 
-Run: `bun test tests/routes/projects.test.ts tests/blueprint/planner.test.ts tests/projects/projectRepository.test.ts && bun run typecheck`  
+Run: `bun test tests/routes/projects.test.ts tests/blueprint/planner.test.ts tests/projects/projectRepository.test.ts && bun run typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Commit Task 4**
@@ -348,7 +348,7 @@ Test that a rejected preview promise leaves the prior `plan` prop rendered and t
 
 - [ ] **Step 2: Run UI/service tests and verify RED**
 
-Run: `bun test tests/client/projectGraphService.test.ts tests/components/projectGraphPanel.test.tsx tests/components/blueprintPreviewPanel.test.tsx`  
+Run: `bun test tests/client/projectGraphService.test.ts tests/components/projectGraphPanel.test.tsx tests/components/blueprintPreviewPanel.test.tsx`
 Expected: FAIL because the preview service, callback, and panel do not exist.
 
 - [ ] **Step 3: Implement the service boundary**
@@ -383,7 +383,7 @@ Use `max-h-[94dvh] overflow-y-auto overscroll-contain`, stacked narrow-screen co
 
 - [ ] **Step 6: Run focused UI and lifecycle tests**
 
-Run: `bun test tests/client/projectGraphService.test.ts tests/components/projectGraphPanel.test.tsx tests/components/blueprintPreviewPanel.test.tsx tests/components/vaultModal.test.tsx tests/client/sseStream.test.ts && bun run typecheck`  
+Run: `bun test tests/client/projectGraphService.test.ts tests/components/projectGraphPanel.test.tsx tests/components/blueprintPreviewPanel.test.tsx tests/components/vaultModal.test.tsx tests/client/sseStream.test.ts && bun run typecheck`
 Expected: PASS.
 
 - [ ] **Step 7: Commit Task 5**
@@ -413,7 +413,7 @@ git commit -m "feat: add blueprint smart preview"
 
 Set test expectations to `0.41` and `v0.41`.
 
-Run: `bun test tests/contracts/version.test.ts tests/components/versionDisplay.test.tsx`  
+Run: `bun test tests/contracts/version.test.ts tests/components/versionDisplay.test.tsx`
 Expected: FAIL because product/package versions remain 0.40.
 
 - [ ] **Step 2: Update versions and release documentation**

@@ -1,8 +1,8 @@
 # M2.1 Blueprint planning receipt
 
-**Release:** v0.41  
-**Milestone:** M2 Blueprint Studio in progress  
-**Roadmap:** 9 of 17 complete; 8 remain  
+**Release:** v0.41
+**Milestone:** M2 Blueprint Studio in progress
+**Roadmap:** 9 of 17 complete; 8 remain
 **Evidence:** local structural and deterministic fixture validation
 
 ## Delivered
@@ -28,7 +28,7 @@ A failed preview leaves the previously displayed proposal available. A request c
 
 - Version expectations were changed first and failed against v0.40 before production versions were updated.
 - Blueprint contract, adapter, planner, route, service, lifecycle, and component suites pass locally.
-- The complete local suite passed: 240 tests across 58 files, 0 failures, and 1,043 assertions.
+- The complete local suite passed: 240 tests across 58 files, 0 failures, and 1,058 assertions.
 - TypeScript typecheck and the production client/server build exited successfully. Vite reported its existing advisory that one minified application chunk exceeds 500 kB; this is a performance advisory, not a build failure.
 - `git diff --check` reported no whitespace errors.
 - Excluded-scope review confirms no release diff changes wizard stage numbering, `PhysicsStage`, `ForgeStage`, artifact serializers, provider gateways, connection storage, or the V2 persistence schema.
