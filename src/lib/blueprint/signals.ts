@@ -13,7 +13,7 @@ const FAMILIES: PhraseFamily[] = [
   { domain: "social", concept: "relationships", phrases: ["relationships", "relationship", "neighbors", "neighbours", "friends", "friendship", "social network"] },
   { domain: "social", concept: "romance", phrases: ["romance", "romantic", "courtship", "love story"], weight: 3 },
   { domain: "social", concept: "team", phrases: ["team", "cast", "school", "office"] },
-  { domain: "ordinary_life", concept: "daily_life", phrases: ["cozy", "cosy", "bakery", "daily routines", "daily life", "ordinary life", "slice of life", "household", "workplace"] },
+  { domain: "ordinary_life", concept: "daily_life", phrases: ["cozy", "cosy", "bakery", "daily routines", "daily life", "ordinary life", "slice of life", "household", "workplace", "work", "leisure", "food", "shopping", "transport", "transportation", "hobby", "hobbies", "tradition", "traditions", "neighborhood", "neighbourhood", "school"] },
   { domain: "setting", concept: "locations", phrases: ["town", "city", "cities", "kingdom", "village", "academy", "neighborhood", "neighbourhood", "household", "workplace", "space station", "travel", "region"] },
   { domain: "political", concept: "factions", phrases: ["faction", "factions", "rival factions", "political intrigue", "civil war", "war-torn", "war torn", "guilds"] },
   { domain: "speculative", concept: "magic", phrases: ["magic", "magic system", "magical", "wizard", "wizards", "sorcery", "spellcasting", "spells"] },

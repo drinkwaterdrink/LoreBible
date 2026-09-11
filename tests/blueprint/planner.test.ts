@@ -208,3 +208,56 @@ test("thin sandbox coverage is surfaced as findings without inventing routines o
   expect(output.findings.some(item => item.code === "blueprint.world_autonomy_thin")).toBe(true);
   expect(output.categories.some(item => item.id === "ordinary_life")).toBe(false);
 });
+
+test("an exploration exclusion prevents sandbox evidence from recommending its mechanic", () => {
+  const output = plan(premiseInput("A sandbox", { physicsConstraints: { mustAvoid: "exploration" } }));
+  expect(output.mechanicPacks.find(item => item.id === "exploration")).toMatchObject({ status: "ineligible", evidenceRefs: ["constraint:mustAvoid:exploration"] });
+  expect(output.mechanicPacks.some(item => item.id === "exploration" && item.status === "recommended")).toBe(false);
+});
+
+test("a relationship exclusion prevents family evidence from recommending relationship lore or mechanics", () => {
+  const input = premiseInput("A family visit", { physicsConstraints: { mustAvoid: "relationships" } });
+  const relationships = category(input, "relationships");
+  expect(relationships).toMatchObject({ status: "omitted", evidenceRefs: ["constraint:mustAvoid:relationships"] });
+  expect(relationships.targetRange).toBeUndefined();
+  expect(relationships.candidateArchitectures).toEqual([]);
+  expect(plan(input).mechanicPacks.find(item => item.id === "social_ecosystem")).toMatchObject({ status: "ineligible", evidenceRefs: ["constraint:mustAvoid:relationships"] });
+  expect(category(input, "principal_cast").status).toBe("recommended");
+});
+
+for (const cue of ["work", "leisure", "food", "shopping", "transport", "transportation", "hobby", "hobbies", "tradition", "traditions", "neighborhood", "school"]) {
+  test(`ordinary-life cue '${cue}' supports sandbox and hybrid coverage without speculative inflation`, () => {
+    for (const mode of ["sandbox", "sandbox with a story arc"]) {
+      const output = plan(premiseInput(`A ${mode} about ${cue}.`));
+      expect(output.categories.find(item => item.id === "ordinary_life")?.status).toBe("recommended");
+      expect(output.assessments.ordinaryLife.status).toBe("supported");
+      expect(output.findings.some(item => item.code === "blueprint.ordinary_life_thin")).toBe(false);
+      for (const id of ["factions", "magic_system", "secrets", "combat"]) expect(output.categories.find(item => item.id === id)?.status).toBe("omitted");
+      const allowed = cue === "school" ? ["ordinary_life", "principal_cast", "roster_cast", "education"] : cue === "neighborhood" ? ["ordinary_life", "locations"] : ["ordinary_life"];
+      expect(output.categories.filter(item => item.status !== "omitted").every(item => allowed.includes(item.id))).toBe(true);
+    }
+  });
+}
+
+test("ordinary-life cues require whole concepts and respect their exclusion", () => {
+  const fragment = plan(premiseInput("A sandbox about artwork, leisurewear, foodstuff, shoppingish, transportationist, hobbyist, traditionalism, neighborhoodish, and preschool."));
+  expect(fragment.assessments.ordinaryLife.status).toBe("thin");
+  expect(fragment.categories.some(item => item.id === "ordinary_life")).toBe(false);
+  const excluded = plan(premiseInput("A sandbox about work and food.", { physicsConstraints: { mustAvoid: "ordinary life" } }));
+  expect(excluded.categories.find(item => item.id === "ordinary_life")?.status).toBe("omitted");
+  expect(excluded.assessments.ordinaryLife.status).not.toBe("supported");
+});
+
+test("typed graph domains qualify a full-world package without reading names or values", () => {
+  const input = premiseInput("A full world package.");
+  input.graph.entities = (["location", "faction", "organization", "system"] as const).map((type, index) => ({
+    id: `entity:${index}`, type, get name(): string { throw new Error("Names are not planning evidence"); }, aliases: [], importance: "major", lifecycle: "active", factIds: [], relationshipIds: [], sourceEvidenceIds: [],
+  }));
+  input.graph.canon = [{ id: "fact:1", subjectId: "entity:0", predicate: "name", get value() { throw new Error("Values are not planning evidence"); }, status: "canon", origin: "user", confidence: 1, visibility: "public", temporalClass: "evergreen", sourceEvidenceIds: [] }];
+  const target = plan(input).artifactTargets.find(item => item.value === "full_world_package");
+  expect(target).toBeDefined();
+  expect(target?.evidenceRefs).toEqual(expect.arrayContaining(["graph:entities:location", "graph:entities:faction", "graph:entities:system"]));
+  // Faction and organization are one political domain, not two breadth votes.
+  input.graph.entities = input.graph.entities.filter(item => item.type !== "system");
+  expect(plan(input).artifactTargets.some(item => item.value === "full_world_package")).toBe(false);
+});

@@ -9,6 +9,7 @@ import { canonicalizeJson, sha256Hex } from "../projectGraph/canonicalJson";
 import { collectBlueprintSignals, normalizeBlueprintText, type BlueprintPlanningInput, type BlueprintSignal } from "./signals";
 
 const positives = (signals: BlueprintSignal[], concepts: string[]) => signals.filter(signal => signal.weight > 0 && concepts.includes(signal.concept));
+const exclusions = (signals: BlueprintSignal[], concepts: string[]) => signals.filter(signal => signal.domain === "constraint" && concepts.includes(signal.concept));
 const refs = (signals: BlueprintSignal[]) => [...new Set(signals.map(signal => signal.sourceRef))].sort();
 const proposal = <T>(value: T, reason: string, evidence: BlueprintSignal[], defaultRef?: string): BlueprintRecommendation<T> => ({
   value, status: "proposed", reason, evidenceRefs: evidence.length ? refs(evidence) : defaultRef ? [defaultRef] : [],
@@ -17,13 +18,22 @@ const proposal = <T>(value: T, reason: string, evidence: BlueprintSignal[], defa
 function recommendArtifactTargets(signals: BlueprintSignal[], _graph: ProjectGraphV1): BlueprintRecommendation<ArtifactTarget>[] {
   const excluded = new Set(signals.filter(signal => signal.domain === "constraint").map(signal => signal.concept));
   const explicit = signals.filter(signal => signal.domain === "target" && signal.weight > 0);
-  const contentDomains = new Set(signals.filter(signal => signal.weight > 0 && ["social", "ordinary_life", "setting", "political", "speculative", "system", "information", "conflict"].includes(signal.domain)).map(signal => signal.domain));
+  // Structured types provide domain breadth without interpreting names or values.
+  // Related types share a domain, so faction + organization are not two votes.
+  const entityDomains: Record<string, string> = { characters: "social", locations: "setting", factions: "political", organizations: "political", systems: "system", items: "objects", culture: "culture", species: "species", events: "temporal" };
+  const contentDomain = (signal: BlueprintSignal) => signal.domain === "entity" ? entityDomains[signal.concept] : signal.domain;
+  const breadthEvidence = signals.filter(signal => signal.weight > 0 && ["social", "ordinary_life", "setting", "political", "speculative", "system", "information", "conflict", "objects", "culture", "species", "temporal"].includes(contentDomain(signal)));
+  const contentDomains = new Set(breadthEvidence.map(contentDomain));
   const broadScope = positives(signals, ["wide"]).length > 0 && contentDomains.size >= 3;
   // A package already includes its world; overlapping phrases must not add a duplicate target.
   const targets = [...new Set(explicit.map(signal => signal.concept as ArtifactTarget))]
     .filter(target => target !== "full_world" || !explicit.some(signal => signal.concept === "full_world_package"))
     .filter(target => !["full_world", "full_world_package"].includes(target) || broadScope);
-  if (targets.length) return targets.map(target => proposal(target, "An explicit artifact concept supports this target.", explicit.filter(signal => signal.concept === target)));
+  if (targets.length) return targets.map(target => {
+    const targetEvidence = explicit.filter(signal => signal.concept === target);
+    const fullWorld = target === "full_world" || target === "full_world_package";
+    return proposal(target, fullWorld ? "Explicit target intent, wide scope, and multiple content domains support this target." : "An explicit artifact concept supports this target.", fullWorld ? [...targetEvidence, ...positives(signals, ["wide"]), ...breadthEvidence] : targetEvidence);
+  });
   const world = positives(signals, ["sandbox", "autonomy"]);
   if (world.length && !excluded.has("narrator_world")) return [proposal("narrator_world", "Explicit open-world or independent activity supports a narrator world proposal.", world)];
   const ensemble = positives(signals, ["cast_roster", "family", "team"]);
@@ -101,9 +111,11 @@ function buildLoreMatrix(signals: BlueprintSignal[], _graph: ProjectGraphV1): Lo
   const wide = positives(signals, ["wide"]).length > 0 && intensity !== "lean";
   return CATEGORY_PROFILES.flatMap(profile => {
     const evidence = positives(signals, profile.concepts);
-    const constraints = signals.filter(signal => signal.domain === "constraint" && profile.concepts.includes(signal.concept));
+    // A category's own excluded concept vetoes alternate supporting concepts.
+    // Multi-concept cast support is not itself a relationship recommendation.
+    const constraints = exclusions(signals, [profile.id, ...(profile.concepts.length === 1 ? profile.concepts : [])]);
     if (!evidence.length && !profile.diagnostic && !constraints.length) return [];
-    const supported = evidence.length > 0;
+    const supported = evidence.length > 0 && constraints.length === 0;
     return [{
       id: profile.id, label: profile.label, purpose: profile.purpose,
       justification: supported ? "Curated concepts or graph structure support this category." : constraints.length ? "An explicit constraint excludes this category." : "No qualifying evidence supports this category.",
@@ -118,18 +130,20 @@ function buildLoreMatrix(signals: BlueprintSignal[], _graph: ProjectGraphV1): Lo
 
 function recommendMechanicPacks(signals: BlueprintSignal[], mode: BlueprintWorldMode): MechanicPackRecommendation[] {
   const profiles = [
-    { id: "social_ecosystem", label: "Social Ecosystem", concepts: ["family", "relationships", "romance"], reason: "Evidenced social dynamics support NPC relationship tracking with player agency reserved." },
+    { id: "social_ecosystem", label: "Social Ecosystem", concepts: ["family", "relationships", "romance"], excludedBy: ["relationships"], reason: "Evidenced social dynamics support NPC relationship tracking with player agency reserved." },
     { id: "procedural_ambience", label: "Procedural Ambience", concepts: ["daily_life"], reason: "Evidenced routines support everyday activity." },
     { id: "rumor_belief_truth", label: "Rumor / Belief / Truth", concepts: ["knowledge", "secrets"], reason: "Information structure supports tracking what NPCs know without exposing hidden values." },
     { id: "faction_politics", label: "Faction Politics", concepts: ["factions"], reason: "Evidenced collective interests support faction activity." },
     { id: "living_world", label: "Living World", concepts: ["autonomy"], reason: "Explicit independent activity supports offscreen NPC agendas." },
     { id: "mystery_architecture", label: "Mystery Architecture", concepts: ["investigation"], reason: "Explicit investigation supports clue and revelation planning." },
-    { id: "exploration", label: "Exploration", concepts: ["exploration", "sandbox"], reason: "Explicit exploration supports discovery planning." },
+    { id: "exploration", label: "Exploration", concepts: ["exploration", "sandbox"], excludedBy: ["exploration"], reason: "Explicit exploration supports discovery planning." },
     { id: "arc_state", label: "Arc State", concepts: ["arc"], reason: "Explicit directed progression supports tracking arc state." },
     { id: "calendar_schedules", label: "Calendar & Schedules", concepts: ["schedules"], reason: "Explicit time structures support schedule planning." },
   ];
-  return profiles.flatMap(profile => {
+  return profiles.flatMap<MechanicPackRecommendation>(profile => {
     const evidence = positives(signals, profile.concepts);
+    const constraints = exclusions(signals, [profile.id, ...(profile.excludedBy ?? profile.concepts)]);
+    if (constraints.length) return [{ id: profile.id, label: profile.label, status: "ineligible" as const, reason: "An explicit constraint excludes this mechanic, including inferred support.", evidenceRefs: refs(constraints) }];
     if (!evidence.length) return [];
     return [{ id: profile.id, label: profile.label, status: profile.id === "living_world" && mode === "arc" ? "optional" as const : "recommended" as const, reason: profile.reason, evidenceRefs: refs(evidence) }];
   });
