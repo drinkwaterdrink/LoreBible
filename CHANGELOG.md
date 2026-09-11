@@ -4,6 +4,28 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.41 — 2026-09-11
+
+### Added
+
+- A read-only Blueprint preview that recommends an artifact target, world mode, build intensity, generation quality, runtime budget, premise-specific lore categories, eligible mechanic packs, and a bounded build inventory.
+- Visible evidence and plain-language reasons for every recommendation, including explicit explanations for omitted categories and ordinary-life/world-autonomy assessments.
+- A revision-checked preview API, sanitized V2 planning adapter, deterministic premise-contrast fixtures, and a mobile-safe preview panel launched from Project Graph Beta.
+
+### Changed
+
+- The compact version label now reads `v0.41`.
+- M2 Blueprint Studio is in progress: 9 of 17 ordered roadmap items are complete and 8 remain. M2.2 editable and persisted Blueprint controls are next.
+
+### Why
+
+- Users need to inspect why LoreBible proposes a particular world shape before an expensive Forge run. This first Blueprint slice makes that planning visible while keeping recommendations separate from accepted project truth.
+
+### Preservation and validation boundary
+
+- Blueprint previews are proposals only: they are not persisted, do not mutate the Project Graph or V2 save, and do not change Physics, Forge, provider connections, or artifact serialization. A failed refresh preserves the prior preview; closing or cancelling the request does not overwrite accepted work. Reverting v0.41 leaves existing V2 saves and Project Graph data intact.
+- Local tests establish parser, redaction, revision, deterministic fixture, lifecycle, and rendering behavior. This release does not claim model-output quality, live Lumiverse import or activation, provider pricing, or generation duration.
+
 ## v0.40 — 2026-09-09
 
 ### Added

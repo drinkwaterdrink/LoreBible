@@ -3,8 +3,8 @@ import { expect, test } from "bun:test";
 import { renderToString } from "react-dom/server";
 import { AppVersionBadge } from "../../src/components/AppVersionBadge";
 
-test("renders the compact v0.40 app version", () => {
+test("renders the compact v0.41 app version", () => {
   const html = renderToString(<AppVersionBadge />);
-  expect(html.replace("<!-- -->", "")).toContain("v0.40");
-  expect(html).toContain('aria-label="LoreBible version 0.40"');
+  expect(html.replace("<!-- -->", "")).toContain("v0.41");
+  expect(html).toContain('aria-label="LoreBible version 0.41"');
 });

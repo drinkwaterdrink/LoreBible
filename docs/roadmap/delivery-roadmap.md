@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 9 of 17 ordered roadmap items complete (M0.1–M1); 8 remain. M1 Project Graph and persistence foundation is complete through the opt-in migration/edit/compile/restart vertical slice. M2 Blueprint Studio is next. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 9 of 17 ordered roadmap items complete (M0.1–M1); 8 remain. M2 Blueprint Studio is in progress: M2.1 shipped a read-only, premise-adaptive planning preview in v0.41, and M2.2 editable and persisted Blueprint controls are next. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 
@@ -73,6 +73,8 @@ Copy/import SavedProjectV2 without discarding unknown fields. Keep original raw 
 ## 5. M2 — Blueprint Studio
 
 **Depends on:** M1 contracts/store; M0 Divergence reliability. **Outcome:** a user can inspect and override a premise-specific build inventory before spending on Forge.
+
+**Progress:** In progress. M2.1 shipped in v0.41 with a proposal-only Smart Auto preview: sanitized V2 context, evidence-backed deterministic recommendations, revision-checked Project Graph API, and mobile-safe inspection UI. It does not persist choices or alter Physics/Forge. M2.2 adds editable, locked, and persisted Blueprint controls while retaining the 9-of-17 roadmap count.
 
 Introduce artifact composition, world mode, independent intensity/quality/runtime controls, dynamic Lore Matrix, category explanations, principal/roster targets, pack eligibility, and Smart/Guided/Expert surfaces. Migrate Physics into constraints while retaining its old saved values. Recommendations are proposed, not silently canon.
 
