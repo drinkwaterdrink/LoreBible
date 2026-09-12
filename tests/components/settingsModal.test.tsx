@@ -1,7 +1,16 @@
 import React from "react";
 import { expect, test } from "bun:test";
 import { renderToString } from "react-dom/server";
-import { addCustomModelId, connectionTestSuccessMessage, removeCustomModelId, SettingsModal } from "../../src/components/SettingsModal";
+import { addCustomModelId, connectionTestSuccessMessage, createModelListResetKey, removeCustomModelId, SettingsModal } from "../../src/components/SettingsModal";
+
+test("model list reset key changes for every view-changing control", () => {
+  const baseline = createModelListResetKey("profile-a", "alphabetical", "", false, ["a", "b"]);
+  expect(createModelListResetKey("profile-b", "alphabetical", "", false, ["a", "b"])).not.toBe(baseline);
+  expect(createModelListResetKey("profile-a", "newest", "", false, ["a", "b"])).not.toBe(baseline);
+  expect(createModelListResetKey("profile-a", "alphabetical", "gemini", false, ["a", "b"])).not.toBe(baseline);
+  expect(createModelListResetKey("profile-a", "alphabetical", "", true, ["a", "b"])).not.toBe(baseline);
+  expect(createModelListResetKey("profile-a", "alphabetical", "", false, ["b", "a"])).not.toBe(baseline);
+});
 
 test("connections dialog renders with no saved model selection", () => {
   const html = renderToString(
