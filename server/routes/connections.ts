@@ -2,7 +2,9 @@ import type { Application, Request, Response as ExpressResponse } from "express"
 import { isProviderId, type ProviderId } from "../../src/contracts/generation.js";
 import { getCatalogForProvider } from "../../src/lib/modelCatalog.js";
 import { ProfileStoreError, type ProfileStore } from "../secrets/profileStore.js";
-import { fetchProviderModels, ModelDiscoveryTimeoutError, normalizeProviderModels } from "../model/modelDiscovery.js";
+import { fetchProviderModels, ModelDiscoveryTimeoutError, normalizeProviderModelCatalog } from "../model/modelDiscovery.js";
+import { nanoGptSubscriptionModelsUrl, parseNanoGptPopularModelIds } from "../model/nanoGptCatalog.js";
+import { createModelGateway, ModelGatewayError } from "../model/gateway.js";
 
 interface ConnectionRouteDependencies {
   store: ProfileStore;
@@ -51,6 +53,7 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
   const discoveryTimeoutMs = dependencies.discoveryTimeoutMs ?? 8_000;
   const getProfile = async (id: string) => id === "environment-gemini" ? environmentProfile(dependencies.environmentGeminiKey) : dependencies.store.getMetadata(id);
   const getSecret = async (id: string) => id === "environment-gemini" ? dependencies.environmentGeminiKey || null : dependencies.store.getSecret(id);
+  const gateway = createModelGateway(dependencies.store, fetchImpl);
 
   app.get("/api/connections", async (_req: Request, res: ExpressResponse) => {
     try {
@@ -90,7 +93,7 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
     if (!key) return res.status(400).json({ code: "CREDENTIAL_MISSING", message: "This connection profile has no API key." });
     if (req.params.id === "environment-gemini") return res.json({ status: "available", provider: profile.provider, modelCount: 0 });
     try {
-      const response = await fetchProviderModels(fetchImpl, `${profile.baseUrl}/models`, { Authorization: `Bearer ${key}`, Accept: "application/json" }, discoveryTimeoutMs);
+      const response = await fetchProviderModels(fetchImpl, `${profile.baseUrl}/models${profile.provider === "nanogpt" ? "?detailed=true" : ""}`, { Authorization: `Bearer ${key}`, Accept: "application/json" }, discoveryTimeoutMs);
       if (response.status === 401 || response.status === 403) {
         if (req.params.id !== "environment-gemini") await dependencies.store.setTestStatus(req.params.id, "error");
         return res.status(401).json({ code: "AUTHENTICATION_FAILED", message: "The provider rejected this API key." });
@@ -114,24 +117,68 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
     const key = await getSecret(req.params.id);
     if (!key) return res.status(400).json({ code: "CREDENTIAL_MISSING", message: "This connection profile has no API key." });
     try {
-      const response = await fetchProviderModels(fetchImpl, `${profile.baseUrl}/models`, { Authorization: `Bearer ${key}`, Accept: "application/json" }, discoveryTimeoutMs);
+      const response = await fetchProviderModels(fetchImpl, `${profile.baseUrl}/models${profile.provider === "nanogpt" ? "?detailed=true" : ""}`, { Authorization: `Bearer ${key}`, Accept: "application/json" }, discoveryTimeoutMs);
       if (!response.ok) return res.status(503).json({ code: response.status === 401 || response.status === 403 ? "AUTHENTICATION_FAILED" : "PROVIDER_UNAVAILABLE", message: "Unable to retrieve provider models." });
       const payload: unknown = await response.json();
-      const available = new Set(normalizeProviderModels(profile.provider, payload));
+      const providerModels = normalizeProviderModelCatalog(profile.provider, payload);
+      const available = new Set(providerModels.map((model) => model.id));
+      let subscriptionIds = new Set<string>();
+      let popularRanks = new Map<string, number>();
+      if (profile.provider === "nanogpt") {
+        const supplemental = await Promise.allSettled([
+          fetchProviderModels(fetchImpl, nanoGptSubscriptionModelsUrl(profile.baseUrl), { Authorization: `Bearer ${key}`, Accept: "application/json" }, discoveryTimeoutMs),
+          fetchProviderModels(fetchImpl, "https://cake.nano-gpt.com/models/text", { Accept: "text/html" }, discoveryTimeoutMs),
+        ]);
+        if (supplemental[0].status === "fulfilled" && supplemental[0].value.ok) {
+          const subscriptionPayload: unknown = await supplemental[0].value.json().catch(() => null);
+          subscriptionIds = new Set(normalizeProviderModelCatalog("nanogpt", subscriptionPayload).map((model) => model.id));
+        }
+        if (supplemental[1].status === "fulfilled" && supplemental[1].value.ok) {
+          const html = await supplemental[1].value.text().catch(() => "");
+          popularRanks = new Map(parseNanoGptPopularModelIds(html).map((id, index) => [id, index + 1]));
+        }
+      }
       const curatedIds = new Set(catalog.map((model) => model.id));
       const customIds = new Set(profile.customModelIds.map(normalizeProviderModelId));
       const custom = profile.customModelIds
         .filter((id) => !curatedIds.has(id))
         .map((id) => ({ id, label: id, reasoning: "optional" as const, available: true, custom: true }));
-      const providerReported = [...available]
-        .filter((id) => !curatedIds.has(id) && !customIds.has(id))
-        .map((id) => ({ id, label: id, reasoning: "optional" as const, available: true, providerReported: true }));
-      res.json({ models: [...catalog.map((model) => ({ ...model, available: available.has(model.id) })), ...custom, ...providerReported] });
+      const metadata = new Map(providerModels.map((model) => [model.id, model]));
+      const decorate = <T extends { id: string }>(model: T) => ({ ...model, ...(metadata.get(model.id)?.created === undefined ? {} : { created: metadata.get(model.id)!.created }), ...(subscriptionIds.has(model.id) ? { subscriptionIncluded: true } : {}), ...(popularRanks.has(model.id) ? { popularRank: popularRanks.get(model.id) } : {}) });
+      const providerReported = providerModels
+        .filter((model) => !curatedIds.has(model.id) && !customIds.has(model.id))
+        .map((model) => decorate({ ...model, reasoning: "optional" as const, available: true, providerReported: true }));
+      res.json({ models: [...catalog.map((model) => decorate({ ...model, available: available.has(model.id) })), ...custom.map(decorate), ...providerReported] });
     } catch (error) {
       if (error instanceof ModelDiscoveryTimeoutError) {
         return res.status(504).json({ code: "MODEL_DISCOVERY_TIMEOUT", message: "Model discovery timed out. Retry, or add the exact model ID as a custom model." });
       }
       res.status(503).json({ code: "PROVIDER_UNAVAILABLE", message: "Unable to retrieve provider models." });
+    }
+  });
+
+  app.post("/api/connections/:id/generation-test", async (req: Request, res: ExpressResponse) => {
+    const modelId = typeof req.body?.modelId === "string" ? req.body.modelId.trim() : "";
+    if (!modelId || modelId.length > 200 || /\p{Cc}/u.test(modelId)) return res.status(400).json({ code: "MODEL_UNAVAILABLE", message: "Choose a valid model before testing generation." });
+    try {
+      const result = await gateway.generate({
+        profileId: req.params.id,
+        modelId,
+        systemInstruction: "Return only the requested JSON.",
+        userPrompt: "Return {\"ok\":true}.",
+        responseSchema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false },
+        reasoningEffort: "low",
+        stageName: "Connection generation test",
+        timeoutMs: 30_000,
+        inactivityTimeoutMs: 30_000,
+        overallTimeoutMs: 45_000,
+        maxOutputTokens: 64,
+      });
+      if (!result.parsed || typeof result.parsed !== "object" || (result.parsed as { ok?: unknown }).ok !== true) throw new ModelGatewayError("The model did not return the requested structured response.", "INVALID_STRUCTURED_OUTPUT", 502, result.provenance.provider);
+      res.json({ status: "generated", provider: result.provenance.provider, modelId });
+    } catch (error) {
+      if (error instanceof ModelGatewayError) return res.status(error.status).json({ code: error.code, message: error.message });
+      res.status(500).json({ code: "INTERNAL_ERROR", message: "Model generation test failed." });
     }
   });
 }

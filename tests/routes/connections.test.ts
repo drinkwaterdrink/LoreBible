@@ -85,6 +85,21 @@ test("connection APIs persist and expose profile-scoped custom models", async ()
   });
 });
 
+test("NanoGPT models include live recency, subscription membership, and official site popularity rank", async () => {
+  const provider = async (input: string) => {
+    if (input === "https://cake.nano-gpt.com/models/text") return new Response('<a href="/models/text/z-ai/glm-5.3">GLM</a><a href="/models/text/vendor/newest">Newest</a>', { status: 200 });
+    if (input.includes("/api/subscription/v1/models")) return new Response(JSON.stringify({ data: [{ id: "z-ai/glm-5.3" }] }), { status: 200 });
+    return new Response(JSON.stringify({ data: [{ id: "vendor/newest", name: "Newest Model", created: 200 }, { id: "z-ai/glm-5.3", name: "GLM 5.3", created: 100 }] }), { status: 200 });
+  };
+  await withApp(provider, async (baseUrl) => {
+    const created = await fetch(`${baseUrl}/api/connections`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "NanoGPT", provider: "nanogpt", apiKey: "sk-secret" }) });
+    const profile = (await created.json()).profile;
+    const body = await (await fetch(`${baseUrl}/api/connections/${profile.id}/models`)).json();
+    expect(body.models.find((model: { id: string }) => model.id === "z-ai/glm-5.3")).toMatchObject({ created: 100, popularRank: 1, subscriptionIncluded: true });
+    expect(body.models.find((model: { id: string }) => model.id === "vendor/newest")).toMatchObject({ label: "Newest Model", created: 200, popularRank: 2 });
+  });
+});
+
 test("Gemini AI Studio profiles test and discover models through the compatibility API", async () => {
   const requests: Array<{ url: string; authorization: string | null }> = [];
   const models = async (input: string, init?: RequestInit) => {
@@ -132,6 +147,26 @@ test("Gemini AI Studio profiles test and discover models through the compatibili
     expect(requests).toHaveLength(2);
     expect(requests.every((request) => request.url === "https://generativelanguage.googleapis.com/v1beta/openai/models")).toBe(true);
     expect(requests.every((request) => request.authorization === "Bearer gemini-secret")).toBe(true);
+  });
+});
+
+test("selected-model test performs a real minimal structured generation", async () => {
+  let generationBody: any;
+  const provider = async (input: string, init?: RequestInit) => {
+    if (input.endsWith("/chat/completions")) {
+      generationBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ model: "gemini-2.5-flash", choices: [{ message: { content: '{"ok":true}' } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ data: [{ id: "models/gemini-2.5-flash" }] }), { status: 200 });
+  };
+  await withApp(provider, async (baseUrl) => {
+    const created = await fetch(`${baseUrl}/api/connections`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "AI Studio", provider: "gemini", apiKey: "gemini-secret" }) });
+    const profile = (await created.json()).profile;
+    const response = await fetch(`${baseUrl}/api/connections/${profile.id}/generation-test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modelId: "gemini-2.5-flash" }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "generated", provider: "gemini", modelId: "gemini-2.5-flash" });
+    expect(generationBody.response_format.type).toBe("json_schema");
+    expect(JSON.stringify(generationBody)).not.toContain("gemini-secret");
   });
 });
 

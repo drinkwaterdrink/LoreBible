@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createCatalogRequestTracker, listConnectionModels, listConnections, saveConnection } from "../../src/services/connectionsService";
+import { createCatalogRequestTracker, listConnectionModels, listConnections, saveConnection, testModelGeneration } from "../../src/services/connectionsService";
 
 test("connection service refuses a response containing secret fields", async () => {
   const originalFetch = globalThis.fetch;
@@ -65,5 +65,18 @@ test("model discovery forwards cancellation and rejects stale request tokens", a
     expect(tracker.isCurrent(second)).toBe(true);
     tracker.invalidate();
     expect(tracker.isCurrent(second)).toBe(false);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("generation test sends only the selected model id", async () => {
+  let body: unknown;
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ status: "generated", provider: "gemini", modelId: "gemini-2.5-flash" }), { status: 200 });
+    }) as typeof fetch;
+    expect(await testModelGeneration("profile-a", "gemini-2.5-flash")).toMatchObject({ status: "generated" });
+    expect(body).toEqual({ modelId: "gemini-2.5-flash" });
   } finally { globalThis.fetch = originalFetch; }
 });

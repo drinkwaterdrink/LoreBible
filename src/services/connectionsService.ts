@@ -21,6 +21,9 @@ export interface AvailableModel {
   available?: boolean;
   custom?: boolean;
   providerReported?: boolean;
+  created?: number;
+  popularRank?: number;
+  subscriptionIncluded?: boolean;
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -66,6 +69,14 @@ export async function testConnection(id: string): Promise<{ status: string; prov
 
 export async function listConnectionModels(id: string, signal?: AbortSignal): Promise<AvailableModel[]> {
   return (await readJson<{ models: AvailableModel[] }>(await fetch(`/api/connections/${encodeURIComponent(id)}/models`, { signal }))).models;
+}
+
+export async function testModelGeneration(id: string, modelId: string): Promise<{ status: "generated"; provider: ProviderId; modelId: string }> {
+  return readJson(await fetch(`/api/connections/${encodeURIComponent(id)}/generation-test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelId }),
+  }));
 }
 
 export interface CatalogRequestTracker {

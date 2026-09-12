@@ -4,6 +4,28 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.42 — 2026-09-11
+
+### Added
+
+- Model sorting by alphabetical name, provider creation date, NanoGPT's live public Popular ordering, and subscription inclusion, plus a subscription-only filter for NanoGPT profiles.
+- Local model favorites that remain at the top of every sort without changing the selected generation model or storing provider credentials.
+- A selected-model generation test that sends a tiny structured-output request through the saved profile, distinguishing usable generation from a successful catalog/authentication check.
+
+### Changed
+
+- NanoGPT discovery now reads its detailed model catalog and dedicated subscription catalog, while Popular ranking is used only when the official public models page supplies an ordering; LoreBible does not manufacture missing rank data.
+- Gemini discovery filters known image, video, embedding, TTS, transcription, live-audio, robotics, computer-use, and research endpoints out of the text-generation selector.
+- The compact version label now reads `v0.42`.
+
+### Why
+
+- Hundreds of provider models need dependable organization, and a valid API key does not prove that a selected model can satisfy LoreBible's streamed structured-generation contract.
+
+### Validation boundary
+
+- Automated fixtures verify metadata normalization, sorting, subscription membership, official-page rank parsing, favorite persistence, non-chat Gemini exclusion, and the real-generation test boundary. Provider catalogs and subscription membership remain live external data. A successful selected-model test proves only a small structured request at that moment, not long-form quality, speed, quota, or every Forge workload.
+
 ## v0.41 — 2026-09-11
 
 ### Added

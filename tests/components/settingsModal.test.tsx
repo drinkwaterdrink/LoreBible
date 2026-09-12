@@ -19,6 +19,12 @@ test("connections dialog renders with no saved model selection", () => {
   expect(html).toContain("id=\"custom-model-id\"");
   expect(html).toContain("Add model");
   expect(html).toContain("value=\"gemini\">Gemini AI Studio");
+  expect(html).toContain("Sort models");
+  expect(html).toContain("Alphabetical");
+  expect(html).toContain("Newest");
+  expect(html).toContain("NanoGPT Popular");
+  expect(html).toContain("NanoGPT subscription first");
+  expect(html).toContain("Favorites stay at the top");
   expect(html).not.toContain("value=\"gemini\" disabled=\"\"");
 });
 

@@ -26,15 +26,21 @@ function isTextCapable(provider: ProviderId, model: Record<string, unknown>): bo
     : null;
   const modalities = architecture?.output_modalities ?? model.output_modalities;
   if (Array.isArray(modalities)) return modalities.includes("text");
+  if (provider === "gemini") {
+    const id = normalizedId(model.id ?? model.name)?.toLowerCase() || "";
+    if (/(?:embedding|image|veo|lyria|tts|transcribe|native-audio|live|robotics|computer-use|deep-research|aqa)/.test(id)) return false;
+  }
   return true;
 }
 
-export function normalizeProviderModels(provider: ProviderId, payload: unknown): string[] {
+export interface ProviderModelCatalogItem { id: string; label: string; created?: number; }
+
+export function normalizeProviderModelCatalog(provider: ProviderId, payload: unknown): ProviderModelCatalogItem[] {
   if (!payload || typeof payload !== "object") return [];
   const root = payload as { data?: unknown; models?: unknown };
   const records = Array.isArray(root.data) ? root.data : Array.isArray(root.models) ? root.models : [];
   const seen = new Set<string>();
-  const result: string[] = [];
+  const result: ProviderModelCatalogItem[] = [];
   for (const candidate of records) {
     if (!candidate || typeof candidate !== "object") continue;
     const model = candidate as Record<string, unknown>;
@@ -42,9 +48,15 @@ export function normalizeProviderModels(provider: ProviderId, payload: unknown):
     const id = normalizedId(model.id ?? model.name);
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    result.push(id);
+    const display = typeof model.name === "string" && !model.name.startsWith("models/") ? model.name.trim() : id;
+    const created = typeof model.created === "number" && Number.isSafeInteger(model.created) && model.created >= 0 ? model.created : undefined;
+    result.push({ id, label: display || id, ...(created === undefined ? {} : { created }) });
   }
   return result;
+}
+
+export function normalizeProviderModels(provider: ProviderId, payload: unknown): string[] {
+  return normalizeProviderModelCatalog(provider, payload).map((model) => model.id);
 }
 
 export async function fetchProviderModels(

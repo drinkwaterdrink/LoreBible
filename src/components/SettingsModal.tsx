@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Check, KeyRound, Loader2, Plus, Save, Trash2, X, Zap } from "lucide-react";
+import { Check, KeyRound, Loader2, Plus, Save, Star, Trash2, X, Zap } from "lucide-react";
 import type { ModelSelection, ProviderId } from "../contracts/generation";
 import {
   deleteConnection,
@@ -9,9 +9,11 @@ import {
   listConnections,
   saveConnection,
   testConnection,
+  testModelGeneration,
   type AvailableModel,
   type ConnectionProfile,
 } from "../services/connectionsService";
+import { filterAndSortModels, readFavoriteModelIds, toggleFavoriteModel, type ModelSort } from "../lib/modelPresentation";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -21,6 +23,7 @@ interface SettingsModalProps {
 }
 
 const EMPTY_DRAFT = { id: undefined as string | undefined, name: "", provider: "openrouter" as ProviderId, apiKey: "", customModelIds: [] as string[] };
+const FAVORITES_KEY = "lore-bible-model-favorites-v1";
 
 interface CustomModelChange {
   modelIds: string[];
@@ -54,9 +57,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   const [customModelInput, setCustomModelInput] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [modelSort, setModelSort] = useState<ModelSort>("alphabetical");
+  const [subscriptionOnly, setSubscriptionOnly] = useState(false);
+  const [favoriteModelIds, setFavoriteModelIds] = useState<string[]>(() => typeof localStorage === "undefined" ? [] : readFavoriteModelIds(localStorage.getItem(FAVORITES_KEY)));
   const catalogRequests = useRef(createCatalogRequestTracker());
 
   const selectedProfile = useMemo(() => profiles.find((profile) => profile.id === draft.id) || null, [profiles, draft.id]);
+  const displayedModels = useMemo(() => filterAndSortModels(models, { sort: modelSort, favorites: favoriteModelIds, subscriptionOnly: draft.provider === "nanogpt" && subscriptionOnly }), [models, modelSort, favoriteModelIds, subscriptionOnly, draft.provider]);
+  const hasPopularity = models.some((model) => model.popularRank !== undefined);
+
+  const toggleFavorite = (id: string) => {
+    const next = toggleFavoriteModel(favoriteModelIds, id);
+    setFavoriteModelIds(next);
+    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(next)); } catch { /* Preference persistence is best-effort. */ }
+  };
 
   const refresh = async () => {
     setError(null);
@@ -140,6 +154,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
     finally { setBusy(false); }
   };
 
+  const handleGenerationTest = async () => {
+    if (!draft.id || !selectedModelId) { setError("Choose a model before testing generation."); return; }
+    setBusy(true); setError(null); setStatus(null);
+    try {
+      await testModelGeneration(draft.id, selectedModelId);
+      setStatus("Generation passed · this model completed a small structured-output request through the saved profile.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Selected-model generation test failed."); }
+    finally { setBusy(false); }
+  };
+
   const handleDelete = async () => {
     if (!draft.id || draft.id === "environment-gemini") return;
     setBusy(true); setError(null);
@@ -198,10 +222,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
             <p className="mt-2 text-[11px] text-[var(--graphite)] flex items-start gap-1.5"><Zap size={12} className="mt-0.5 text-[var(--gold)] shrink-0" />Only a short key hint is returned to the UI. The full key is encrypted with Windows DPAPI and never written to localStorage.</p>
             <div className="mt-6 border-t border-[var(--ink-soft)] pt-4">
               <div className="flex items-center justify-between mb-2"><h3 className="text-xs font-apparatus uppercase tracking-widest">Model for generation</h3>{(busy || isLoadingModels) && <Loader2 size={14} className="animate-spin text-[var(--rubric)]" />}</div>
-              {draft.id === "environment-gemini" ? <p className="text-xs text-[var(--graphite)]">Gemini environment credentials are available to the server but do not use the curated OpenRouter/NanoGPT catalog.</p> : draft.id ? <div className="space-y-1">{models.map((model) => <label key={model.id} className={`flex items-start gap-2 px-2 py-2 border ${model.available === false ? "opacity-45" : "border-transparent hover:border-[var(--ink-soft)]"}`}><input type="radio" name="model" disabled={model.available === false} checked={selectedModelId === model.id} onChange={() => onSelectionChange({ profileId: draft.id!, modelId: model.id })} className="mt-1" /><span className="min-w-0"><span className="block text-xs font-mono-ui break-all">{model.id}</span><span className="block text-[10px] text-[var(--graphite)]">{model.custom ? "Custom model" : model.providerReported ? "Provider model" : model.reasoning === "required" ? "Reasoning model" : "Standard model"}{model.available === false ? " · not reported by provider" : ""}</span></span></label>)}{models.length === 0 && <p className="text-xs text-[var(--graphite)]">Save a profile to load its model catalog.</p>}<button type="button" onClick={() => onSelectionChange(null)} className="mt-2 text-[10px] uppercase tracking-wider text-[var(--graphite)] hover:text-[var(--ink)]">Use default Gemini/offline path</button></div> : <p className="text-xs text-[var(--graphite)]">Create or select a provider profile to choose a curated or provider-reported model.</p>}
+              <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                <label className="text-[10px] uppercase tracking-wider text-[var(--graphite)]">Sort models<select aria-label="Sort models" value={modelSort} onChange={(event) => setModelSort(event.target.value as ModelSort)} className="mt-1 w-full input-paper"><option value="alphabetical">Alphabetical</option><option value="newest">Newest</option><option value="popular" disabled={draft.provider !== "nanogpt" || !hasPopularity}>NanoGPT Popular</option><option value="subscription" disabled={draft.provider !== "nanogpt"}>NanoGPT subscription first</option></select></label>
+                {draft.provider === "nanogpt" && <label className="self-end flex min-h-10 items-center gap-2 border border-[var(--ink-soft)] px-3 text-[11px]"><input type="checkbox" checked={subscriptionOnly} onChange={(event) => setSubscriptionOnly(event.target.checked)} />Subscription only</label>}
+              </div>
+              <p className="mb-2 text-[10px] text-[var(--graphite)]">Favorites stay at the top of every sort. NanoGPT badges and ranking come from its live catalog.</p>
+              {draft.provider === "nanogpt" && !hasPopularity && models.length > 0 && <p className="mb-2 text-[10px] text-[var(--gold)]">NanoGPT popularity ranking is temporarily unavailable; no ranking is being guessed.</p>}
+              {draft.id === "environment-gemini" ? <p className="text-xs text-[var(--graphite)]">Gemini environment credentials are available to the server but do not use the curated OpenRouter/NanoGPT catalog.</p> : draft.id ? <div className="space-y-1">{displayedModels.map((model) => <div key={model.id} className={`flex items-start gap-2 px-2 py-2 border ${model.available === false ? "opacity-45" : "border-transparent hover:border-[var(--ink-soft)]"}`}><label className="flex min-w-0 flex-1 items-start gap-2"><input type="radio" name="model" disabled={model.available === false} checked={selectedModelId === model.id} onChange={() => onSelectionChange({ profileId: draft.id!, modelId: model.id })} className="mt-1" /><span className="min-w-0"><span className="block text-xs font-mono-ui break-all">{model.label || model.id}</span>{model.label !== model.id && <span className="block text-[9px] font-mono-ui break-all text-[var(--graphite)]">{model.id}</span>}<span className="block text-[10px] text-[var(--graphite)]">{model.custom ? "Custom model" : model.providerReported ? "Provider model" : model.reasoning === "required" ? "Reasoning model" : "Standard model"}{model.subscriptionIncluded ? " · subscription included" : ""}{model.created ? ` · added ${new Date(model.created * 1000).toLocaleDateString()}` : ""}{model.available === false ? " · not reported by provider" : ""}</span></span></label><button type="button" aria-label={`${favoriteModelIds.includes(model.id) ? "Unfavorite" : "Favorite"} ${model.id}`} aria-pressed={favoriteModelIds.includes(model.id)} onClick={() => toggleFavorite(model.id)} className={`shrink-0 p-1 ${favoriteModelIds.includes(model.id) ? "text-[var(--gold)]" : "text-[var(--graphite)] hover:text-[var(--gold)]"}`}><Star size={14} fill={favoriteModelIds.includes(model.id) ? "currentColor" : "none"} /></button></div>)}{displayedModels.length === 0 && <p className="text-xs text-[var(--graphite)]">{models.length ? "No models match this filter." : "Save a profile to load its model catalog."}</p>}<button type="button" onClick={() => onSelectionChange(null)} className="mt-2 text-[10px] uppercase tracking-wider text-[var(--graphite)] hover:text-[var(--ink)]">Use default Gemini/offline path</button></div> : <p className="text-xs text-[var(--graphite)]">Create or select a provider profile to choose a curated or provider-reported model.</p>}
             </div>
             {draft.id !== "environment-gemini" && <div className="mt-6 border-t border-[var(--ink-soft)] pt-4"><h3 className="text-xs font-apparatus uppercase tracking-widest">Custom models</h3><p className="mt-1 text-[11px] text-[var(--graphite)]">Add the exact model ID accepted by this provider.</p><div className="mt-2 flex gap-2"><input id="custom-model-id" value={customModelInput} onChange={(event) => setCustomModelInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleAddCustomModel(); } }} className="input-paper min-w-0 flex-1 font-mono-ui text-xs" placeholder="provider/model-id:thinking" /><button type="button" onClick={handleAddCustomModel} className="btn-secondary shrink-0 px-3 py-2 text-[10px] uppercase tracking-wider">Add model</button></div>{draft.customModelIds.length > 0 && <div className="mt-3 space-y-1">{draft.customModelIds.map((id) => <div key={id} className="flex items-center gap-2 border border-[var(--ink-soft)] px-2 py-1.5"><span className="min-w-0 flex-1 break-all font-mono-ui text-[11px]">{id}</span><span className="text-[9px] uppercase tracking-wider text-[var(--gold)]">Custom</span><button type="button" onClick={() => handleRemoveCustomModel(id)} aria-label={`Remove custom model ${id}`} className="p-1 text-[var(--graphite)] hover:text-red-700"><X size={12} /></button></div>)}</div>}<p className="mt-2 text-[10px] text-[var(--graphite)]">Save the connection after changing this list.</p></div>}
-            <div className="mt-6 flex items-center gap-2">{draft.id !== "environment-gemini" && <button type="button" onClick={handleSave} disabled={busy} className="btn-primary py-2 px-3 text-[11px] uppercase tracking-wider flex items-center gap-1.5"><Save size={13} /> Save securely</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleTest} disabled={busy} className="btn-secondary py-2 px-3 text-[11px] uppercase tracking-wider">Test connection</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleDelete} disabled={busy} className="ml-auto text-[var(--graphite)] hover:text-red-700 p-2" title="Delete connection"><Trash2 size={15} /></button>}</div>
+            <div className="mt-6 flex flex-wrap items-center gap-2">{draft.id !== "environment-gemini" && <button type="button" onClick={handleSave} disabled={busy} className="btn-primary py-2 px-3 text-[11px] uppercase tracking-wider flex items-center gap-1.5"><Save size={13} /> Save securely</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleTest} disabled={busy} className="btn-secondary py-2 px-3 text-[11px] uppercase tracking-wider">Test connection</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleGenerationTest} disabled={busy || !selectedModelId} className="btn-secondary py-2 px-3 text-[11px] uppercase tracking-wider">Test selected model</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleDelete} disabled={busy} className="ml-auto text-[var(--graphite)] hover:text-red-700 p-2" title="Delete connection"><Trash2 size={15} /></button>}</div>
+            {draft.id && draft.id !== "environment-gemini" && <p className="mt-2 text-[10px] text-[var(--graphite)]">Testing the selected model sends a small real generation request and may use provider quota or balance.</p>}
             {isCompleteModelSelection(selection) && <p className="mt-3 text-[10px] font-mono-ui text-[var(--graphite)]">Selected: {selection.modelId}</p>}
           </div>
         </div>
