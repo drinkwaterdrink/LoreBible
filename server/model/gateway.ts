@@ -49,7 +49,8 @@ function mapHttpError(status: number, provider: ProviderId, message: string): Mo
   if (status === 408 || status === 504) return new ModelGatewayError("The provider request timed out.", "REQUEST_TIMEOUT", 504, provider);
   if (status === 429) return new ModelGatewayError("The provider rate limit was reached.", "RATE_LIMITED", 429, provider);
   if (status >= 500) return new ModelGatewayError("The provider is temporarily unavailable.", "PROVIDER_UNAVAILABLE", 503, provider);
-  return new ModelGatewayError(message, "PROVIDER_UNAVAILABLE", 502, provider);
+  const detail = message && message !== "Provider request failed." ? ` ${message}` : "";
+  return new ModelGatewayError(`Provider rejected the request (HTTP ${status}).${detail}`, "PROVIDER_UNAVAILABLE", 502, provider);
 }
 
 function endpointFor(baseUrl: string): string {
@@ -146,7 +147,6 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
       };
       if (profile.provider === "gemini") {
         requestBody.reasoning_effort = request.reasoningEffort;
-        requestBody.extra_body = { google: { thinking_config: { include_thoughts: true } } };
       } else if (curatedModel?.reasoning === "required") {
         if (profile.provider === "nanogpt") {
           requestBody.reasoning_effort = request.reasoningEffort;
@@ -171,17 +171,20 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
             deadlines.markActivity();
             request.onProviderActivity?.();
             return response;
-          } catch {
+          } catch (error) {
             if (deadlines.signal.aborted) {
               if (deadlines.timeoutKind) throw new ModelGatewayError(timeoutMessage(deadlines.timeoutKind), "REQUEST_TIMEOUT", 504, profile.provider, deadlines.timeoutKind);
               throw new ModelGatewayError("Generation was cancelled.", "CLIENT_DISCONNECTED", 499, profile.provider);
             }
-            throw new ModelGatewayError("Unable to reach the provider.", "PROVIDER_UNAVAILABLE", 503, profile.provider);
+            const detail = error instanceof Error && error.message
+              ? error.message.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 180)
+              : "network error";
+            throw new ModelGatewayError(`Unable to reach the provider: ${detail}`, "PROVIDER_UNAVAILABLE", 503, profile.provider);
           }
         };
 
         let response!: globalThis.Response;
-        for (let compatibilityAttempt = 0; compatibilityAttempt < 3; compatibilityAttempt++) {
+        for (let compatibilityAttempt = 0; compatibilityAttempt < 4; compatibilityAttempt++) {
           response = await requestProvider();
           if (response.ok) break;
           const errorPayload = await readJsonWithSignal(response, deadlines.signal);
@@ -189,6 +192,8 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
           const normalizedMessage = providerMessage.toLowerCase();
           const streamRejected = response.status === 400 && requestBody.stream === true && normalizedMessage.includes("stream") && (normalizedMessage.includes("not supported") || normalizedMessage.includes("unsupported") || normalizedMessage.includes("invalid"));
           const schemaRejected = response.status === 400 && request.responseSchema && (requestBody.response_format as { type?: unknown } | undefined)?.type === "json_schema" && (normalizedMessage.includes("json_schema") || normalizedMessage.includes("response_format") || normalizedMessage.includes("structured")) && (normalizedMessage.includes("not supported") || normalizedMessage.includes("unsupported") || normalizedMessage.includes("invalid"));
+          const genericInvalidParameters = response.status === 400
+            && (normalizedMessage.includes("invalid request") || normalizedMessage.includes("invalid parameter") || normalizedMessage.includes("request parameter"));
           if (streamRejected) {
             requestBody.stream = false;
             delete requestBody.stream_options;
@@ -196,6 +201,20 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
           }
           if (schemaRejected) {
             requestBody.response_format = { type: "json_object" };
+            continue;
+          }
+          if (genericInvalidParameters && (requestBody.response_format as { type?: unknown } | undefined)?.type === "json_schema") {
+            requestBody.response_format = { type: "json_object" };
+            delete requestBody.stream_options;
+            continue;
+          }
+          if (genericInvalidParameters && Object.hasOwn(requestBody, "stream_options")) {
+            delete requestBody.stream_options;
+            continue;
+          }
+          if (genericInvalidParameters && requestBody.response_format) {
+            delete requestBody.response_format;
+            requestBody.stream = false;
             continue;
           }
           throw mapHttpError(response.status, profile.provider, providerMessage);
@@ -259,7 +278,7 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
             parsed = structured.parsed;
             text = structured.text;
             repaired = structured.repaired;
-          } catch {
+          } catch (error) {
             throw new ModelGatewayError(`The provider returned invalid structured output for ${profile.provider}/${request.modelId} (${wasStream ? "stream" : "json"} mode). Expected one JSON object or array.`, "INVALID_STRUCTURED_OUTPUT", 502, profile.provider);
           }
         }

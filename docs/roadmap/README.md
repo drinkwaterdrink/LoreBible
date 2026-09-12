@@ -1,8 +1,8 @@
 # LoreBible Production Studio: north-star roadmap
 
-**Planning baseline:** 2026-09-07 · application v0.3.0 · commit `0f2b4878423d2c75fb4bfe5ece449041c2d6038b`.
+**Current delivery baseline:** 2026-09-12 · application v0.50 · `test` branch.
 
-**Status:** 9 of 17 ordered roadmap items are complete and 8 remain. M0 and M1 are complete; M2 Blueprint Studio is in progress. v0.46 shipped Stage 1 premise freshness, full-board Divergence history, and mobile Connections reliability. M2.2 editable and persisted Blueprint controls are next.
+**Status:** 9 of 17 ordered roadmap items are complete and 8 remain. M0 and M1 are complete; M2 Blueprint Studio is in progress. Reliability releases through v0.50 stabilized premise freshness, Divergence history, mobile Connections, resumable Forge controls, provider diagnostics, and cross-browser generation IDs. M2.2 editable and persisted Blueprint controls are next.
 
 LoreBible will become a creative production studio whose rich source world and carefully compiled runtime artifacts are deliberately different things. Creative quality takes precedence over speed and minimizing calls, while the user retains control over cost, accepted work, and scope.
 
@@ -27,7 +27,7 @@ Application changes are summarized in the project-level [changelog](../../CHANGE
 | M0.5–M0.8 Foundation completion | Complete | Stable Divergence lineage, model discovery/gateway coverage, canonical artifact IR, native/portable serializers, Windows CI, and mobile workflow gates. |
 | M1 Project Graph foundation | Complete | Versioned graph migration, transactional repository, revision-safe commands, controlled editing, and graph-native preview. |
 | M2.1 Blueprint planning preview | Complete | Read-only premise-adaptive recommendations with evidence, revision checks, and mobile-safe inspection. |
-| v0.46 Reliability bridge | Complete | Explicit AI premise starters, recoverable full-board reroll history, and corrected mobile model-list positioning. |
+| v0.46–v0.50 Reliability bridge | Complete | Fresh premise starters, recoverable board history, mobile model ergonomics, manual Forge checkpoints, truthful provider diagnostics, and browser-safe generation IDs. |
 | M2.2 Editable Blueprint | Next | Persist accepted/overridden category, intensity, runtime, and mechanic decisions before Forge. |
 
 ## Recommended order

@@ -76,6 +76,44 @@ test("gateway rejects model IDs that the provider does not report", async () => 
   expect(requests).toEqual(["https://openrouter.ai/api/v1/models"]);
 });
 
+test("gateway preserves a safe HTTP status and provider reason for an unclassified request rejection", async () => {
+  const { gateway, profile } = await makeGateway(async () => new Response(JSON.stringify({
+    error: { message: "Invalid argument: this model does not accept the requested generation configuration" },
+  }), { status: 400, headers: { "Content-Type": "application/json" } }));
+
+  await expect(gateway.generate({
+    profileId: profile.id,
+    modelId: "z-ai/glm-5.3",
+    systemInstruction: "system",
+    userPrompt: "user",
+    reasoningEffort: "low",
+    stageName: "Test",
+    timeoutMs: 5000,
+  })).rejects.toMatchObject({
+    code: "PROVIDER_UNAVAILABLE",
+    message: "Provider rejected the request (HTTP 400). Invalid argument: this model does not accept the requested generation configuration",
+  });
+});
+
+test("gateway keeps a bounded transport diagnostic when the provider cannot be reached", async () => {
+  const { gateway, profile } = await makeGateway(async () => {
+    throw new Error("connect ECONNREFUSED 127.0.0.1:443");
+  });
+
+  await expect(gateway.generate({
+    profileId: profile.id,
+    modelId: "z-ai/glm-5.3",
+    systemInstruction: "system",
+    userPrompt: "user",
+    reasoningEffort: "low",
+    stageName: "Test",
+    timeoutMs: 5000,
+  })).rejects.toMatchObject({
+    code: "PROVIDER_UNAVAILABLE",
+    message: "Unable to reach the provider: connect ECONNREFUSED 127.0.0.1:443",
+  });
+});
+
 test("gateway accepts a single fenced JSON document from a Gemini-style structured response", async () => {
   const { gateway, profile } = await makeGateway(async () => new Response(JSON.stringify({
     model: "gemini-3.8-flash",
@@ -310,6 +348,7 @@ test("gateway generates with an exact model from a saved Gemini AI Studio profil
   expect(requestAuthorization).toBe("Bearer gemini-secret");
   expect(requestBody.model).toBe("gemini-3.8-flash");
   expect(requestBody).toMatchObject({ stream: true, reasoning_effort: "medium" });
+  expect(requestBody.extra_body).toBeUndefined();
   expect(response.parsed).toEqual({ candidates: ["one"] });
   expect(response.provenance).toMatchObject({ provider: "gemini", modelRequested: "gemini-3.8-flash" });
   expect(JSON.stringify(response.provenance)).not.toContain("gemini-secret");
@@ -418,4 +457,58 @@ test("gateway falls back to JSON object mode only after an explicit schema rejec
   expect(bodies[0].response_format.type).toBe("json_schema");
   expect(bodies[1].response_format).toEqual({ type: "json_object" });
   expect(response.parsed).toEqual({ takes: [] });
+});
+
+test("gateway downgrades strict schema mode after a provider returns only a generic invalid-parameters error", async () => {
+  const bodies: any[] = [];
+  const { gateway, profile } = await makeGateway(async (_input, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    if (bodies.length === 1) return new Response(JSON.stringify({ error: { message: "Invalid request parameters. Please check your input and try again." } }), { status: 400, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ model: "z-ai/glm-5.3", choices: [{ message: { content: '{"takes":[]}' } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+
+  const response = await gateway.generate({
+    profileId: profile.id,
+    modelId: "z-ai/glm-5.3",
+    systemInstruction: "system",
+    userPrompt: "user",
+    responseSchema: { type: "object", properties: { takes: { type: "array" } } },
+    reasoningEffort: "low",
+    stageName: "Divergence Writer",
+    timeoutMs: 1000,
+  });
+
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0].response_format.type).toBe("json_schema");
+  expect(bodies[1].response_format).toEqual({ type: "json_object" });
+  expect(response.parsed).toEqual({ takes: [] });
+});
+
+test("gateway removes optional stream usage metadata after a generic invalid-parameters error", async () => {
+  const bodies: any[] = [];
+  const { gateway, profile } = await makeGateway(async (_input, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    if (bodies.length === 1) return new Response(JSON.stringify({ error: { message: "Invalid request parameters" } }), { status: 400, headers: { "Content-Type": "application/json" } });
+    return new Response([
+      'data: {"model":"z-ai/glm-5.3","choices":[{"delta":{"content":"compatible answer"},"finish_reason":"stop"}]}',
+      "data: [DONE]",
+      "",
+    ].join("\n\n"), { status: 200, headers: { "Content-Type": "text/event-stream" } });
+  });
+
+  const response = await gateway.generate({
+    profileId: profile.id,
+    modelId: "z-ai/glm-5.3",
+    systemInstruction: "system",
+    userPrompt: "user",
+    reasoningEffort: "low",
+    stageName: "Divergence Writer",
+    timeoutMs: 1000,
+  });
+
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0].stream_options).toEqual({ include_usage: true });
+  expect(bodies[1].stream).toBe(true);
+  expect(bodies[1].stream_options).toBeUndefined();
+  expect(response.text).toBe("compatible answer");
 });

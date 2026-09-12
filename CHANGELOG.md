@@ -4,6 +4,31 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.50 — 2026-09-12
+
+### Fixed
+
+- Divergence and Project Graph actions now create browser-safe IDs when `crypto.randomUUID()` is unavailable on Android or a local-network HTTP address. A completed generation can no longer crash afterward with `crypto.randomUUID is not a function`.
+- Forge bundle 3 now uses one shared relationship contract. The provider schema and local validator both require `relation`, eliminating the contradictory `relationshipWeb entry 1 is missing required content` failure caused by LoreBible itself.
+- Forge failures now name the exact bundle, selected model, and underlying safe error. Completed bundle checkpoints remain intact so retrying or changing models resumes from the failed bundle.
+- Provider errors retain the HTTP status and bounded provider or network explanation instead of collapsing into `Provider request failed`.
+- OpenAI-compatible providers now receive bounded compatibility retries when a model rejects strict JSON Schema or streaming parameters with a generic invalid-request response. Retries progressively relax transport formatting without changing the selected model or inventing output.
+- Gemini requests keep the documented `reasoning_effort` control but no longer force an additional provider-specific thinking extension that can conflict with model aliases or compatibility behavior.
+
+### Added
+
+- Shared, deterministically tested Forge validation and diagnostic modules.
+- A refreshed one-file Production Studio master blueprint containing current delivery status, ordered milestones, release gates, and the post-v0.50 implementation sequence.
+
+### Why
+
+- Provider compatibility failures and LoreBible validation failures previously looked alike, which made model switching and retries difficult to diagnose. This release separates those causes and only relaxes optional request features when a provider explicitly rejects the original request.
+- Mobile/LAN browsers are not always secure contexts, so modern UUID helpers cannot be assumed even when generation itself succeeds.
+
+### Validation boundary
+
+- Automated client-ID, gateway compatibility, Forge contract, Forge diagnostic, Divergence board, Project Graph, full-suite, typecheck, and production-build checks are run before release. No paid live provider request is made by this test suite; Gemini AI Studio, NanoGPT Gemini 3.8, and NanoGPT Terra still require user-key runtime confirmation.
+
 ## v0.49 — 2026-09-12
 
 ### Fixed

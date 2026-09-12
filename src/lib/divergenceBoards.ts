@@ -1,4 +1,5 @@
 import type { DivergenceBoardGeneration, DivergenceTake } from "../types";
+import { createClientId } from "./clientId";
 import { initializeDivergenceBoard } from "./divergenceLineage";
 
 interface BoardIdentity {
@@ -20,7 +21,7 @@ export function createDivergenceBoard(
   identity: BoardIdentity = {},
 ): DivergenceBoardGeneration {
   return {
-    id: identity.id || `board-${crypto.randomUUID()}`,
+    id: identity.id || createClientId("board"),
     createdAt: identity.createdAt || new Date().toISOString(),
     operation,
     takes: initializeDivergenceBoard(takes.map(copyTake), operation),

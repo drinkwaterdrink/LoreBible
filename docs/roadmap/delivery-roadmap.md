@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 9 of 17 ordered roadmap items complete (M0.1–M1); 8 remain. M2 Blueprint Studio is in progress: M2.1 shipped a read-only, premise-adaptive planning preview in v0.41. v0.46 then closed current Stage 1 freshness, full-board Divergence history, and mobile Connections reliability gaps without changing the milestone count. M2.2 editable and persisted Blueprint controls are next, followed by the approved resumable Forge slice. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 9 of 17 ordered roadmap items complete (M0.1–M1); 8 remain. M2 Blueprint Studio is in progress: M2.1 shipped a read-only, premise-adaptive planning preview in v0.41. Reliability releases through v0.50 then closed Stage 1 freshness, full-board Divergence history, mobile Connections, provider diagnostics, cross-browser IDs, and initial resumable Forge-control gaps without changing the milestone count. M2.2 editable and persisted Blueprint controls are next, followed by durable graph-native Forge batches. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 

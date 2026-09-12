@@ -1,6 +1,8 @@
 # LoreBible Production Studio architecture blueprint
 
-**Status:** north-star design, not an implemented feature inventory. **Baseline:** v0.3.0 / `0f2b487` / 2026-09-07. **Primary target:** Lumiverse. **Companion:** [delivery roadmap](delivery-roadmap.md).
+**Status:** living master architecture and implementation blueprint, not a claim that every described capability exists. **Current delivery baseline:** v0.50 on the `test` branch, 2026-09-12. **Primary target:** Lumiverse. **Companions:** [delivery roadmap](delivery-roadmap.md), [requirement traceability](requirements-traceability.md), and [capability evidence](capability-evidence.md).
+
+**Progress:** 9 of 17 ordered roadmap items are complete and 8 remain. M0 and M1 are complete; M2 Blueprint Studio is active. Reliability releases through v0.50 preserve that milestone count because they harden the generation foundation required by M2–M4 rather than falsely marking architectural work complete.
 
 ## 1. Product constitution
 
@@ -316,3 +318,52 @@ Incrementally extract services only when touched by a tested feature. Proposed r
 | No hard entry quotas | Match the premise rather than old templates | Evaluation shows undercoverage in a specific class |
 
 Out of scope for the initial production sequence: a public multi-tenant hosting service, automatic publishing to third-party communities, custom runtime extensions required for basic output, universal native compatibility claims, and a replacement for Lumiverse's chat runtime. These require separate decisions, not implied permission from the studio vision.
+
+## 15. Ordered delivery map
+
+The roadmap is delivered as bounded vertical slices. A milestone is complete only when its user workflow, persistence, migrations, failure behavior, mobile layout, deterministic validation, documentation, and relevant export evidence are complete together.
+
+| Milestone | Status | Purpose and user-visible outcome |
+|---|---|---|
+| M0 — Trustworthy foundation | Complete | Neutral drafts, truthful failures, complete project restoration, stable Divergence lineage, secure provider profiles, canonical starter IR, CI, and mobile workflow gates. |
+| M1 — Project Graph foundation | Complete | Stable entities/facts/relationships, transactional revisions, controlled commands, migration from existing projects, and graph-native inspection without discarding the manuscript. |
+| M2 — Blueprint Studio | In progress | Decide what this premise needs before expensive generation: artifact target, world mode, intensity, dynamic categories, ordinary-life balance, runtime budget, and optional mechanic packs. |
+| M3 — Resumable graph-native Forge | Planned | Generate accepted Blueprint batches directly into the graph, preserve each completed batch, pause between calls, switch models safely, and resume without starting over. |
+| M4 — Lore Production Engine | Planned | Separate lore architecture, writing, retrieval design, and activation auditing; add category-aware titles, size targets, optional advanced mechanics, and Activation Lab tests. |
+| M5 — Card Production Engine | Planned | Compile distinct Character, Scenario, Narrator, Ensemble, and World archetypes with correct field ownership, greetings, examples, system contracts, and optional alternate fields. |
+| M6 — Full-fidelity Publisher | Planned | Produce canonical artifact IR, Lumiverse World Book, Character Book, CCSv3/CHARX, manifests, passports, capability receipts, and explicit portability-loss reports. |
+| M7 — Visual Production | Planned | Add image-provider profiles, Visual Bible, asset planning, committed portraits, consistent expressions, world art, and verified asset packaging. |
+| M8 — QA Lab | Planned | Integrate continuity, agency, autonomy, knowledge, retrieval, recursion, budget, roleplay-probe, portability, and asset findings into an explainable health workspace. |
+| M9 — Source Studio | Planned | Add provenance-aware file/URL ingestion, authority and spoiler partitions, temporal canon snapshots, extraction, reconciliation, and source-linked facts. |
+
+## 16. Immediate post-v0.50 sequence
+
+1. **M2.2 editable Blueprint.** Turn the current recommendations into persisted Smart Auto, Guided, and Expert decisions. Users can lock, omit, resize, or add categories; select artifact target, world mode, build intensity, runtime budget, and mechanic packs; and understand every recommendation.
+2. **M3.1 durable Forge batches.** Move the current six-bundle checkpoint into the project store with explicit pending, active, complete, and failed records. One-bundle mode waits for the user; continuous mode observes provider pacing; retry starts at the failed batch and may use a newly selected model.
+3. **M3.2 graph-native category generation.** Generate principal and roster cast, directional relationships, knowledge claims, temporal facts, independent goals, and world pressures into stable records while retaining the manuscript as a derived view.
+4. **M4.1 dynamic lore planning.** Convert accepted Blueprint categories into a Lore Manifest with premise-dependent categories, concise `[Category] Name` titles, approximate entry-count targets, canonical ownership, visibility, temporality, and expected runtime role.
+5. **M4.2 retrieval architecture.** Plan precise primary/secondary keys, selective logic, scan depth, position, order, priority, sticky/cooldown/delay, bounded recursion, groups, probability, and vector fallback only when justified and supported.
+6. **M4.3 Activation Lab.** Run positive, negative, collision, selective, recursion, persistence, group, vector, and crowded-budget fixtures; surface dead entries, duplicate ownership, missing coverage, and probable activation cost.
+7. **M5–M6 production compilation.** Build archetype-specific cards and full-fidelity/portable serializers from one accepted IR, then expose exact artifact previews and loss reports before download.
+8. **M7–M9 expansion.** Add visuals, integrated QA, and finally Source Studio after canon, persistence, compilation, and validation foundations are mature.
+
+Reliability work remains continuous. A provider regression, destructive migration, agency leak, stale-state export, or invalid package can interrupt the feature sequence because those are release blockers, not optional polish.
+
+## 17. Release gates and evidence standard
+
+Every release must pass proportionate automated tests, typecheck, and production build. Changed serializers require structural fixtures and round trips where possible. Changed launchers require isolated-process tests. Changed mobile workflows require narrow-viewport verification. Provider adapters require mocked compatibility tests; live key-backed tests are separately labeled and never implied by mocks.
+
+Evidence labels remain explicit:
+
+- **Structurally valid:** local schema/package checks pass.
+- **Simulated:** deterministic or mocked behavior matches fixtures.
+- **Runtime observed:** a user or test operator records the exact provider/Lumiverse build and result.
+- **Certified:** repeatable verification succeeds against a named target version.
+
+A failed generation preserves accepted work and reports the stage, batch/model where safe, failure class, retryability, and next action. No deterministic prose is substituted as model success. Cancellation stops future work while preserving completed batches. Changes to accepted facts calculate and display their dependency blast radius before regeneration.
+
+## 18. Completion definition
+
+The Production Studio north star is reached when a user can begin with a small premise, accept a premise-adaptive Blueprint, generate or resume a structured world, inspect canon and dependencies, compile only the desired modular artifacts, understand retrieval and token behavior, validate agency/knowledge/continuity, and export verified Lumiverse packages without silent loss.
+
+Completion is not measured by feature count or lorebook size. It requires coherent creative material, independent world motion, ordinary life where appropriate, intentional information ownership, precise retrieval, correct card archetypes, honest portability reporting, recoverable generation, mobile usability, and no unresolved Blockers or unaccepted Majors.

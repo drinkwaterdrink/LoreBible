@@ -32,6 +32,8 @@ import { createModelGateway, ModelGatewayError, type ModelGateway } from "./serv
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
 import { createForgeResumePlan, selectForgeBundleSections, type ForgeExecutionMode } from "./server/generation/forgeResume.js";
+import { FORGE_REQUIRED_FIELDS, sanitizeForgeSectionEntries } from "./server/generation/forgeValidation.js";
+import { formatForgeBundleFailure } from "./server/generation/forgeDiagnostics.js";
 import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
 import { APP_VERSION } from "./src/version.js";
 import { RUNTIME_CAPABILITIES } from "./src/lib/runtimeDiagnostics.js";
@@ -1508,7 +1510,7 @@ app.post("/api/forge", async (req, res) => {
           pressure: { type: Type.STRING },
           relation: { type: Type.STRING },
         },
-        required: ["source", "target", "bond", "pressure"],
+        required: [...FORGE_REQUIRED_FIELDS.relationshipWeb],
       },
       keys: { type: Type.ARRAY, items: { type: Type.STRING } },
       permanence: { type: Type.STRING },
@@ -1881,31 +1883,6 @@ app.post("/api/forge", async (req, res) => {
     },
   ];
 
-  function sanitizeSectionEntries(sectionKey: string, entries: any[]): any[] {
-    if (!Array.isArray(entries)) return [];
-    if (entries.length === 0) return [];
-    const requiredFields: Record<string, string[]> = {
-      rules: ["rule", "profits", "pays"], locations: ["name", "function", "mood", "whatsWrong"],
-      factions: ["name", "publicFace", "trueAgenda", "independentWant", "stanceTowardUser"],
-      npcs: ["name", "role", "wants", "body", "voice", "notDefault", "holds", "connection"],
-      relationshipWeb: ["source", "target", "bond", "pressure", "relation"],
-      knowledgeMap: ["truth", "knows", "suspects", "surfacesWhen"],
-      items: ["name", "whatItDoes", "costOrLimit", "unfiredGun"],
-      secrets: ["truth", "whoKeepsIt", "howKept", "discoveryTrigger", "whatItChanges"],
-      history: ["event", "era", "consequence"], pressures: ["name", "force", "scope", "clock"],
-    };
-    return entries.map((entry, idx) => {
-      if (!entry || typeof entry !== "object" || !entry.fields || typeof entry.fields !== "object") {
-        throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} is malformed.`, "INVALID_STRUCTURED_OUTPUT", 502);
-      }
-      const missing = (requiredFields[sectionKey] || []).filter((field) => typeof entry.fields[field] !== "string" || !entry.fields[field].trim());
-      if (missing.length > 0 || !Array.isArray(entry.keys) || entry.keys.length === 0) {
-        throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} is missing required content.`, "INVALID_STRUCTURED_OUTPUT", 502);
-      }
-      return { ...entry, id: entry.id || `${sectionKey}-${idx + 1}`, locked: Boolean(entry.locked) };
-    });
-  }
-
   try {
     for (let i = resumePlan.startBundleIndex; i < resumePlan.endBundleIndexExclusive; i++) {
       const bundle = bundles[i];
@@ -1967,28 +1944,46 @@ Emit strictly valid JSON matching the schema for this bundle.`;
           cleanup();
           return;
         }
-        const failure = normalizeGenerationFailure(bundleErr, { operation: "forge" });
+        const failure = normalizeGenerationFailure(new ModelGatewayError(
+          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", bundleErr instanceof Error ? bundleErr.message : "Provider request failed."),
+          bundleErr instanceof ModelGatewayError ? bundleErr.code : "INTERNAL_ERROR",
+          bundleErr instanceof ModelGatewayError ? bundleErr.status : 502,
+          bundleErr instanceof ModelGatewayError ? bundleErr.provider : undefined,
+          bundleErr instanceof ModelGatewayError ? bundleErr.timeoutKind : undefined,
+        ), { operation: "forge" });
         session.finish({ type: "error", task: "forge", message: failure.message, code: failure.code, action: failure.action, retryable: failure.retryable, retryAfterMs: failure.retryAfterMs });
         cleanup();
         return;
       }
 
-      // Sanitize rules inside worldPhysics if present
-      if (bundleResult.worldPhysics && Array.isArray(bundleResult.worldPhysics.rules)) {
-        bundleResult.worldPhysics.rules = sanitizeSectionEntries("rules", bundleResult.worldPhysics.rules);
-      }
+      try {
+        // Sanitize rules inside worldPhysics if present.
+        if (bundleResult.worldPhysics && Array.isArray(bundleResult.worldPhysics.rules)) {
+          bundleResult.worldPhysics.rules = sanitizeForgeSectionEntries("rules", bundleResult.worldPhysics.rules);
+        }
 
-      // Provider-compatible endpoints occasionally append top-level metadata
-      // such as `keys`. Merge only the schema-owned sections.
-      const selectedBundle = selectForgeBundleSections(bundleResult, bundle.keys);
-      if (selectedBundle.ignoredKeys.length) sendEvent("log", { stage: bundle.keys[0], label: `${bundle.name} ignored provider metadata: ${selectedBundle.ignoredKeys.join(", ")}`, status: "done" });
-      // Merge and stream sections as they arrive
-      for (const [key, val] of Object.entries(selectedBundle.sections)) {
-        const sanitizedVal = Array.isArray(val) && key !== "proceduralRolls"
-          ? sanitizeSectionEntries(key, val)
-          : val;
-        doc[key] = sanitizedVal;
-        sendEvent("section", { key, data: sanitizedVal });
+        // Provider-compatible endpoints occasionally append top-level metadata
+        // such as `keys`. Merge only the schema-owned sections.
+        const selectedBundle = selectForgeBundleSections(bundleResult, bundle.keys);
+        if (selectedBundle.ignoredKeys.length) sendEvent("log", { stage: bundle.keys[0], label: `${bundle.name} ignored provider metadata: ${selectedBundle.ignoredKeys.join(", ")}`, status: "done" });
+        // Merge and stream sections as they arrive.
+        for (const [key, val] of Object.entries(selectedBundle.sections)) {
+          const sanitizedVal = Array.isArray(val) && key !== "proceduralRolls"
+            ? sanitizeForgeSectionEntries(key, val)
+            : val;
+          doc[key] = sanitizedVal;
+          sendEvent("section", { key, data: sanitizedVal });
+        }
+      } catch (validationError) {
+        const failure = normalizeGenerationFailure(new ModelGatewayError(
+          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", validationError instanceof Error ? validationError.message : "Structured output validation failed."),
+          validationError instanceof ModelGatewayError ? validationError.code : "INVALID_STRUCTURED_OUTPUT",
+          validationError instanceof ModelGatewayError ? validationError.status : 502,
+          validationError instanceof ModelGatewayError ? validationError.provider : undefined,
+        ), { operation: "forge" });
+        session.finish({ type: "error", task: "forge", message: failure.message, code: failure.code, action: failure.action, retryable: failure.retryable, retryAfterMs: failure.retryAfterMs });
+        cleanup();
+        return;
       }
 
       sendEvent("log", {
