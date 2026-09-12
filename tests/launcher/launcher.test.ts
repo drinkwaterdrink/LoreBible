@@ -9,7 +9,7 @@ test("launcher starts from its own repository path and polls health without cred
   expect(launcher).toContain("$appRoot = Split-Path -Parent $PSScriptRoot");
   expect(launcher).toContain("/api/health");
   expect(launcher).toContain("Start-Process \"http://localhost:3000\"");
-  expect(launcher).toContain('$expectedVersion = "0.43"');
+  expect(launcher).toContain('$expectedVersion = "0.44"');
   expect(launcher).toContain('selectedModelGenerationTest');
   expect(launcher).not.toContain("GEMINI_API_KEY");
 });
@@ -26,13 +26,27 @@ test("test launcher uses an isolated port and the server accepts a configured po
   const launcher = await readFile(join(root, "scripts", "Start-LoreBible-Test.ps1"), "utf8");
   const server = await readFile(join(root, "server.ts"), "utf8");
 
-  expect(launcher).toContain('$testPort = 3001');
+  expect(launcher).toContain('$candidatePorts = 3001..3010');
+  expect(launcher).toContain('$testPort = $selectedPort');
   expect(launcher).toContain('$env:PORT = "$testPort"');
   expect(launcher).toContain('http://localhost:$testPort');
   expect(launcher).toContain('LoreBible\\test-logs');
-  expect(launcher).toContain('$expectedVersion = "0.43"');
+  expect(launcher).toContain('$expectedVersion = "0.44"');
   expect(launcher).toContain('selectedModelGenerationTest');
   expect(server).toContain("process.env.PORT");
   expect(server).not.toContain("const PORT = 3000;");
   expect(launcher).not.toContain("GEMINI_API_KEY");
+});
+
+test("test launcher selects a free fallback port when an older server owns 3001", async () => {
+  const launcher = await readFile(join(root, "scripts", "Start-LoreBible-Test.ps1"), "utf8");
+
+  expect(launcher).toContain("$candidatePorts = 3001..3010");
+  expect(launcher).toContain("function Test-LoreBiblePortAvailable");
+  expect(launcher).toContain("netstat.exe -ano");
+  expect(launcher).toContain("$selectedPort");
+  expect(launcher).toContain('$testPort = $selectedPort');
+  expect(launcher).toContain('http://127.0.0.1:$testPort/api/health');
+  expect(launcher).toContain('$logStamp = Get-Date -Format');
+  expect(launcher).toContain('launcher-$logStamp-$PID.out.log');
 });

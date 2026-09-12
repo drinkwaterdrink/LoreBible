@@ -4,6 +4,22 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.44 — 2026-09-11
+
+### Fixed
+
+- The test-branch Windows launcher now skips an older LoreBible process that occupies port 3001 and selects the first available local port instead of repeatedly attaching the browser to the stale server.
+- Elevated listeners are detected with a `netstat.exe` fallback when the PowerShell TCP cmdlet cannot see them.
+- Each launch uses a unique stdout/stderr log filename, preventing a previous server's locked log from blocking the replacement process.
+
+### Why
+
+- Restarting the test shortcut could leave the browser on a pre-v0.43 server because the old process owned both the HTTP port and the shared development tooling port. v0.44 makes the fallback launch path deterministic and visibly versioned.
+
+### Validation boundary
+
+- Launcher contract tests pass for version/capability checks, elevated-listener detection, fallback port selection, and unique logs. The currently running elevated stale process cannot be stopped by this session; after clicking the updated shortcut, verify the browser URL and v0.44 badge.
+
 ## v0.43 — 2026-09-11
 
 ### Fixed

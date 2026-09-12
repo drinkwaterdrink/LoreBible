@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $appRoot = Split-Path -Parent $PSScriptRoot
-$expectedVersion = "0.43"
+$expectedVersion = "0.44"
 Set-Location -LiteralPath $appRoot
 
 if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
