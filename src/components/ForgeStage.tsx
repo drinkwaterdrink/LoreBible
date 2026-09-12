@@ -54,7 +54,7 @@ export const ForgeStage: React.FC<ForgeStageProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          {!isForging && !document && hasCheckpoint && !forgeError && onContinueForge && (
+          {!isForging && hasCheckpoint && !forgeError && onContinueForge && (
             <button type="button" onClick={onContinueForge} className="btn-primary text-xs flex items-center gap-1.5">
               <Feather size={12} />
               <span>Continue with next bundle</span>
@@ -73,7 +73,7 @@ export const ForgeStage: React.FC<ForgeStageProps> = ({
             </button>
           )}
 
-          {!isForging && document && (
+          {!isForging && document && !hasCheckpoint && (
             <button
               id="proceed-to-refine-btn"
               type="button"

@@ -320,9 +320,11 @@ test("gateway accepts a provider-reported Gemini model without requiring a custo
   const store = createProfileStore(path, protector);
   const profile = await store.upsert({ name: "AI Studio", provider: "gemini", apiKey: "gemini-secret" });
   const requests: string[] = [];
-  const gateway = createModelGateway(store, async (input) => {
+  let generationBody: any;
+  const gateway = createModelGateway(store, async (input, init) => {
     requests.push(input);
     if (input.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "models/gemini-flash-latest" }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    generationBody = JSON.parse(String(init?.body));
     return new Response(JSON.stringify({ model: "gemini-flash-latest", choices: [{ message: { content: "provider model response" } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
   });
 
@@ -341,6 +343,7 @@ test("gateway accepts a provider-reported Gemini model without requiring a custo
     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
   ]);
   expect(response.text).toBe("provider model response");
+  expect(generationBody.reasoning_effort).toBe("low");
 });
 
 test("gateway accepts a provider-reported NanoGPT model without requiring a custom save", async () => {

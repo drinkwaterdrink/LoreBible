@@ -168,6 +168,8 @@ test("selected-model test performs a real minimal structured generation", async 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "generated", provider: "gemini", modelId: "gemini-2.5-flash" });
     expect(generationBody.response_format.type).toBe("json_schema");
+    expect(generationBody.max_tokens).toBe(2048);
+    expect(generationBody.reasoning_effort).toBe("low");
     expect(JSON.stringify(generationBody)).not.toContain("gemini-secret");
   });
 });

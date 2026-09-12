@@ -4,6 +4,23 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.49 — 2026-09-12
+
+### Fixed
+
+- Gemini AI Studio profiles now send an explicit reasoning effort even when the model was discovered from the provider catalog instead of the curated list. This prevents aliases such as `gemini-flash-latest` from silently selecting a larger default thinking budget.
+- The Connections “Test Selected” probe now allows 2,048 output tokens instead of 64. Gemini thinking tokens count toward the output ceiling, so the previous probe could falsely fail with `finish reason: length` even when ordinary generation worked.
+- Forge now prioritizes **Continue with next bundle** whenever a partial checkpoint exists, even if an older manuscript document is still in memory. **Review Finished Manuscript** appears only after the progress reaches all six bundles.
+
+### Why
+
+- The reported Gemini failure was a budget/probe mismatch, not an invalid AI Studio key: Flash-Lite succeeded because it does not spend the same thinking budget, while Flash could consume the 64-token probe before emitting `{\"ok\":true}`.
+- The Forge screenshot showed the first bundle saved at 1/6 while an old document caused the wrong completion action to render.
+
+### Validation boundary
+
+- Automated gateway, connection-route, Forge-component, full-suite, and typecheck checks pass. The v0.48 production build passed; the v0.49 build was not rerun because the host execution limit was reached. A live Gemini request was not made by this session; use **Test Selected** again with the current v0.49 server to confirm the user’s key and model route.
+
 ## v0.48 — 2026-09-12
 
 ### Fixed

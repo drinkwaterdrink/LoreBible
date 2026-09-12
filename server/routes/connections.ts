@@ -174,7 +174,7 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
         timeoutMs: 30_000,
         inactivityTimeoutMs: 30_000,
         overallTimeoutMs: 45_000,
-        maxOutputTokens: 64,
+        maxOutputTokens: 2048,
       });
       if (!result.parsed || typeof result.parsed !== "object" || (result.parsed as { ok?: unknown }).ok !== true) throw new ModelGatewayError("The model did not return the requested structured response.", "INVALID_STRUCTURED_OUTPUT", 502, result.provenance.provider);
       res.json({ status: "generated", provider: result.provenance.provider, modelId });

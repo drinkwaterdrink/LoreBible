@@ -144,15 +144,15 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
         stream_options: { include_usage: true },
         max_tokens: request.maxOutputTokens ?? maxOutputTokensForStage(request.stageName),
       };
-      if (curatedModel?.reasoning === "required") {
+      if (profile.provider === "gemini") {
+        requestBody.reasoning_effort = request.reasoningEffort;
+        requestBody.extra_body = { google: { thinking_config: { include_thoughts: true } } };
+      } else if (curatedModel?.reasoning === "required") {
         if (profile.provider === "nanogpt") {
           requestBody.reasoning_effort = request.reasoningEffort;
           requestBody.reasoning_content_compat = true;
           requestBody.reasoning_delta_field = "reasoning_content";
           requestBody.reasoning = { effort: request.reasoningEffort, exclude: false, delta_field: "reasoning_content" };
-        } else if (profile.provider === "gemini") {
-          requestBody.reasoning_effort = request.reasoningEffort;
-          requestBody.extra_body = { google: { thinking_config: { include_thoughts: true } } };
         } else {
           requestBody.reasoning = { effort: request.reasoningEffort, exclude: false };
         }

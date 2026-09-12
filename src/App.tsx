@@ -1327,7 +1327,8 @@ export default function App() {
               workingTitle={workingTitle}
               forgeError={forgeError}
               onRetryForge={() => void handleStartForge(true)}
-              hasCheckpoint={Object.keys(streamedSections).length > 0}
+              hasCheckpoint={Object.keys(streamedSections).length > 0
+                && (forgeActivity.progress?.completedSteps ?? 0) < (forgeActivity.progress?.totalSteps ?? 6)}
               onContinueForge={() => void handleStartForge(true)}
               generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
             />
