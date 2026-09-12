@@ -1,6 +1,6 @@
 # v0.47 Blueprint and lore-quality design
 
-**Status:** Approved in principle; awaiting written-spec review  
+**Status:** Approved
 **Target release:** v0.47  
 **Roadmap alignment:** completes M2.2; introduces deterministic lore-quality gates needed by M4 without claiming the full Activation Lab
 
