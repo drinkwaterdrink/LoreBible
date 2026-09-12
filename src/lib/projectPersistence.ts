@@ -1,6 +1,7 @@
 import type {
   CanonConfig,
   DivergenceTake,
+  DivergenceBoardGeneration,
   GenerationProvenance,
   GenerationSettings,
   LoreBibleDocument,
@@ -20,6 +21,8 @@ export interface SavedLoreBibleProjectV2 {
     physics: PhysicsConfig;
     takes: DivergenceTake[];
     selectedTakeId: string | null;
+    divergenceBoards?: DivergenceBoardGeneration[];
+    activeDivergenceBoardId?: string | null;
   };
   generation: {
     settings: GenerationSettings;
@@ -75,6 +78,15 @@ function isTake(value: unknown): value is DivergenceTake {
     && Array.isArray(value.retainedNonNegotiables);
 }
 
+function isDivergenceBoard(value: unknown): value is DivergenceBoardGeneration {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.createdAt === "string"
+    && (value.operation === "initial" || value.operation === "reroll_all")
+    && Array.isArray(value.takes)
+    && value.takes.every(isTake);
+}
+
 function isSettings(value: unknown): value is GenerationSettings {
   return isRecord(value)
     && (value.quality === "Fast" || value.quality === "Balanced" || value.quality === "Deep Craft")
@@ -121,6 +133,8 @@ function validateProject(value: unknown): value is SavedLoreBibleProjectV2 {
     && Array.isArray(workflow.takes)
     && workflow.takes.every(isTake)
     && isNullableString(workflow.selectedTakeId)
+    && (workflow.divergenceBoards === undefined || (Array.isArray(workflow.divergenceBoards) && workflow.divergenceBoards.every(isDivergenceBoard)))
+    && (workflow.activeDivergenceBoardId === undefined || isNullableString(workflow.activeDivergenceBoardId))
     && isSettings(generation.settings)
     && isRecord(selection)
     && isNullableString(selection.profileId)

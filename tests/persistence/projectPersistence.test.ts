@@ -8,6 +8,7 @@ import {
   saveProjectToStore,
   writeProjectStore,
 } from "../../src/lib/projectPersistence";
+import { createDivergenceBoard } from "../../src/lib/divergenceBoards";
 
 function memoryStorage(initial: Record<string, string> = {}, failWrites = false) {
   const values = new Map(Object.entries(initial));
@@ -111,4 +112,23 @@ test("an unavailable project store returns a warning instead of crashing startup
   const result = readProjectStore(storage);
   expect(result.store.projects).toHaveLength(0);
   expect(result.warning).toContain("unavailable");
+});
+
+test("project storage preserves optional divergence board generations", () => {
+  const firstTake = { id: "take-a", title: "A", pitch: "A", genreTone: "Quiet", angle: "A", retainedNonNegotiables: [] };
+  const secondTake = { id: "take-b", title: "B", pitch: "B", genreTone: "Quiet", angle: "B", retainedNonNegotiables: [] };
+  const boards = [
+    createDivergenceBoard([firstTake], "initial", { id: "board-a", createdAt: "2026-01-01T00:00:00.000Z" }),
+    createDivergenceBoard([secondTake], "reroll_all", { id: "board-b", createdAt: "2026-01-02T00:00:00.000Z" }),
+  ];
+  const project = createSavedProjectV2({
+    document,
+    workflow: { stage: "2", sparkParse: document.parse, canon: document.canon, physics: document.physics, takes: [secondTake], selectedTakeId: "take-b", divergenceBoards: boards, activeDivergenceBoardId: "board-b" },
+    generation: { settings: { quality: "Balanced", divergenceMode: "Exploratory", authorFlavor: { mode: "Off", strength: "Sprinkle", autoBehavior: "Compatible" }, modelSelection: { profileId: null, modelId: null } }, modelSelection: { profileId: null, modelId: null }, provenance: [] },
+  });
+  const parsed = parseProjectStorage(JSON.stringify({ schemaVersion: 2, projects: [project] }));
+
+  expect(parsed.recoveryJson).toBeNull();
+  expect(parsed.store.projects[0].workflow.divergenceBoards?.map((board) => board.id)).toEqual(["board-a", "board-b"]);
+  expect(parsed.store.projects[0].workflow.activeDivergenceBoardId).toBe("board-b");
 });

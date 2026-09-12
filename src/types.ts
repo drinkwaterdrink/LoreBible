@@ -246,6 +246,13 @@ export interface OpeningSection {
   permanence: 'T';
 }
 
+export interface DivergenceBoardGeneration {
+  id: string;
+  createdAt: string;
+  operation: "initial" | "reroll_all";
+  takes: DivergenceTake[];
+}
+
 export interface ExpansionNotesSection {
   genre?: string;
   subgenre?: string;
