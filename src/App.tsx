@@ -8,6 +8,7 @@ import {
   BuildLogItem,
   GenerationProvenance,
   GenerationSettings,
+  DivergenceBoardGeneration,
 } from "./types";
 import {
   parseSparkApi,
@@ -44,7 +45,8 @@ import { readSparkDraft, writeSparkDraft } from "./lib/sparkDraft";
 import { createDraftScenarioDocument, DEFAULT_CANON, DEFAULT_PHYSICS } from "./lib/scenarioDraft";
 import { captureSavedProject, captureWorkspaceDraft, restoreSavedProject, restoreWorkspaceDraft } from "./lib/projectWorkspace";
 import { clearWorkspaceDraft, readWorkspaceDraft, writeWorkspaceDraft } from "./lib/workspacePersistence";
-import { appendDivergenceVersion, initializeDivergenceBoard, initializePushedBoard } from "./lib/divergenceLineage";
+import { appendDivergenceVersion, initializePushedBoard } from "./lib/divergenceLineage";
+import { appendDivergenceBoard, createDivergenceBoard, replaceActiveBoardTakes } from "./lib/divergenceBoards";
 import { Menu, Feather, X, PlusCircle, Save } from "lucide-react";
 import { AppVersionBadge } from "./components/AppVersionBadge";
 import { StorageRecoveryNotice } from "./components/StorageRecoveryNotice";
@@ -184,6 +186,8 @@ export default function App() {
   // Divergence state
   const [takes, setTakes] = useState<DivergenceTake[]>(initialPersistence.active?.takes || []);
   const [selectedTakeId, setSelectedTakeId] = useState<string | undefined>(initialPersistence.active?.selectedTakeId || undefined);
+  const [divergenceBoards, setDivergenceBoards] = useState<DivergenceBoardGeneration[]>(initialPersistence.active?.divergenceBoards || []);
+  const [activeDivergenceBoardId, setActiveDivergenceBoardId] = useState<string | null>(initialPersistence.active?.activeDivergenceBoardId || null);
   const [isLoadingDivergence, setIsLoadingDivergence] = useState(false);
   const [rerollingSingleId, setRerollingSingleId] = useState<string | null>(null);
   const [divergenceError, setDivergenceError] = useState<string | null>(null);
@@ -244,6 +248,7 @@ export default function App() {
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const chosenTake = takes.find((t) => t.id === selectedTakeId);
+  const activeDivergenceBoardIndex = Math.max(0, divergenceBoards.findIndex((board) => board.id === activeDivergenceBoardId));
   const workingTitle =
     document?.core?.title ||
     chosenTake?.title ||
@@ -266,6 +271,11 @@ export default function App() {
   }, [settings.modelSelection]);
 
   useEffect(() => {
+    if (!activeDivergenceBoardId) return;
+    setDivergenceBoards((boards) => replaceActiveBoardTakes(boards, activeDivergenceBoardId, takes));
+  }, [activeDivergenceBoardId, takes]);
+
+  useEffect(() => {
     if (workspaceWriteBlocked) return;
     const timer = window.setTimeout(() => {
       try {
@@ -284,6 +294,8 @@ export default function App() {
           physics,
           takes,
           selectedTakeId,
+          divergenceBoards,
+          activeDivergenceBoardId,
           settings,
           provenance,
         }));
@@ -293,7 +305,7 @@ export default function App() {
       }
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [canon, currentStage, document, maxUnlockedStage, parse, physics, provenance, selectedTakeId, settings, sparkText, takes, workspaceWriteBlocked]);
+  }, [activeDivergenceBoardId, canon, currentStage, divergenceBoards, document, maxUnlockedStage, parse, physics, provenance, selectedTakeId, settings, sparkText, takes, workspaceWriteBlocked]);
 
   useEffect(() => () => {
     anchorControllerRef.current?.abort();
@@ -406,6 +418,8 @@ export default function App() {
     physics,
     takes,
     selectedTakeId,
+    divergenceBoards,
+    activeDivergenceBoardId,
     settings,
     provenance,
   });
@@ -468,6 +482,8 @@ export default function App() {
     });
     setTakes([]);
     setSelectedTakeId(undefined);
+    setDivergenceBoards([]);
+    setActiveDivergenceBoardId(null);
     setDocument(null);
     setProvenance([]);
     setStreamedSections({});
@@ -539,10 +555,12 @@ export default function App() {
       }
 
       const generatedTakes = await fetchDivergenceTakes(sparkText, currentParse, canon, undefined, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)), operation: "initial" });
-      const initializedTakes = initializeDivergenceBoard(generatedTakes, "initial");
-      setTakes(initializedTakes);
-      if (initializedTakes.length > 0) {
-        setSelectedTakeId(initializedTakes[0].id);
+      const board = createDivergenceBoard(generatedTakes, "initial");
+      setDivergenceBoards([board]);
+      setActiveDivergenceBoardId(board.id);
+      setTakes(board.takes);
+      if (board.takes.length > 0) {
+        setSelectedTakeId(board.takes[0].id);
       }
       setCurrentStage(2);
       setMaxUnlockedStage((prev) => (prev < 2 ? 2 : prev));
@@ -570,10 +588,13 @@ export default function App() {
     setDivergenceError(null);
     try {
       const freshTakes = await fetchDivergenceTakes(sparkText, parse, canon, undefined, settings, { signal: controller.signal, onEvent: (event) => setDivergenceActivity((state) => applyActivityEvent(state, event)), operation: "reroll_all" });
-      const initializedTakes = initializeDivergenceBoard(freshTakes, "reroll_all");
-      setTakes(initializedTakes);
-      if (initializedTakes.length > 0) {
-        setSelectedTakeId(initializedTakes[0].id);
+      const appended = appendDivergenceBoard(divergenceBoards, freshTakes, "reroll_all");
+      const nextBoard = appended.boards[appended.boards.length - 1];
+      setDivergenceBoards(appended.boards);
+      setActiveDivergenceBoardId(appended.activeBoardId);
+      setTakes(nextBoard.takes);
+      if (nextBoard.takes.length > 0) {
+        setSelectedTakeId(nextBoard.takes[0].id);
       }
     } catch (err: any) {
       if (controller.signal.aborted || err?.name === "AbortError") {
@@ -749,6 +770,14 @@ export default function App() {
     );
   };
 
+  const handleSwitchDivergenceBoard = (index: number) => {
+    const board = divergenceBoards[index];
+    if (!board) return;
+    setActiveDivergenceBoardId(board.id);
+    setTakes(board.takes);
+    setSelectedTakeId(board.takes[0]?.id);
+  };
+
   // Proceed from Stage 2 (DIVERGENCE) -> Stage 3 (PHYSICS)
   const handleProceedToPhysics = () => {
     setCurrentStage(3);
@@ -848,6 +877,8 @@ export default function App() {
     setPhysics(restored.physics);
     setTakes(restored.takes);
     setSelectedTakeId(restored.selectedTakeId || undefined);
+    setDivergenceBoards(restored.divergenceBoards);
+    setActiveDivergenceBoardId(restored.activeDivergenceBoardId);
     setSettings(restored.settings);
     setProvenance(restored.provenance);
     setStreamedSections({});
@@ -1243,6 +1274,9 @@ export default function App() {
               settings={settings}
               onUpdateSettings={setSettings}
               generationActivity={divergenceActivity.status !== "idle" ? { ...divergenceActivity, task: "divergence", onCancel: handleCancelDivergence, onClearReasoning: () => setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
+              boardIndex={activeDivergenceBoardIndex}
+              boardCount={divergenceBoards.length || 1}
+              onSwitchBoard={handleSwitchDivergenceBoard}
             />
           )}
 

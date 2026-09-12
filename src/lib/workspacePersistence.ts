@@ -1,5 +1,6 @@
 import type {
   CanonConfig,
+  DivergenceBoardGeneration,
   DivergenceTake,
   GenerationProvenance,
   GenerationSettings,
@@ -23,6 +24,8 @@ export interface SavedWorkspaceDraftV2 {
     physics: PhysicsConfig;
     takes: DivergenceTake[];
     selectedTakeId: string | null;
+    divergenceBoards?: DivergenceBoardGeneration[];
+    activeDivergenceBoardId?: string | null;
   };
   generation: {
     settings: GenerationSettings;
@@ -70,6 +73,15 @@ function isTake(value: unknown): value is DivergenceTake {
     && Array.isArray(value.retainedNonNegotiables);
 }
 
+function isDivergenceBoard(value: unknown): value is DivergenceBoardGeneration {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.createdAt === "string"
+    && (value.operation === "initial" || value.operation === "reroll_all")
+    && Array.isArray(value.takes)
+    && value.takes.every(isTake);
+}
+
 function isDocument(value: unknown): value is LoreBibleDocument {
   return isRecord(value)
     && typeof value.id === "string"
@@ -100,6 +112,8 @@ function isWorkspaceDraft(value: unknown): value is SavedWorkspaceDraftV2 {
     && Array.isArray(workflow.takes)
     && workflow.takes.every(isTake)
     && isNullableString(workflow.selectedTakeId)
+    && (workflow.divergenceBoards === undefined || (Array.isArray(workflow.divergenceBoards) && workflow.divergenceBoards.every(isDivergenceBoard)))
+    && (workflow.activeDivergenceBoardId === undefined || isNullableString(workflow.activeDivergenceBoardId))
     && isSettings(generation.settings)
     && isRecord(selection)
     && isNullableString(selection.profileId)

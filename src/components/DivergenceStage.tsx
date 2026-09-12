@@ -38,6 +38,9 @@ interface DivergenceStageProps {
   settings?: GenerationSettings;
   onUpdateSettings?: (settings: GenerationSettings) => void;
   generationActivity?: GenerationActivityProps;
+  boardIndex?: number;
+  boardCount?: number;
+  onSwitchBoard?: (index: number) => void;
 }
 
 interface EditFormState {
@@ -78,6 +81,9 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
   settings,
   onUpdateSettings: _onUpdateSettings,
   generationActivity,
+  boardIndex = 0,
+  boardCount = 1,
+  onSwitchBoard,
 }) => {
   // Push further across all 4 (original branch)
   const [pushingTakeId, setPushingTakeId] = useState<string | null>(null);
@@ -206,6 +212,18 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
           <span>{isLoading ? "Cancel Generation" : "Reroll All Angles"}</span>
         </button>
       </div>
+
+      {boardCount > 1 && (
+        <div className="flex items-center justify-between gap-3 border border-[var(--ink-soft)] bg-[var(--vellum-raised)] px-3 py-2">
+          <button type="button" aria-label="Previous angle board" className="btn-tertiary text-xs" disabled={boardIndex <= 0} onClick={() => onSwitchBoard?.(boardIndex - 1)}>
+            <ChevronLeft size={13} /> Previous Board
+          </button>
+          <span aria-label={`Board ${boardIndex + 1} of ${boardCount}`} className="font-mono-ui text-[11px] text-[var(--graphite)]">Board {boardIndex + 1} of {boardCount}</span>
+          <button type="button" aria-label="Next angle board" className="btn-tertiary text-xs" disabled={boardIndex >= boardCount - 1} onClick={() => onSwitchBoard?.(boardIndex + 1)}>
+            Next Board <ChevronRight size={13} />
+          </button>
+        </div>
+      )}
 
       {generationActivity && <GenerationActivity {...generationActivity} />}
 

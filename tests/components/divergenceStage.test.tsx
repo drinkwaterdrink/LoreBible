@@ -29,3 +29,23 @@ test("Divergence proceed action remains reachable and full width on mobile", () 
   expect(html).toContain("w-full sm:w-auto");
   expect(html).toContain("safe-area-inset-bottom");
 });
+
+test("Divergence exposes full-board history separately from take versions", () => {
+  const html = renderToString(<DivergenceStage
+    takes={[take]}
+    selectedTakeId={take.id}
+    onSelectTake={() => undefined}
+    onRerollAll={() => undefined}
+    onPushFurther={() => undefined}
+    onProceed={() => undefined}
+    isLoading={false}
+    sparkText="A premise"
+    boardIndex={1}
+    boardCount={2}
+    onSwitchBoard={() => undefined}
+  />);
+
+  expect(html).toContain("Board 2 of 2");
+  expect(html).toContain('aria-label="Previous angle board"');
+  expect(html).toContain('aria-label="Next angle board"');
+});

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createSavedProjectV2 } from "../../src/lib/projectPersistence";
 import { captureSavedProject, captureWorkspaceDraft, restoreSavedProject, restoreWorkspaceDraft } from "../../src/lib/projectWorkspace";
+import { createDivergenceBoard } from "../../src/lib/divergenceBoards";
 
 const parse = { franchise: null, nonNegotiables: ["Anchor"], registerWords: [], userRole: null, openNegotiables: [] } as any;
 const canon = { enabled: false, franchiseName: null, fidelity: "Adjacent", explanation: "" } as any;
@@ -110,4 +111,32 @@ test("legacy V2 project mislabeled Stage 1 reopens at Refine when forged content
   const restored = restoreSavedProject(project);
   expect(restored.currentStage).toBe(5);
   expect(restored.maxUnlockedStage).toBe(5);
+});
+
+test("saved project and active autosave preserve complete divergence boards", () => {
+  const first = createDivergenceBoard([take("old")], "initial", { id: "board-old", createdAt: "2026-01-01T00:00:00.000Z" });
+  const second = createDivergenceBoard([take("new")], "reroll_all", { id: "board-new", createdAt: "2026-01-02T00:00:00.000Z" });
+  const state = {
+    document,
+    currentStage: 2 as const,
+    maxUnlockedStage: 3 as const,
+    sparkText: "Original spark",
+    parse,
+    canon,
+    physics,
+    takes: second.takes,
+    divergenceBoards: [first, second],
+    activeDivergenceBoardId: "board-new",
+    selectedTakeId: second.takes[0].id,
+    settings,
+    provenance: [],
+  };
+
+  const restoredProject = restoreSavedProject(captureSavedProject(state));
+  expect(restoredProject.divergenceBoards.map((board) => board.id)).toEqual(["board-old", "board-new"]);
+  expect(restoredProject.activeDivergenceBoardId).toBe("board-new");
+
+  const restoredDraft = restoreWorkspaceDraft(captureWorkspaceDraft({ ...state, document: null }));
+  expect(restoredDraft.divergenceBoards.map((board) => board.id)).toEqual(["board-old", "board-new"]);
+  expect(restoredDraft.takes[0].id).toBe(second.takes[0].id);
 });

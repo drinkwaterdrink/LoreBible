@@ -1,5 +1,6 @@
 import type {
   CanonConfig,
+  DivergenceBoardGeneration,
   DivergenceTake,
   GenerationProvenance,
   GenerationSettings,
@@ -8,6 +9,7 @@ import type {
   SparkParse,
 } from "../types";
 import { createSavedProjectV2, type SavedLoreBibleProjectV2 } from "./projectPersistence";
+import { migrateLegacyDivergenceBoards } from "./divergenceBoards";
 import type { SavedWorkspaceDraftV2, WorkflowStage } from "./workspacePersistence";
 
 export interface ProjectWorkspaceState {
@@ -20,20 +22,26 @@ export interface ProjectWorkspaceState {
   physics: PhysicsConfig;
   takes: DivergenceTake[];
   selectedTakeId: string | null;
+  divergenceBoards: DivergenceBoardGeneration[];
+  activeDivergenceBoardId: string | null;
   settings: GenerationSettings;
   provenance: GenerationProvenance[];
 }
 
-export type ProjectWorkspaceCapture = Omit<ProjectWorkspaceState, "selectedTakeId"> & {
+export type ProjectWorkspaceCapture = Omit<ProjectWorkspaceState, "selectedTakeId" | "divergenceBoards" | "activeDivergenceBoardId"> & {
   selectedTakeId: string | null | undefined;
+  divergenceBoards?: DivergenceBoardGeneration[];
+  activeDivergenceBoardId?: string | null;
 };
 
 export interface ActiveWorkspaceState extends Omit<ProjectWorkspaceState, "document"> {
   document: LoreBibleDocument | null;
 }
 
-export type ActiveWorkspaceCapture = Omit<ActiveWorkspaceState, "selectedTakeId"> & {
+export type ActiveWorkspaceCapture = Omit<ActiveWorkspaceState, "selectedTakeId" | "divergenceBoards" | "activeDivergenceBoardId"> & {
   selectedTakeId: string | null | undefined;
+  divergenceBoards?: DivergenceBoardGeneration[];
+  activeDivergenceBoardId?: string | null;
 };
 
 function normalizeStage(value: unknown, fallback: WorkflowStage): WorkflowStage {
@@ -77,6 +85,7 @@ export function restoredProjectStages(project: SavedLoreBibleProjectV2): { curre
 }
 
 export function captureSavedProject(state: ProjectWorkspaceCapture): SavedLoreBibleProjectV2 {
+  const boardState = migrateLegacyDivergenceBoards(state.divergenceBoards, state.takes, state.activeDivergenceBoardId);
   const selectedTakeId = selectExistingTakeId(state.takes, state.selectedTakeId);
   const chosenTake = state.takes.find((take) => take.id === selectedTakeId);
   const document: LoreBibleDocument = {
@@ -100,6 +109,8 @@ export function captureSavedProject(state: ProjectWorkspaceCapture): SavedLoreBi
       physics: state.physics,
       takes: state.takes,
       selectedTakeId,
+      divergenceBoards: boardState.boards,
+      activeDivergenceBoardId: boardState.activeBoardId,
     },
     generation: {
       settings: { ...state.settings, modelSelection },
@@ -114,7 +125,9 @@ export function restoreSavedProject(project: SavedLoreBibleProjectV2): ProjectWo
   const takes = project.workflow.takes.length > 0
     ? project.workflow.takes
     : project.document.takes || (project.document.chosenTake ? [project.document.chosenTake] : []);
-  const selectedTakeId = selectExistingTakeId(takes, project.workflow.selectedTakeId || project.document.chosenTake?.id);
+  const boardState = migrateLegacyDivergenceBoards(project.workflow.divergenceBoards, takes, project.workflow.activeDivergenceBoardId);
+  const activeTakes = boardState.boards.find((board) => board.id === boardState.activeBoardId)?.takes || takes;
+  const selectedTakeId = selectExistingTakeId(activeTakes, project.workflow.selectedTakeId || project.document.chosenTake?.id);
   const modelSelection = project.generation.modelSelection || project.generation.settings.modelSelection || { profileId: null, modelId: null };
   return {
     document: project.document,
@@ -124,14 +137,17 @@ export function restoreSavedProject(project: SavedLoreBibleProjectV2): ProjectWo
     parse: project.workflow.sparkParse || project.document.parse || null,
     canon: project.workflow.canon || project.document.canon,
     physics: project.workflow.physics || project.document.physics,
-    takes,
+    takes: activeTakes,
     selectedTakeId,
+    divergenceBoards: boardState.boards,
+    activeDivergenceBoardId: boardState.activeBoardId,
     settings: { ...project.generation.settings, modelSelection },
     provenance: project.generation.provenance || [],
   };
 }
 
 export function captureWorkspaceDraft(state: ActiveWorkspaceCapture, updatedAt = new Date().toISOString()): SavedWorkspaceDraftV2 {
+  const boardState = migrateLegacyDivergenceBoards(state.divergenceBoards, state.takes, state.activeDivergenceBoardId);
   const selectedTakeId = selectExistingTakeId(state.takes, state.selectedTakeId);
   const modelSelection = state.settings.modelSelection || { profileId: null, modelId: null };
   return {
@@ -146,6 +162,8 @@ export function captureWorkspaceDraft(state: ActiveWorkspaceCapture, updatedAt =
       physics: state.physics,
       takes: state.takes,
       selectedTakeId,
+      divergenceBoards: boardState.boards,
+      activeDivergenceBoardId: boardState.activeBoardId,
     },
     generation: {
       settings: { ...state.settings, modelSelection },
@@ -159,7 +177,9 @@ export function captureWorkspaceDraft(state: ActiveWorkspaceCapture, updatedAt =
 export function restoreWorkspaceDraft(draft: SavedWorkspaceDraftV2): ActiveWorkspaceState {
   const currentStage = normalizeStage(draft.workflow.currentStage, 1);
   const maxUnlockedStage = normalizeStage(draft.workflow.maxUnlockedStage, currentStage);
-  const selectedTakeId = selectExistingTakeId(draft.workflow.takes, draft.workflow.selectedTakeId);
+  const boardState = migrateLegacyDivergenceBoards(draft.workflow.divergenceBoards, draft.workflow.takes, draft.workflow.activeDivergenceBoardId);
+  const takes = boardState.boards.find((board) => board.id === boardState.activeBoardId)?.takes || draft.workflow.takes;
+  const selectedTakeId = selectExistingTakeId(takes, draft.workflow.selectedTakeId);
   const modelSelection = draft.generation.modelSelection || draft.generation.settings.modelSelection || { profileId: null, modelId: null };
   return {
     document: draft.document,
@@ -169,8 +189,10 @@ export function restoreWorkspaceDraft(draft: SavedWorkspaceDraftV2): ActiveWorks
     parse: draft.workflow.sparkParse,
     canon: draft.workflow.canon,
     physics: draft.workflow.physics,
-    takes: draft.workflow.takes,
+    takes,
     selectedTakeId,
+    divergenceBoards: boardState.boards,
+    activeDivergenceBoardId: boardState.activeBoardId,
     settings: { ...draft.generation.settings, modelSelection },
     provenance: draft.generation.provenance || [],
   };
