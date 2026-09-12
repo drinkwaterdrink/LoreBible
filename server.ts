@@ -31,6 +31,7 @@ import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./
 import { createModelGateway, ModelGatewayError, type ModelGateway } from "./server/model/gateway.js";
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
+import { selectForgeBundleSections } from "./server/generation/forgeResume.js";
 import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
 import { APP_VERSION } from "./src/version.js";
 import { RUNTIME_CAPABILITIES } from "./src/lib/runtimeDiagnostics.js";
@@ -1973,8 +1974,12 @@ Emit strictly valid JSON matching the schema for this bundle.`;
         bundleResult.worldPhysics.rules = sanitizeSectionEntries("rules", bundleResult.worldPhysics.rules);
       }
 
+      // Provider-compatible endpoints occasionally append top-level metadata
+      // such as `keys`. Merge only the schema-owned sections.
+      const selectedBundle = selectForgeBundleSections(bundleResult, bundle.keys);
+      if (selectedBundle.ignoredKeys.length) sendEvent("log", { stage: bundle.keys[0], label: `${bundle.name} ignored provider metadata: ${selectedBundle.ignoredKeys.join(", ")}`, status: "done" });
       // Merge and stream sections as they arrive
-      for (const [key, val] of Object.entries(bundleResult)) {
+      for (const [key, val] of Object.entries(selectedBundle.sections)) {
         const sanitizedVal = Array.isArray(val) && key !== "proceduralRolls"
           ? sanitizeSectionEntries(key, val)
           : val;
