@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fetchDivergenceTakes, fetchVariantsApi, generatePremiseSuggestionsApi, parseSparkApi, pushEntryApi, regenerateSectionApi, rerollEntryApi, streamForgeDocument } from "../../src/services/geminiService";
+import { fetchDivergenceTakes, fetchSingleDivergenceTake, fetchVariantsApi, generatePremiseSuggestionsApi, parseSparkApi, pushEntryApi, regenerateSectionApi, rerollEntryApi, streamForgeDocument } from "../../src/services/geminiService";
 import { GenerationRequestError } from "../../src/contracts/generationFailure";
 
 test("parseSparkApi forwards the caller abort signal", async () => {
@@ -84,6 +84,12 @@ test("Forge client dispatches structured progress and cancellation", async () =>
     });
     expect(seen).toEqual(["Bundle 1", "Forge stopped."]);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("single-angle reroll forwards cancellation without serializing the signal", async () => {
+  const originalFetch=globalThis.fetch; const controller=new AbortController(); let init:RequestInit|undefined;
+  globalThis.fetch=(async(_input,options)=>{init=options;return new Response(JSON.stringify({take:{id:"new",title:"New",pitch:"Pitch",genreTone:"Warm",angle:"Social",retainedNonNegotiables:[]}}),{status:200,headers:{"content-type":"application/json"}});}) as typeof fetch;
+  try{await fetchSingleDivergenceTake({sparkText:"x",parse:{} as any,canon:{} as any,targetAngle:"Social",signal:controller.signal});expect(init?.signal).toBe(controller.signal);expect(JSON.parse(String(init?.body))).not.toHaveProperty("signal");}finally{globalThis.fetch=originalFetch;}
 });
 
 test("push-further sends the exact selected take and operation to the server", async () => {

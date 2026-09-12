@@ -49,3 +49,9 @@ test("Divergence exposes full-board history separately from take versions", () =
   expect(html).toContain('aria-label="Previous angle board"');
   expect(html).toContain('aria-label="Next angle board"');
 });
+
+test("a running single-angle reroll exposes a dedicated cancel action",()=>{
+  const html=renderToString(<DivergenceStage takes={[take]} selectedTakeId={take.id} onSelectTake={()=>undefined} onRerollAll={()=>undefined} onPushFurther={()=>undefined} onRerollSingleTake={()=>undefined} onCancelSingleTake={()=>undefined} rerollingSingleId={take.id} onProceed={()=>undefined} isLoading={false} sparkText="A premise"/>);
+  expect(html).toContain("Cancel reroll");
+  expect(html).toContain('aria-label="Cancel reroll for A Quiet Branch"');
+});

@@ -25,6 +25,7 @@ interface DivergenceStageProps {
   onRerollAll: () => void;
   onPushFurther: (take: DivergenceTake, pushInstruction: string) => void;
   onRerollSingleTake?: (take: DivergenceTake) => Promise<void> | void;
+  onCancelSingleTake?: () => void;
   onSteerSingleTake?: (take: DivergenceTake, steerInstruction: string) => Promise<void> | void;
   onUpdateTake?: (updatedTake: DivergenceTake) => void;
   onSwitchTakeVersion?: (takeSlotId: string, versionIndex: number) => void;
@@ -68,6 +69,7 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
   onRerollAll,
   onPushFurther,
   onRerollSingleTake,
+  onCancelSingleTake,
   onSteerSingleTake,
   onUpdateTake,
   onSwitchTakeVersion,
@@ -404,6 +406,7 @@ export const DivergenceStage: React.FC<DivergenceStageProps> = ({
                       <span>{isRerollingThis ? "Inking..." : "Reroll Angle"}</span>
                     </button>
                   )}
+                  {isRerollingThis && onCancelSingleTake && <button type="button" onClick={onCancelSingleTake} aria-label={`Cancel reroll for ${take.title}`} className="px-2 py-1 text-[10px] font-apparatus uppercase tracking-wider rounded-[2px] border border-[var(--rubric)] text-[var(--rubric)] bg-[var(--vellum)] flex items-center gap-1"><X size={10}/><span>Cancel reroll</span></button>}
 
                   {onSteerSingleTake && (
                     <button

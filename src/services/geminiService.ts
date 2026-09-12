@@ -154,11 +154,14 @@ export async function fetchSingleDivergenceTake(params: {
   steerInstruction?: string;
   settings?: GenerationSettings;
   rerollType?: SemanticRerollType;
+  signal?: AbortSignal;
 }): Promise<DivergenceTake> {
+  const { signal, ...body } = params;
   const res = await fetch("/api/divergence-single", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok) {
     return throwResponseFailure(res, `Single divergence failed with HTTP ${res.status}`);

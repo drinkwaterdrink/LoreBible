@@ -639,12 +639,16 @@ export default function App() {
 
   // Reroll single individual angle
   const handleRerollSingleTake = async (targetTake: DivergenceTake) => {
+    divergenceControllerRef.current?.abort();
+    const controller = new AbortController();
+    divergenceControllerRef.current = controller;
     setRerollingSingleId(targetTake.id);
+    setDivergenceActivity(activeActivity("divergence", `Rerolling ${targetTake.title}`));
     setDivergenceError(null);
     try {
       let currentParse = parse;
       if (!currentParse || currentParse.nonNegotiables.length === 0) {
-        currentParse = await parseSparkApi(sparkText, settings);
+        currentParse = await parseSparkApi(sparkText, settings, controller.signal);
         setParse(currentParse);
       }
       const freshTake = await fetchSingleDivergenceTake({
@@ -654,6 +658,7 @@ export default function App() {
         targetAngle: targetTake.angle,
         currentTake: targetTake,
         settings,
+        signal: controller.signal,
       });
 
       const takeWithHistory = appendDivergenceVersion(targetTake, freshTake, "reroll");
@@ -670,10 +675,12 @@ export default function App() {
         setSelectedTakeId(freshTake.id);
       }
     } catch (err: any) {
+      if(controller.signal.aborted||err?.name==="AbortError"){setDivergenceActivity(state=>({...state,status:"cancelled",progress:{task:"divergence",phase:"cancelled",label:"Angle reroll stopped"}}));return;}
       console.error("Single take reroll error:", err);
       setDivergenceError(err?.message || "Failed to reroll this angle.");
     } finally {
       setRerollingSingleId(null);
+      if(divergenceControllerRef.current===controller)divergenceControllerRef.current=null;
     }
   };
 
@@ -1261,6 +1268,7 @@ export default function App() {
               onRerollAll={handleRerollDivergence}
               onPushFurther={handlePushFurther}
               onRerollSingleTake={handleRerollSingleTake}
+              onCancelSingleTake={handleCancelDivergence}
               onSteerSingleTake={handleSteerSingleTake}
               onUpdateTake={handleUpdateTake}
               onSwitchTakeVersion={handleSwitchTakeVersion}
