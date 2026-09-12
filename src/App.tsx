@@ -207,6 +207,7 @@ export default function App() {
   const [isForging, setIsForging] = useState(false);
   const [forgeError, setForgeError] = useState<string | null>(null);
   const [forgeActivity, setForgeActivity] = useState<ActivityState>(() => ({ ...activeActivity("forge", "Ready"), startedAt: null, status: "idle", lastEventAt: null }));
+  const [forgeExecutionMode, setForgeExecutionMode] = useState<"continuous" | "step_by_step">("continuous");
   const forgeControllerRef = useRef<AbortController | null>(null);
 
   // Vault & Modals
@@ -792,7 +793,7 @@ export default function App() {
   };
 
   // Proceed from Stage 3 (PHYSICS) -> Stage 4 (FORGE)
-  const handleStartForge = async () => {
+  const handleStartForge = async (resumeExisting = false) => {
     const chosenTake = takes.find((t) => t.id === selectedTakeId) || takes[0];
     forgeControllerRef.current?.abort();
     const controller = new AbortController();
@@ -802,8 +803,7 @@ export default function App() {
     setMaxUnlockedStage((prev) => (prev < 4 ? 4 : prev));
     setIsForging(true);
     setForgeError(null);
-    setBuildLogs([]);
-    setStreamedSections({});
+    if(!resumeExisting){setBuildLogs([]);setStreamedSections({});}
 
     await streamForgeDocument(
       {
@@ -813,6 +813,8 @@ export default function App() {
         physics,
         chosenTake,
         settings,
+        resumeSections:resumeExisting?streamedSections:{},
+        executionMode: forgeExecutionMode,
       },
       {
         onLog: (log) => {
@@ -837,6 +839,21 @@ export default function App() {
           const project = buildSavedProject(doc, 5, 5);
           const nextStore = saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, project);
           commitProjectStore(nextStore.projects);
+        },
+        onCheckpoint: (_doc, nextBundleIndex) => {
+          setIsForging(false);
+          setForgeError(null);
+          setForgeActivity((state) => ({
+            ...state,
+            status: "complete",
+            progress: {
+              task: "forge",
+              phase: "complete",
+              label: `Bundle ${nextBundleIndex} saved. Ready for the next bundle.`,
+              completedSteps: nextBundleIndex,
+              totalSteps: 6,
+            },
+          }));
         },
         onError: (err) => {
           console.error("Forge error:", err);
@@ -1292,9 +1309,11 @@ export default function App() {
             <PhysicsStage
               physics={physics}
               onChangePhysics={setPhysics}
-              onProceed={handleStartForge}
+              onProceed={() => void handleStartForge(false)}
               isCanonActive={canon.enabled}
               chosenTitle={chosenTake?.title || workingTitle}
+              forgeExecutionMode={forgeExecutionMode}
+              onChangeForgeExecutionMode={setForgeExecutionMode}
             />
           )}
 
@@ -1307,7 +1326,9 @@ export default function App() {
               onProceedToRefine={handleProceedToRefine}
               workingTitle={workingTitle}
               forgeError={forgeError}
-              onRetryForge={handleStartForge}
+              onRetryForge={() => void handleStartForge(true)}
+              hasCheckpoint={Object.keys(streamedSections).length > 0}
+              onContinueForge={() => void handleStartForge(true)}
               generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
             />
           )}

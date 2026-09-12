@@ -14,6 +14,8 @@ interface ForgeStageProps {
   forgeError?: string | null;
   onRetryForge?: () => void;
   generationActivity?: GenerationActivityProps;
+  hasCheckpoint?: boolean;
+  onContinueForge?: () => void;
 }
 
 export const ForgeStage: React.FC<ForgeStageProps> = ({
@@ -26,6 +28,8 @@ export const ForgeStage: React.FC<ForgeStageProps> = ({
   forgeError,
   onRetryForge,
   generationActivity,
+  hasCheckpoint = false,
+  onContinueForge,
 }) => {
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -50,6 +54,12 @@ export const ForgeStage: React.FC<ForgeStageProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {!isForging && !document && hasCheckpoint && !forgeError && onContinueForge && (
+            <button type="button" onClick={onContinueForge} className="btn-primary text-xs flex items-center gap-1.5">
+              <Feather size={12} />
+              <span>Continue with next bundle</span>
+            </button>
+          )}
           {forgeError && onRetryForge && (
             <button
               id="retry-forge-header-btn"

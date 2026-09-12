@@ -67,14 +67,15 @@ test("premise generation forwards the selected model, activity events, and abort
 test("Forge client dispatches structured progress and cancellation", async () => {
   const originalFetch = globalThis.fetch;
   const encoder = new TextEncoder();
-  globalThis.fetch = (async () => new Response(new ReadableStream({ start(stream) {
+  let body:any;
+  globalThis.fetch = (async (_input,init) => {body=JSON.parse(String(init?.body));return new Response(new ReadableStream({ start(stream) {
     stream.enqueue(encoder.encode('event: progress\ndata: {"type":"progress","task":"forge","phase":"forge_bundle","label":"Bundle 1","completedSteps":0,"totalSteps":6}\n\n'));
     stream.enqueue(encoder.encode('event: cancelled\ndata: {"type":"cancelled","task":"forge","message":"Forge stopped."}\n\n'));
     stream.close();
-  } }), { status: 200 })) as unknown as typeof fetch;
+  } }), { status: 200 });}) as unknown as typeof fetch;
   const seen: string[] = [];
   try {
-    await streamForgeDocument({ sparkText: "x", parse: {} as any, canon: {} as any, physics: {} as any, chosenTake: {} as any }, {
+    await streamForgeDocument({ sparkText: "x", parse: {} as any, canon: {} as any, physics: {} as any, chosenTake: {} as any, resumeSections:{core:{title:"Saved"}}, executionMode:"continuous" }, {
       onLog: () => undefined,
       onSection: () => undefined,
       onComplete: () => undefined,
@@ -83,6 +84,8 @@ test("Forge client dispatches structured progress and cancellation", async () =>
       onCancelled: (message) => seen.push(message),
     });
     expect(seen).toEqual(["Bundle 1", "Forge stopped."]);
+    expect(body.resumeSections.core.title).toBe("Saved");
+    expect(body.executionMode).toBe("continuous");
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -91,6 +94,8 @@ test("single-angle reroll forwards cancellation without serializing the signal",
   globalThis.fetch=(async(_input,options)=>{init=options;return new Response(JSON.stringify({take:{id:"new",title:"New",pitch:"Pitch",genreTone:"Warm",angle:"Social",retainedNonNegotiables:[]}}),{status:200,headers:{"content-type":"application/json"}});}) as typeof fetch;
   try{await fetchSingleDivergenceTake({sparkText:"x",parse:{} as any,canon:{} as any,targetAngle:"Social",signal:controller.signal});expect(init?.signal).toBe(controller.signal);expect(JSON.parse(String(init?.body))).not.toHaveProperty("signal");}finally{globalThis.fetch=originalFetch;}
 });
+
+test("Forge client reports a saved partial checkpoint separately from completion",async()=>{const originalFetch=globalThis.fetch;const encoder=new TextEncoder();globalThis.fetch=(async()=>new Response(new ReadableStream({start(stream){stream.enqueue(encoder.encode('event: done\ndata: {"type":"done","task":"forge","result":{"document":{"core":{"title":"Saved"}},"complete":false,"nextBundleIndex":2}}\n\n'));stream.close();}}),{status:200})) as any;const seen:string[]=[];try{await streamForgeDocument({sparkText:"x",parse:{} as any,canon:{} as any,physics:{} as any,chosenTake:{} as any},{onLog:()=>{},onSection:()=>{},onComplete:()=>seen.push("complete"),onError:()=>{},onCheckpoint:(_doc,next)=>seen.push(`checkpoint:${next}`)});expect(seen).toEqual(["checkpoint:2"]);}finally{globalThis.fetch=originalFetch;}});
 
 test("push-further sends the exact selected take and operation to the server", async () => {
   const originalFetch = globalThis.fetch;

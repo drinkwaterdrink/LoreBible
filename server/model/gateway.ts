@@ -238,7 +238,19 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
           if (responseReasoning) request.onReasoningDelta?.(responseReasoning);
         }
 
-        if (!text.trim()) throw new ModelGatewayError("The provider returned an empty response.", "PROVIDER_UNAVAILABLE", 502, profile.provider);
+        const reasoning = normalizeProviderReasoning(payload);
+        if (!text.trim()) {
+          const rawFinishReason = payload && typeof payload === "object" && Array.isArray((payload as any).choices)
+            ? (payload as any).choices[0]?.finish_reason
+            : undefined;
+          const finishReason = typeof rawFinishReason === "string" && /^[a-z0-9_.-]{1,32}$/i.test(rawFinishReason)
+            ? ` (finish reason: ${rawFinishReason})`
+            : "";
+          const message = reasoning.text
+            ? `The provider returned reasoning but no final answer${finishReason}. This model may not support the selected structured-generation route.`
+            : `The provider returned no usable final answer${finishReason}.`;
+          throw new ModelGatewayError(message, "PROVIDER_UNAVAILABLE", 502, profile.provider);
+        }
         let parsed: unknown;
         let repaired = false;
         if (request.responseSchema) {
@@ -252,7 +264,6 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
           }
         }
         const root = payload && typeof payload === "object" ? payload as { model?: unknown; usage?: ProviderStreamUsage } : {};
-        const reasoning = normalizeProviderReasoning(payload);
         const clientUsage = usageForClient(root.usage);
         if (!wasStream) {
           request.onUsage?.(clientUsage);

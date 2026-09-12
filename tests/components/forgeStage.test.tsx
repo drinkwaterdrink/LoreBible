@@ -1,0 +1,2 @@
+import {expect,test} from "bun:test";import {renderToString} from "react-dom/server";import {ForgeStage} from "../../src/components/ForgeStage";
+test("a paused checkpoint offers the next bundle without pretending the manuscript is complete",()=>{const html=renderToString(<ForgeStage buildLogs={[]} streamedSections={{core:{title:"Saved"}}} isForging={false} document={null} onProceedToRefine={()=>{}} workingTitle="Saved" hasCheckpoint onContinueForge={()=>{}}/>);expect(html).toContain("Continue with next bundle");expect(html).not.toContain("Review Finished Manuscript");});

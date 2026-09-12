@@ -31,6 +31,8 @@ interface PhysicsStageProps {
   onProceed: () => void;
   isCanonActive: boolean;
   chosenTitle: string;
+  forgeExecutionMode?: "continuous" | "step_by_step";
+  onChangeForgeExecutionMode?: (mode: "continuous" | "step_by_step") => void;
 }
 
 export const PhysicsStage: React.FC<PhysicsStageProps> = ({
@@ -39,6 +41,8 @@ export const PhysicsStage: React.FC<PhysicsStageProps> = ({
   onProceed,
   isCanonActive,
   chosenTitle,
+  forgeExecutionMode = "continuous",
+  onChangeForgeExecutionMode,
 }) => {
   const update = <K extends keyof PhysicsConfig>(field: K, val: PhysicsConfig[K]) => {
     onChangePhysics({
@@ -639,6 +643,30 @@ export const PhysicsStage: React.FC<PhysicsStageProps> = ({
               className="w-full bg-transparent resize-none input-underline font-hand text-lg text-[var(--ink-blue)] leading-snug placeholder:text-[var(--graphite)]/40 placeholder:font-hand"
             />
           </div>
+        </div>
+      </div>
+
+      <div className="manuscript-sheet p-6 space-y-4">
+        <div className="scribe-header">
+          <span>Forge execution</span>
+          <span className="text-[10px] font-mono-ui">Rate-limit control</span>
+        </div>
+        <p className="text-xs text-[var(--graphite)] font-manuscript leading-relaxed">
+          Choose whether Forge runs every remaining bundle automatically or pauses after each validated bundle. Completed bundles are kept if a later request fails.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {([
+            ["continuous", "Continuous", "Run all remaining bundles automatically."],
+            ["step_by_step", "One bundle at a time", "Pause after each bundle so you decide when the next API call begins."],
+          ] as const).map(([value, label, description]) => (
+            <label key={value} className="flex items-start gap-3 border border-[var(--ink-soft)] p-3 cursor-pointer bg-[var(--vellum-raised)]">
+              <input type="radio" name="forge-execution-mode" value={value} checked={forgeExecutionMode === value} onChange={() => onChangeForgeExecutionMode?.(value)} className="mt-0.5" />
+              <span>
+                <span className="block text-xs font-apparatus font-semibold text-[var(--ink)]">{label}</span>
+                <span className="block mt-1 text-[11px] font-manuscript text-[var(--graphite)] leading-relaxed">{description}</span>
+              </span>
+            </label>
+          ))}
         </div>
       </div>
 

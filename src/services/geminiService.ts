@@ -177,6 +177,7 @@ export interface ForgeCallbacks {
   onLog: (log: { stage: string; label: string; status: "pending" | "active" | "done" }) => void;
   onSection: (sectionKey: string, data: any) => void;
   onComplete: (document: LoreBibleDocument) => void;
+  onCheckpoint?: (document: LoreBibleDocument, nextBundleIndex: number) => void;
   onError: (error: string) => void;
   onProgress?: (event: GenerationProgressEvent) => void;
   onUsage?: (usage: GenerationUsage) => void;
@@ -195,6 +196,8 @@ export async function streamForgeDocument(
     physics: PhysicsConfig;
     chosenTake: DivergenceTake;
     settings?: GenerationSettings;
+    resumeSections?: Record<string,unknown>;
+    executionMode?: "continuous"|"step_by_step"|"single_request";
   },
   callbacks: ForgeCallbacks,
   signal?: AbortSignal,
@@ -220,7 +223,14 @@ export async function streamForgeDocument(
       else if (event.type === "output_delta") callbacks.onOutputDelta?.(event.characters);
       else if (event.type === "section") callbacks.onSection(event.key, event.data);
     } });
-    if (terminal.type === "done") callbacks.onComplete((terminal.result as { document: LoreBibleDocument }).document);
+    if (terminal.type === "done") {
+      const result = terminal.result as { document: LoreBibleDocument; complete?: boolean; nextBundleIndex?: number };
+      if (result.complete === false && typeof result.nextBundleIndex === "number") {
+        callbacks.onCheckpoint?.(result.document, result.nextBundleIndex);
+      } else {
+        callbacks.onComplete(result.document);
+      }
+    }
     else if (terminal.type === "cancelled") callbacks.onCancelled?.(terminal.message);
     else callbacks.onError(terminal.message);
   } catch (err: any) {

@@ -31,7 +31,7 @@ import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./
 import { createModelGateway, ModelGatewayError, type ModelGateway } from "./server/model/gateway.js";
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
-import { selectForgeBundleSections } from "./server/generation/forgeResume.js";
+import { createForgeResumePlan, selectForgeBundleSections, type ForgeExecutionMode } from "./server/generation/forgeResume.js";
 import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
 import { APP_VERSION } from "./src/version.js";
 import { RUNTIME_CAPABILITIES } from "./src/lib/runtimeDiagnostics.js";
@@ -1361,7 +1361,7 @@ REQUIREMENTS:
 
 // 3. Document Forge endpoint (Sequential 6-Bundle Generation over SSE)
 app.post("/api/forge", async (req, res) => {
-  const { sparkText, parse, canon, physics, chosenTake, settings } = req.body;
+  const { sparkText, parse, canon, physics, chosenTake, settings, resumeSections = {}, executionMode = "continuous" } = req.body;
   const requestLifecycle = createRequestAbortSignal(req, res);
   const session = createSseSession(res, "forge");
   session.startHeartbeat();
@@ -1390,6 +1390,9 @@ app.post("/api/forge", async (req, res) => {
 
   sendEvent("log", { stage: "init", label: "Reading the spark and canonical registers…", status: "active" });
 
+  let resumePlan;
+  try { resumePlan=createForgeResumePlan(resumeSections,executionMode as ForgeExecutionMode); }
+  catch(error){sendEvent("error",{code:"INVALID_REQUEST",message:error instanceof Error?error.message:"Invalid Forge checkpoint."});return;}
   const doc: Record<string, any> = {
     id: "doc-" + Date.now(),
     title: chosenTake?.title || "Scenario Seed Document",
@@ -1400,6 +1403,7 @@ app.post("/api/forge", async (req, res) => {
     chosenTake,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    ...resumePlan.resumeSections,
   };
 
   // Specific, strongly-typed Entry Schemas so Gemini generates full prose fields instead of empty objects {}
@@ -1903,7 +1907,7 @@ app.post("/api/forge", async (req, res) => {
   }
 
   try {
-    for (let i = 0; i < bundles.length; i++) {
+    for (let i = resumePlan.startBundleIndex; i < resumePlan.endBundleIndexExclusive; i++) {
       const bundle = bundles[i];
       session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Forging bundle ${i + 1} of ${bundles.length}: ${bundle.name}`, completedSteps: i, totalSteps: bundles.length });
       sendEvent("log", {
@@ -1995,6 +1999,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
       session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `${bundle.name} complete`, completedSteps: i + 1, totalSteps: bundles.length });
     }
 
+    if(resumePlan.endBundleIndexExclusive<bundles.length){sendEvent("done",{document:doc,complete:false,nextBundleIndex:resumePlan.endBundleIndexExclusive});return;}
     if (doc.core?.title) {
       doc.title = doc.core.title;
     }

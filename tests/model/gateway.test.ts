@@ -118,6 +118,31 @@ test("gateway keeps invalid structured output actionable and does not fabricate 
   });
 });
 
+test("gateway identifies reasoning-only provider responses without exposing their contents", async () => {
+  const { gateway, profile } = await makeGateway(async () => new Response(JSON.stringify({
+    model: "meta/muse-spark-1.3-contributor",
+    choices: [{ message: { content: "", reasoning_content: "private provider reasoning" }, finish_reason: "stop" }],
+  }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+  try {
+    await gateway.generate({
+      profileId: profile.id,
+      modelId: "meta/muse-spark-1.3-contributor",
+      systemInstruction: "system",
+      userPrompt: "user",
+      reasoningEffort: "low",
+      stageName: "Muse compatibility test",
+      timeoutMs: 5000,
+    });
+    throw new Error("Expected a gateway failure.");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ModelGatewayError);
+    expect((error as Error).message).toContain("reasoning but no final answer");
+    expect((error as Error).message).toContain("finish reason: stop");
+    expect((error as Error).message).not.toContain("private provider reasoning");
+  }
+});
+
 test("gateway accepts a custom model ID saved on the selected profile", async () => {
   const path = `${process.env.TEMP || process.cwd()}\\lore-bible-gateway-test-${crypto.randomUUID()}.json`;
   const store = createProfileStore(path, protector);

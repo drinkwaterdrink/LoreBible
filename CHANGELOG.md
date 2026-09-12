@@ -4,6 +4,28 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.47 — 2026-09-12
+
+### Added
+
+- Stage 3 now offers two Forge execution modes: Continuous runs all remaining bundles, while One bundle at a time pauses after each validated bundle so the user controls when the next provider request begins.
+- A paused Forge checkpoint has a dedicated Continue with next bundle action and is never presented as a finished manuscript.
+- Interrupted Forge runs resume after the last complete contiguous bundle instead of regenerating accepted bundle output.
+
+### Fixed
+
+- Forge now accepts only the sections assigned to the active bundle. Extra top-level provider metadata such as a stray `keys` array is ignored instead of being misread as a lore section and causing errors such as `keys entry 1 is malformed`.
+- Empty model responses now distinguish a reasoning-only response from a response with no usable answer and include a safe finish reason when available. Reasoning contents are not copied into the error.
+
+### Why
+
+- Free and tightly rate-limited APIs can fail when Forge makes several requests back to back. User-paced checkpoints reduce that pressure, preserve completed work, and make slow or interrupted builds diagnosable and resumable.
+- Some compatible-provider models, including Muse-style routes, may finish without a usable assistant answer. More precise diagnostics make this distinguishable from a bad API key without fabricating output.
+
+### Validation boundary
+
+- Automated gateway, client-stream, component, and Forge-resume tests cover checkpoint separation, one-bundle execution, contiguous resume validation, provider-metadata isolation, and safe reasoning-only diagnostics. No paid live-provider call was made, so provider-specific compatibility and rate-limit behavior still require an in-app test.
+
 ## v0.46 — 2026-09-12
 
 ### Added
