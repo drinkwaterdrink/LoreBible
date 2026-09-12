@@ -26,6 +26,7 @@ import { createWindowsDpapiProtector } from "./server/secrets/dpapi.js";
 import { createProfileStore, resolveDefaultProfileStorePath, type ProfileStore } from "./server/secrets/profileStore.js";
 import { registerConnectionRoutes } from "./server/routes/connections.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
+import { registerPremiseSuggestionRoutes } from "./server/routes/premiseSuggestions.js";
 import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./server/projects/projectRepository.js";
 import { createModelGateway, ModelGatewayError, type ModelGateway } from "./server/model/gateway.js";
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
@@ -62,6 +63,8 @@ try {
 } catch (error) {
   console.warn("[Connections] Profile routes unavailable:", error instanceof Error ? error.message : error);
 }
+
+registerPremiseSuggestionRoutes(app, { gateway: modelGateway });
 
 function resolveRequestedModelSelection(value: unknown): ModelSelection | null {
   if (value == null) return null;
