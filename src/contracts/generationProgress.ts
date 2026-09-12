@@ -1,4 +1,4 @@
-export type GenerationTask = "anchors" | "divergence" | "forge";
+export type GenerationTask = "anchors" | "premises" | "divergence" | "forge";
 
 export type GenerationPhase =
   | "requesting"
@@ -44,7 +44,7 @@ export type GenerationStreamEvent =
   | { type: "section"; task: "forge"; key: string; data: unknown }
   | GenerationTerminalEvent;
 
-const TASKS = new Set<GenerationTask>(["anchors", "divergence", "forge"]);
+const TASKS = new Set<GenerationTask>(["anchors", "premises", "divergence", "forge"]);
 const PHASES = new Set<GenerationPhase>(["requesting", "waiting", "validating", "architect", "critic", "writer", "forge_bundle", "retrying", "complete", "cancelled", "error"]);
 
 function record(value: unknown): Record<string, unknown> {

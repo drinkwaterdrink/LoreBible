@@ -23,6 +23,7 @@ import {
 import type { GenerationProgressEvent, GenerationStreamEvent, GenerationUsage } from "../contracts/generationProgress";
 import { consumeGenerationSse } from "./sseStream";
 import { GenerationRequestError, parseGenerationFailurePayload } from "../contracts/generationFailure";
+import { parsePremiseSuggestionSet, type PremiseSuggestionSet } from "../contracts/premiseSuggestions";
 
 async function throwResponseFailure(res: Response, fallback: string): Promise<never> {
   const data = await res.json().catch(() => null);
@@ -39,6 +40,36 @@ export interface ParseSparkResult extends SparkParse {}
 
 export interface DivergenceResult {
   takes: DivergenceTake[];
+}
+
+export async function generatePremiseSuggestionsApi(
+  settings: GenerationSettings,
+  options?: { signal?: AbortSignal; onEvent?: (event: GenerationStreamEvent) => void },
+): Promise<PremiseSuggestionSet> {
+  const res = await fetch("/api/premise-suggestions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({ settings }),
+    signal: options?.signal,
+  });
+  if (!res.ok) return throwResponseFailure(res, `Premise generation failed with HTTP ${res.status}`);
+  const terminal = await consumeGenerationSse(res, {
+    signal: options?.signal,
+    onEvent: (event) => {
+      if (event.type !== "done" && event.type !== "error" && event.type !== "cancelled") options?.onEvent?.(event);
+    },
+  });
+  if (terminal.type === "cancelled") throw new DOMException(terminal.message, "AbortError");
+  if (terminal.type === "error") throw new GenerationRequestError({
+    error: "generation_failed",
+    message: terminal.message,
+    code: terminal.code as any || "INTERNAL_ERROR",
+    action: terminal.action || "retry",
+    retryable: terminal.retryable ?? false,
+    retryAfterMs: terminal.retryAfterMs,
+    operation: terminal.task,
+  }, 0);
+  return parsePremiseSuggestionSet(terminal.result);
 }
 
 export async function parseSparkApi(sparkText: string, settings?: GenerationSettings, signal?: AbortSignal): Promise<ParseSparkResult> {

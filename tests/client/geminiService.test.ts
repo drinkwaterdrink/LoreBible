@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fetchDivergenceTakes, fetchVariantsApi, parseSparkApi, pushEntryApi, regenerateSectionApi, rerollEntryApi, streamForgeDocument } from "../../src/services/geminiService";
+import { fetchDivergenceTakes, fetchVariantsApi, generatePremiseSuggestionsApi, parseSparkApi, pushEntryApi, regenerateSectionApi, rerollEntryApi, streamForgeDocument } from "../../src/services/geminiService";
 import { GenerationRequestError } from "../../src/contracts/generationFailure";
 
 test("parseSparkApi forwards the caller abort signal", async () => {
@@ -30,6 +30,37 @@ test("parseSparkApi preserves structured recovery details", async () => {
     const error = await parseSparkApi("spark").catch((caught) => caught);
     expect(error).toBeInstanceOf(GenerationRequestError);
     expect(error).toMatchObject({ code: "CREDENTIAL_MISSING", action: "open_connections", status: 401 });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("premise generation forwards the selected model, activity events, and abort signal", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const encoder = new TextEncoder();
+  let requestBody: Record<string, any> | undefined;
+  let receivedSignal: AbortSignal | null | undefined;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    requestBody = JSON.parse(String(init?.body));
+    receivedSignal = init?.signal;
+    return new Response(new ReadableStream({ start(stream) {
+      stream.enqueue(encoder.encode('event: progress\ndata: {"type":"progress","task":"premises","phase":"writer","label":"Drafting four fresh premises"}\n\n'));
+      stream.enqueue(encoder.encode('event: done\ndata: {"type":"done","task":"premises","result":{"schemaVersion":1,"suggestions":[{"id":"a","title":"A","premise":"Premise A","category":"Original"},{"id":"b","title":"B","premise":"Premise B","category":"Original"},{"id":"c","title":"C","premise":"Premise C","category":"Original"},{"id":"d","title":"D","premise":"Premise D","category":"Original"}]}}\n\n'));
+      stream.close();
+    } }), { status: 200, headers: { "Content-Type": "text/event-stream" } });
+  }) as typeof fetch;
+  const events: string[] = [];
+  try {
+    const result = await generatePremiseSuggestionsApi({
+      quality: "Balanced",
+      divergenceMode: "Exploratory",
+      authorFlavor: { mode: "Off", strength: "Sprinkle", autoBehavior: "Compatible" },
+      modelSelection: { profileId: "p1", modelId: "vendor/model" },
+    }, { signal: controller.signal, onEvent: (event) => events.push(event.type) });
+
+    expect(requestBody?.settings.modelSelection).toEqual({ profileId: "p1", modelId: "vendor/model" });
+    expect(receivedSignal).toBe(controller.signal);
+    expect(events).toEqual(["progress"]);
+    expect(result.suggestions.map((item) => item.id)).toEqual(["a", "b", "c", "d"]);
   } finally { globalThis.fetch = originalFetch; }
 });
 
