@@ -14,6 +14,7 @@ import {
   fetchDivergenceTakes,
   fetchSingleDivergenceTake,
   streamForgeDocument,
+  generatePremiseSuggestionsApi,
 } from "./services/geminiService";
 import { SidebarRail } from "./components/SidebarRail";
 import { RightMarginPanel } from "./components/RightMarginPanel";
@@ -53,6 +54,7 @@ import { compileGraphPreview, listPreparedProjectGraphs, loadProjectGraph, prepa
 import type { ProjectGraphV1 } from "./contracts/projectGraph";
 import type { ProjectGraphArtifactPreview } from "./lib/projectGraph/artifactCompiler";
 import type { BlueprintPlanV1 } from "./contracts/blueprint";
+import type { PremiseSuggestionSet } from "./contracts/premiseSuggestions";
 import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext";
 import { abortBlueprintRequest, findBlueprintSourceProject, getBlueprintFailure, shouldClearBlueprintPlan } from "./lib/blueprint/previewLifecycle";
 
@@ -168,6 +170,10 @@ export default function App() {
   const [sparkText, setSparkText] = useState<string>(initialPersistence.fallbackSparkText);
   const [parse, setParse] = useState<SparkParse | null>(initialPersistence.active?.parse || null);
   const [isParsingSpark, setIsParsingSpark] = useState(false);
+  const [premiseSuggestions, setPremiseSuggestions] = useState<PremiseSuggestionSet | null>(null);
+  const [isGeneratingPremises, setIsGeneratingPremises] = useState(false);
+  const [premiseActivity, setPremiseActivity] = useState<ActivityState>(() => ({ ...activeActivity("premises", "Ready"), startedAt: null, status: "idle", lastEventAt: null }));
+  const premiseControllerRef = useRef<AbortController | null>(null);
 
   // Canon state
   const [canon, setCanon] = useState<CanonConfig>(initialPersistence.active?.canon || DEFAULT_CANON);
@@ -291,13 +297,40 @@ export default function App() {
 
   useEffect(() => () => {
     anchorControllerRef.current?.abort();
+    premiseControllerRef.current?.abort();
     divergenceControllerRef.current?.abort();
     forgeControllerRef.current?.abort();
   }, []);
 
   const handleCancelAnchors = () => anchorControllerRef.current?.abort();
+  const handleCancelPremises = () => premiseControllerRef.current?.abort();
   const handleCancelDivergence = () => divergenceControllerRef.current?.abort();
   const handleCancelForge = () => forgeControllerRef.current?.abort();
+
+  const handleGeneratePremises = async () => {
+    premiseControllerRef.current?.abort();
+    const controller = new AbortController();
+    premiseControllerRef.current = controller;
+    setIsGeneratingPremises(true);
+    setPremiseActivity(activeActivity("premises", "Requesting four fresh premises"));
+    try {
+      const generated = await generatePremiseSuggestionsApi(settings, {
+        signal: controller.signal,
+        onEvent: (event) => setPremiseActivity((state) => applyActivityEvent(state, event)),
+      });
+      setPremiseSuggestions(generated);
+      setPremiseActivity((state) => ({ ...state, status: "complete", progress: { task: "premises", phase: "complete", label: "Four fresh premises ready", completedSteps: 1, totalSteps: 1 } }));
+    } catch (error: any) {
+      if (controller.signal.aborted || error?.name === "AbortError") {
+        setPremiseActivity((state) => ({ ...state, status: "cancelled", progress: { task: "premises", phase: "cancelled", label: "Premise generation stopped" } }));
+      } else {
+        setPremiseActivity((state) => ({ ...state, status: "error", progress: { task: "premises", phase: "error", label: error?.message || "Premise generation failed" } }));
+      }
+    } finally {
+      setIsGeneratingPremises(false);
+      if (premiseControllerRef.current === controller) premiseControllerRef.current = null;
+    }
+  };
 
   // Explicit Margin Inking handler (User presses button when finished writing)
   const handleAnalyzeSpark = async () => {
@@ -1169,6 +1202,16 @@ export default function App() {
               onOpenMargin={() => setIsMarginOpen(true)}
               settings={settings}
               onUpdateSettings={setSettings}
+              premiseSuggestions={premiseSuggestions}
+              onGeneratePremiseSuggestions={handleGeneratePremises}
+              isGeneratingPremises={isGeneratingPremises}
+              premiseGenerationActivity={premiseActivity.status !== "idle" ? {
+                ...premiseActivity,
+                task: "premises",
+                onCancel: handleCancelPremises,
+                onClearReasoning: () => setPremiseActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })),
+                onOpenConnections: () => setIsSettingsOpen(true),
+              } : undefined}
               generationActivity={(isParsingSpark ? anchorActivity : divergenceActivity).status !== "idle" ? {
                 ...(isParsingSpark ? anchorActivity : divergenceActivity),
                 task: isParsingSpark ? "anchors" : "divergence",

@@ -18,11 +18,11 @@ export interface GenerationActivityProps {
 }
 
 function taskLabel(task: GenerationTask): string {
-  return task === "anchors" ? "Anchor Scribing" : task === "divergence" ? "Divergence" : "Forge";
+  return task === "anchors" ? "Anchor Scribing" : task === "premises" ? "Fresh Premises" : task === "divergence" ? "Divergence" : "Forge";
 }
 
 function cancelLabel(task: GenerationTask): string {
-  return task === "anchors" ? "Stop Scribing" : task === "divergence" ? "Cancel Generation" : "Cancel Forge";
+  return task === "anchors" ? "Stop Scribing" : task === "premises" ? "Stop premise generation" : task === "divergence" ? "Cancel Generation" : "Cancel Forge";
 }
 
 function elapsedLabel(startedAt: number | null, now: number): string {

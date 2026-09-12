@@ -4,6 +4,7 @@ import { Dices, ArrowRight, RotateCcw, Feather, Sparkles, HelpCircle, Check, Boo
 import { GenerationSettings, AuthorId, DivergenceMode, GenerationQuality, AuthorFlavorStrength } from "../types";
 import { AUTHOR_PROFILES } from "../lib/authorProfiles";
 import { GenerationActivity, type GenerationActivityProps } from "./GenerationActivity";
+import type { PremiseSuggestionSet } from "../contracts/premiseSuggestions";
 
 interface SparkStageProps {
   sparkText: string;
@@ -17,6 +18,10 @@ interface SparkStageProps {
   settings?: GenerationSettings;
   onUpdateSettings?: (settings: GenerationSettings) => void;
   generationActivity?: GenerationActivityProps;
+  premiseSuggestions?: PremiseSuggestionSet | null;
+  onGeneratePremiseSuggestions?: () => void;
+  isGeneratingPremises?: boolean;
+  premiseGenerationActivity?: GenerationActivityProps;
 }
 
 export const SparkStage: React.FC<SparkStageProps> = ({
@@ -31,13 +36,16 @@ export const SparkStage: React.FC<SparkStageProps> = ({
   settings,
   onUpdateSettings,
   generationActivity,
+  premiseSuggestions,
+  onGeneratePremiseSuggestions,
+  isGeneratingPremises = false,
+  premiseGenerationActivity,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isTumbling, setIsTumbling] = useState(false);
   const [showCollideExplainer, setShowCollideExplainer] = useState(false);
   const [showCraftSettings, setShowCraftSettings] = useState(false);
-  const [novelSparks, setNovelSparks] = useState<NovelSpark[]>(() => generateNovelSparks(4));
-  const [isRollingSparks, setIsRollingSparks] = useState(false);
+  const [starterSparks] = useState<NovelSpark[]>(() => generateNovelSparks(4));
   const [justInked, setJustInked] = useState(false);
 
   // Auto-grow textarea with bounded limits and preserve scrollability
@@ -54,14 +62,6 @@ export const SparkStage: React.FC<SparkStageProps> = ({
     const rolled = rollCollision();
     onChangeSpark(rolled.combined);
     setTimeout(() => setIsTumbling(false), 500);
-  };
-
-  const handleRollFreshSparks = () => {
-    setIsRollingSparks(true);
-    setTimeout(() => {
-      setNovelSparks(generateNovelSparks(4));
-      setIsRollingSparks(false);
-    }, 280);
   };
 
   const handleSelectExample = (premise: string) => {
@@ -88,6 +88,13 @@ export const SparkStage: React.FC<SparkStageProps> = ({
 
   const wordCount = sparkText.trim() ? sparkText.trim().split(/\s+/).length : 0;
   const isLongInput = sparkText.length > 250;
+  const displayedSparks = premiseSuggestions?.suggestions || starterSparks.map((spark) => ({
+    id: spark.id,
+    title: spark.title,
+    premise: spark.premise,
+    category: spark.category,
+    inspirationNote: spark.sourceInspiration,
+  }));
 
   return (
     <div id="spark-stage-container" className="w-full max-w-[78ch] mx-auto py-6 sm:py-8">
@@ -446,33 +453,36 @@ export const SparkStage: React.FC<SparkStageProps> = ({
         </div>
       </div>
 
-      {/* DYNAMIC TESTED SPARKS SECTION */}
+      {/* PREMISE STARTERS AND EXPLICIT MODEL GENERATION */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-3 border-b border-[var(--ink-soft)] pb-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 border-b border-[var(--ink-soft)] pb-1.5">
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-[var(--ink)] font-apparatus font-semibold">
-              Tested Sparks &amp; Novel Archetypes
+              {premiseSuggestions ? "Generated Premises" : "Premise Starters"}
             </span>
             <span className="text-[9px] text-[var(--graphite)] font-mono-ui">
-              (Anime, Gothic Lit, Sci-Fi, History, AI RP)
+              {premiseSuggestions ? "fresh model output" : "offline examples"}
             </span>
           </div>
 
           <button
-            id="roll-fresh-sparks-btn"
+            id="generate-fresh-premises-btn"
             type="button"
-            onClick={handleRollFreshSparks}
-            className="text-xs font-apparatus text-[var(--gold)] hover:text-[var(--ink)] transition-colors flex items-center gap-1.5 px-2 py-0.5 rounded border border-[var(--ink-soft)] hover:border-[var(--gold)] bg-[var(--vellum-raised)]"
-            title="Generate completely new sparks from wide inspirations"
+            onClick={isGeneratingPremises ? premiseGenerationActivity?.onCancel : onGeneratePremiseSuggestions}
+            disabled={!onGeneratePremiseSuggestions && !isGeneratingPremises}
+            className="text-xs font-apparatus text-[var(--gold)] hover:text-[var(--ink)] transition-colors flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-[var(--ink-soft)] hover:border-[var(--gold)] bg-[var(--vellum-raised)] disabled:opacity-50"
+            title="Uses one model request and may use provider quota"
           >
-            <Sparkles size={12} className={isRollingSparks ? "animate-spin text-[var(--rubric)]" : ""} />
-            <span>Roll Fresh Sparks</span>
+            <Sparkles size={12} className={isGeneratingPremises ? "animate-spin text-[var(--rubric)]" : ""} />
+            <span>{isGeneratingPremises ? "Stop premise generation" : "Generate Fresh Premises"}</span>
           </button>
         </div>
+        <p className="mb-3 text-[10px] text-[var(--graphite)]">Uses one model request only when pressed. Existing premises remain if generation fails or is stopped.</p>
+        {premiseGenerationActivity && <div className="mb-3"><GenerationActivity {...premiseGenerationActivity} /></div>}
 
         {/* 2x2 Grid of Rich Novel Sparks */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {novelSparks.map((spark) => (
+          {displayedSparks.map((spark) => (
             <div
               key={spark.id}
               onClick={() => handleSelectExample(spark.premise)}
@@ -484,7 +494,7 @@ export const SparkStage: React.FC<SparkStageProps> = ({
                     {spark.category}
                   </span>
                   <span className="text-[9px] font-apparatus text-[var(--graphite)] italic">
-                    {spark.sourceInspiration}
+                    {spark.inspirationNote || "Original premise"}
                   </span>
                 </div>
                 <h4 className="text-xs font-semibold text-[var(--ink)] font-apparatus mb-1">
