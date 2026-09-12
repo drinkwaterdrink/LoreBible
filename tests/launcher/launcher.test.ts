@@ -9,7 +9,7 @@ test("launcher starts from its own repository path and polls health without cred
   expect(launcher).toContain("$appRoot = Split-Path -Parent $PSScriptRoot");
   expect(launcher).toContain("/api/health");
   expect(launcher).toContain("Start-Process \"http://localhost:3000\"");
-  expect(launcher).toContain('$expectedVersion = "0.46"');
+  expect(launcher).toContain('$expectedVersion = ([string]$package.version) -replace "\\.0$", ""');
   expect(launcher).toContain('selectedModelGenerationTest');
   expect(launcher).not.toContain("GEMINI_API_KEY");
 });
@@ -31,11 +31,26 @@ test("test launcher uses an isolated port and the server accepts a configured po
   expect(launcher).toContain('$env:PORT = "$testPort"');
   expect(launcher).toContain('http://localhost:$testPort');
   expect(launcher).toContain('LoreBible\\test-logs');
-  expect(launcher).toContain('$expectedVersion = "0.46"');
+  expect(launcher).toContain('$expectedVersion = ([string]$package.version) -replace "\\.0$", ""');
   expect(launcher).toContain('selectedModelGenerationTest');
   expect(server).toContain("process.env.PORT");
   expect(server).not.toContain("const PORT = 3000;");
   expect(launcher).not.toContain("GEMINI_API_KEY");
+});
+
+test("test restart shortcut stops only verified LoreBible listeners on isolated test ports", async () => {
+  const restart = await readFile(join(root, "scripts", "Restart-LoreBible-Test.ps1"), "utf8");
+  const installer = await readFile(join(root, "scripts", "Install-LoreBibleTestShortcut.ps1"), "utf8");
+
+  expect(restart).toContain("3001..3010");
+  expect(restart).toContain("/api/health");
+  expect(restart).toContain("selectedModelGenerationTest");
+  expect(restart).toContain("Stop-Process -Id $listenerPid");
+  expect(restart).toContain("Start-LoreBible-Test.ps1");
+  expect(restart).not.toContain("3000");
+  expect(installer).toContain("LoreBible Test.lnk");
+  expect(installer).toContain("Restart-LoreBible-Test.ps1");
+  expect(installer).not.toContain("apiKey");
 });
 
 test("test launcher selects a free fallback port when an older server owns 3001", async () => {

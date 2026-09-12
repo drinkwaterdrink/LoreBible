@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 $appRoot = Split-Path -Parent $PSScriptRoot
-$expectedVersion = "0.46"
+$package = Get-Content -LiteralPath (Join-Path $appRoot "package.json") -Raw | ConvertFrom-Json
+$expectedVersion = ([string]$package.version) -replace "\.0$", ""
 Set-Location -LiteralPath $appRoot
 
 if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {

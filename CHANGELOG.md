@@ -4,6 +4,22 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.48 — 2026-09-12
+
+### Fixed
+
+- Normal and test launchers now derive the expected application version from `package.json`. A newly updated server is no longer mislabeled as older because of a stale hard-coded launcher version.
+- Added a self-cleaning LoreBible Test restart launcher. It stops only verified LoreBible listeners on isolated test ports 3001–3010, waits for them to close, starts one current test server, and opens its correct URL.
+- Added an installer for a single-click **LoreBible Test** desktop shortcut backed by the restart launcher.
+
+### Why
+
+- Ending one visible process in Task Manager could leave an older child server alive, while launcher version drift made the replacement server fail its own health check. Restarting the test branch should be one deliberate action instead of manual process hunting.
+
+### Validation boundary
+
+- Automated launcher checks cover the shared version source, test-port isolation, verified health probing, scoped process termination, shortcut target, and credential-free arguments. The installed Windows shortcut is separately inspected after creation.
+
 ## v0.47 — 2026-09-12
 
 ### Added
