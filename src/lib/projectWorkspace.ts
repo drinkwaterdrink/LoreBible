@@ -11,6 +11,7 @@ import type {
 import { createSavedProjectV2, type SavedLoreBibleProjectV2 } from "./projectPersistence";
 import { migrateLegacyDivergenceBoards } from "./divergenceBoards";
 import type { SavedWorkspaceDraftV2, WorkflowStage } from "./workspacePersistence";
+import type { BlueprintSelectionV1 } from "../contracts/blueprintSelection";
 
 export interface ProjectWorkspaceState {
   document: LoreBibleDocument;
@@ -24,24 +25,27 @@ export interface ProjectWorkspaceState {
   selectedTakeId: string | null;
   divergenceBoards: DivergenceBoardGeneration[];
   activeDivergenceBoardId: string | null;
+  blueprintSelection: BlueprintSelectionV1 | null;
   settings: GenerationSettings;
   provenance: GenerationProvenance[];
 }
 
-export type ProjectWorkspaceCapture = Omit<ProjectWorkspaceState, "selectedTakeId" | "divergenceBoards" | "activeDivergenceBoardId"> & {
+export type ProjectWorkspaceCapture = Omit<ProjectWorkspaceState, "selectedTakeId" | "divergenceBoards" | "activeDivergenceBoardId" | "blueprintSelection"> & {
   selectedTakeId: string | null | undefined;
   divergenceBoards?: DivergenceBoardGeneration[];
   activeDivergenceBoardId?: string | null;
+  blueprintSelection?: BlueprintSelectionV1 | null;
 };
 
 export interface ActiveWorkspaceState extends Omit<ProjectWorkspaceState, "document"> {
   document: LoreBibleDocument | null;
 }
 
-export type ActiveWorkspaceCapture = Omit<ActiveWorkspaceState, "selectedTakeId" | "divergenceBoards" | "activeDivergenceBoardId"> & {
+export type ActiveWorkspaceCapture = Omit<ActiveWorkspaceState, "selectedTakeId" | "divergenceBoards" | "activeDivergenceBoardId" | "blueprintSelection"> & {
   selectedTakeId: string | null | undefined;
   divergenceBoards?: DivergenceBoardGeneration[];
   activeDivergenceBoardId?: string | null;
+  blueprintSelection?: BlueprintSelectionV1 | null;
 };
 
 function normalizeStage(value: unknown, fallback: WorkflowStage): WorkflowStage {
@@ -111,6 +115,7 @@ export function captureSavedProject(state: ProjectWorkspaceCapture): SavedLoreBi
       selectedTakeId,
       divergenceBoards: boardState.boards,
       activeDivergenceBoardId: boardState.activeBoardId,
+      blueprintSelection: state.blueprintSelection ?? null,
     },
     generation: {
       settings: { ...state.settings, modelSelection },
@@ -141,6 +146,7 @@ export function restoreSavedProject(project: SavedLoreBibleProjectV2): ProjectWo
     selectedTakeId,
     divergenceBoards: boardState.boards,
     activeDivergenceBoardId: boardState.activeBoardId,
+    blueprintSelection: project.workflow.blueprintSelection ?? null,
     settings: { ...project.generation.settings, modelSelection },
     provenance: project.generation.provenance || [],
   };
@@ -164,6 +170,7 @@ export function captureWorkspaceDraft(state: ActiveWorkspaceCapture, updatedAt =
       selectedTakeId,
       divergenceBoards: boardState.boards,
       activeDivergenceBoardId: boardState.activeBoardId,
+      blueprintSelection: state.blueprintSelection ?? null,
     },
     generation: {
       settings: { ...state.settings, modelSelection },
@@ -193,6 +200,7 @@ export function restoreWorkspaceDraft(draft: SavedWorkspaceDraftV2): ActiveWorks
     selectedTakeId,
     divergenceBoards: boardState.boards,
     activeDivergenceBoardId: boardState.activeBoardId,
+    blueprintSelection: draft.workflow.blueprintSelection ?? null,
     settings: { ...draft.generation.settings, modelSelection },
     provenance: draft.generation.provenance || [],
   };

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createSavedProjectV2 } from "../../src/lib/projectPersistence";
 import { captureSavedProject, captureWorkspaceDraft, restoreSavedProject, restoreWorkspaceDraft } from "../../src/lib/projectWorkspace";
 import { createDivergenceBoard } from "../../src/lib/divergenceBoards";
+import { validSelection } from "../blueprint/selectionContract.test";
 
 const parse = { franchise: null, nonNegotiables: ["Anchor"], registerWords: [], userRole: null, openNegotiables: [] } as any;
 const canon = { enabled: false, franchiseName: null, fidelity: "Adjacent", explanation: "" } as any;
@@ -139,4 +140,14 @@ test("saved project and active autosave preserve complete divergence boards", ()
   const restoredDraft = restoreWorkspaceDraft(captureWorkspaceDraft({ ...state, document: null }));
   expect(restoredDraft.divergenceBoards.map((board) => board.id)).toEqual(["board-old", "board-new"]);
   expect(restoredDraft.takes[0].id).toBe(second.takes[0].id);
+});
+
+test("saved and active workspaces preserve Blueprint selection and legacy mundanity exactly", () => {
+  const state = { document, currentStage: 3 as const, maxUnlockedStage: 3 as const, sparkText: "Original spark", parse, canon, physics, takes: [selected], selectedTakeId: selected.id, settings, provenance: [], blueprintSelection: validSelection };
+  const restoredProject = restoreSavedProject(captureSavedProject(state));
+  const restoredDraft = restoreWorkspaceDraft(captureWorkspaceDraft({ ...state, document: null }));
+  expect(restoredProject.blueprintSelection).toEqual(validSelection);
+  expect(restoredDraft.blueprintSelection).toEqual(validSelection);
+  expect(restoredProject.physics.mundanity).toBe(4);
+  expect(restoredProject.blueprintSelection?.everydayLifeDetail).toBe(4);
 });

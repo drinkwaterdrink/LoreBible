@@ -9,6 +9,7 @@ import type {
   PhysicsConfig,
   SparkParse,
 } from "../types";
+import { parseBlueprintSelectionV1, type BlueprintSelectionV1 } from "../contracts/blueprintSelection";
 
 export interface SavedLoreBibleProjectV2 {
   schemaVersion: 2;
@@ -23,6 +24,7 @@ export interface SavedLoreBibleProjectV2 {
     selectedTakeId: string | null;
     divergenceBoards?: DivergenceBoardGeneration[];
     activeDivergenceBoardId?: string | null;
+    blueprintSelection?: BlueprintSelectionV1 | null;
   };
   generation: {
     settings: GenerationSettings;
@@ -135,6 +137,7 @@ function validateProject(value: unknown): value is SavedLoreBibleProjectV2 {
     && isNullableString(workflow.selectedTakeId)
     && (workflow.divergenceBoards === undefined || (Array.isArray(workflow.divergenceBoards) && workflow.divergenceBoards.every(isDivergenceBoard)))
     && (workflow.activeDivergenceBoardId === undefined || isNullableString(workflow.activeDivergenceBoardId))
+    && (workflow.blueprintSelection === undefined || workflow.blueprintSelection === null || parseBlueprintSelectionV1(workflow.blueprintSelection).ok)
     && isSettings(generation.settings)
     && isRecord(selection)
     && isNullableString(selection.profileId)

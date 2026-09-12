@@ -6,6 +6,7 @@ import {
   writeWorkspaceDraft,
   type SavedWorkspaceDraftV2,
 } from "../../src/lib/workspacePersistence";
+import { validSelection } from "../blueprint/selectionContract.test";
 
 function memoryStorage(initial: Record<string, string> = {}, failWrites = false) {
   const values = new Map(Object.entries(initial));
@@ -87,4 +88,18 @@ test("an unavailable workspace store returns a warning instead of crashing start
   const result = readWorkspaceDraft(storage);
   expect(result.draft).toBeNull();
   expect(result.warning).toContain("unavailable");
+});
+
+test("active workspace round-trips a valid Blueprint selection", () => {
+  const storage = memoryStorage();
+  const withBlueprint = { ...draft, workflow: { ...draft.workflow, blueprintSelection: validSelection } };
+  writeWorkspaceDraft(storage, withBlueprint);
+  expect(readWorkspaceDraft(storage).draft?.workflow.blueprintSelection).toEqual(validSelection);
+});
+
+test("an invalid Blueprint selection quarantines the draft instead of partially loading it", () => {
+  const storage = memoryStorage({ [WORKSPACE_DRAFT_KEY]: JSON.stringify({ ...draft, workflow: { ...draft.workflow, blueprintSelection: { ...validSelection, api_key: "forbidden" } } }) });
+  const result = readWorkspaceDraft(storage, () => 909);
+  expect(result.draft).toBeNull();
+  expect(result.recoveryKey).toBe("lore_bible_active_workspace_recovery_909");
 });
