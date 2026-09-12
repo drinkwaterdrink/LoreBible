@@ -4,6 +4,23 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.45 — 2026-09-11
+
+### Fixed
+
+- Structured generation now safely accepts a single fenced or harmlessly wrapped JSON document from providers that add formatting around an otherwise valid response. Invalid output remains an explicit failure and never falls back to invented content.
+- OpenAI-compatible streams now separate thought/reasoning content parts from the answer text, improving Gemini 3.8-style thinking responses and keeping reasoning out of structured JSON parsing.
+- Structured-output errors now identify the provider, model, and response mode, making connection diagnostics more actionable.
+
+### Changed
+
+- Connections & Models is now mobile-first: the profile editor and model catalog have independent scrolling, model search and counts are visible near the picker, custom models are tucked under Advanced model settings, and Save/Test actions remain in a sticky footer.
+- Model favorite buttons and primary mobile actions meet a larger touch target while preserving the desktop two-column layout.
+
+### Validation boundary
+
+- The full automated suite passes (257 tests, 0 failures) and TypeScript typechecking passes. Live Gemini 3.8 provider behavior still requires running the selected-model test with the user's AI Studio or OpenRouter key; this release removes safe formatting/reasoning incompatibilities but does not claim provider availability.
+
 ## v0.44 — 2026-09-11
 
 ### Fixed

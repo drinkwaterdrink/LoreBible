@@ -22,10 +22,32 @@ export interface ProviderStreamResult {
   finishReason?: string;
 }
 
-function textDelta(value: unknown): string {
+function isReasoningPart(part: Record<string, unknown>): boolean {
+  const type = typeof part.type === "string" ? part.type.toLowerCase() : "";
+  return type === "reasoning" || type === "reasoning_content" || type === "thinking" || type === "thought" || typeof part.reasoning === "string" || typeof part.reasoning_content === "string";
+}
+
+export function splitProviderContent(value: unknown): { text: string; reasoning: string } {
+  if (typeof value === "string") return { text: value, reasoning: "" };
+  if (!Array.isArray(value)) return { text: "", reasoning: "" };
+  let text = "";
+  let reasoning = "";
+  for (const part of value) {
+    if (typeof part === "string") { text += part; continue; }
+    if (!part || typeof part !== "object") continue;
+    const record = part as Record<string, unknown>;
+    const partText = typeof record.text === "string" ? record.text : typeof record.content === "string" ? record.content : "";
+    if (!partText) continue;
+    if (isReasoningPart(record)) reasoning += partText;
+    else text += partText;
+  }
+  return { text, reasoning };
+}
+
+function reasoningDelta(value: unknown): string {
   if (typeof value === "string") return value;
-  if (!Array.isArray(value)) return "";
-  return value.map((part) => part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "").join("");
+  if (Array.isArray(value)) return splitProviderContent(value).text;
+  return "";
 }
 
 async function readWithSignal(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal) {
@@ -69,12 +91,18 @@ export async function consumeOpenAICompatibleStream(
     const choice = Array.isArray(payload?.choices) ? payload.choices[0] : null;
     if (typeof choice?.finish_reason === "string") finishReason = choice.finish_reason;
     const delta = choice?.delta;
-    const content = textDelta(delta?.content);
+    const contentParts = splitProviderContent(delta?.content);
+    const content = contentParts.text;
     if (content) { text += content; handlers.onContentDelta?.(content); }
-    const reasoningDelta = typeof delta?.reasoning === "string" ? delta.reasoning : typeof delta?.reasoning_content === "string" ? delta.reasoning_content : "";
-    if (reasoningDelta) {
-      reasoning = appendBoundedReasoning(reasoning, reasoningDelta).text;
-      handlers.onReasoningDelta?.(reasoningDelta);
+    const providerReasoning = reasoningDelta(delta?.reasoning) || reasoningDelta(delta?.reasoning_content);
+    const inlineReasoning = contentParts.reasoning;
+    if (inlineReasoning) {
+      reasoning = appendBoundedReasoning(reasoning, inlineReasoning).text;
+      handlers.onReasoningDelta?.(inlineReasoning);
+    }
+    if (providerReasoning) {
+      reasoning = appendBoundedReasoning(reasoning, providerReasoning).text;
+      handlers.onReasoningDelta?.(providerReasoning);
     }
   };
 

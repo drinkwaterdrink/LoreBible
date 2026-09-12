@@ -52,3 +52,23 @@ test("provider stream rejects an incomplete malformed data frame without echoing
   await expect(consumeOpenAICompatibleStream(response, {}, new AbortController().signal))
     .rejects.toThrow("malformed streaming response");
 });
+
+test("provider stream separates thought content parts from the structured answer", async () => {
+  const content: string[] = [];
+  const reasoning: string[] = [];
+  const body = fragmentedStream([
+    'data: {"choices":[{"delta":{"content":[{"type":"thought","text":"checking the premise"},{"type":"text","text":"{\\"ok\\":true}"}]}}]}\n\n',
+    'data: [DONE]\n\n',
+  ]);
+  const response = new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+
+  const result = await consumeOpenAICompatibleStream(response, {
+    onContentDelta: (delta) => content.push(delta),
+    onReasoningDelta: (delta) => reasoning.push(delta),
+  }, new AbortController().signal);
+
+  expect(result.text).toBe('{"ok":true}');
+  expect(result.reasoning).toBe("checking the premise");
+  expect(content).toEqual(['{"ok":true}']);
+  expect(reasoning).toEqual(["checking the premise"]);
+});

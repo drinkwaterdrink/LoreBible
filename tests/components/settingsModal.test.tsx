@@ -16,8 +16,7 @@ test("connections dialog renders with no saved model selection", () => {
   expect(html).toContain("Connections &amp; Models");
   expect(html).toContain("No saved providers yet.");
   expect(html).toContain("data-connections-scroll-root=\"true\"");
-  expect(html).toContain("id=\"custom-model-id\"");
-  expect(html).toContain("Add model");
+  expect(html).toContain("Advanced model settings");
   expect(html).toContain("value=\"gemini\">Gemini AI Studio");
   expect(html).toContain("Sort models");
   expect(html).toContain("Alphabetical");
@@ -27,6 +26,18 @@ test("connections dialog renders with no saved model selection", () => {
   expect(html).toContain("Favorites stay at the top");
   expect(html).toContain("Copy diagnostics");
   expect(html).not.toContain("value=\"gemini\" disabled=\"\"");
+  expect(html).toContain("Search models");
+  expect(html).toContain("data-connections-model-picker=\"true\"");
+  expect(html).toContain("data-connections-actions=\"true\"");
+  const selectedHtml = renderToString(
+    React.createElement(SettingsModal, {
+      isOpen: true,
+      onClose: () => undefined,
+      selection: { profileId: "saved-profile", modelId: "gemini-3.8-flash" },
+      onSelectionChange: () => undefined,
+    }),
+  );
+  expect(selectedHtml).toContain("Selected model");
 });
 
 test("custom model additions return validation errors instead of throwing through React updates", () => {

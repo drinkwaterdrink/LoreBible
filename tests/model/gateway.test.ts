@@ -76,6 +76,48 @@ test("gateway rejects model IDs that the provider does not report", async () => 
   expect(requests).toEqual(["https://openrouter.ai/api/v1/models"]);
 });
 
+test("gateway accepts a single fenced JSON document from a Gemini-style structured response", async () => {
+  const { gateway, profile } = await makeGateway(async () => new Response(JSON.stringify({
+    model: "gemini-3.8-flash",
+    choices: [{ message: { content: "```json\n{\"candidates\":[\"one\"]}\n```" } }],
+  }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+  const response = await gateway.generate({
+    profileId: profile.id,
+    modelId: "z-ai/glm-5.3",
+    systemInstruction: "system",
+    userPrompt: "user",
+    responseSchema: { type: "object", properties: { candidates: { type: "array" } } },
+    reasoningEffort: "low",
+    stageName: "Structured output test",
+    timeoutMs: 5000,
+  });
+
+  expect(response.parsed).toEqual({ candidates: ["one"] });
+  expect(response.provenance.repaired).toBe(true);
+});
+
+test("gateway keeps invalid structured output actionable and does not fabricate a fallback", async () => {
+  const { gateway, profile } = await makeGateway(async () => new Response(JSON.stringify({
+    model: "gemini-3.8-flash",
+    choices: [{ message: { content: "I need to think about this before returning an answer." } }],
+  }), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+  await expect(gateway.generate({
+    profileId: profile.id,
+    modelId: "z-ai/glm-5.3",
+    systemInstruction: "system",
+    userPrompt: "user",
+    responseSchema: { type: "object", properties: { candidates: { type: "array" } } },
+    reasoningEffort: "low",
+    stageName: "Structured output test",
+    timeoutMs: 5000,
+  })).rejects.toMatchObject({
+    code: "INVALID_STRUCTURED_OUTPUT",
+    message: "The provider returned invalid structured output for openrouter/z-ai/glm-5.3 (json mode). Expected one JSON object or array.",
+  });
+});
+
 test("gateway accepts a custom model ID saved on the selected profile", async () => {
   const path = `${process.env.TEMP || process.cwd()}\\lore-bible-gateway-test-${crypto.randomUUID()}.json`;
   const store = createProfileStore(path, protector);

@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $appRoot = Split-Path -Parent $PSScriptRoot
-$expectedVersion = "0.44"
+$expectedVersion = "0.45"
 $candidatePorts = 3001..3010
 Set-Location -LiteralPath $appRoot
 

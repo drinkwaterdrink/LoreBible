@@ -2,8 +2,9 @@ import { getCatalogForProvider } from "../../src/lib/modelCatalog.js";
 import type { GenerationErrorCode, GenerationRequest, GenerationResponse, JsonSchema, ProviderId } from "../../src/contracts/generation.js";
 import { ProfileStoreError, type ProfileStore } from "../secrets/profileStore.js";
 import { normalizeProviderReasoning } from "./reasoning.js";
-import { consumeOpenAICompatibleStream, type ProviderStreamUsage } from "./providerStream.js";
+import { consumeOpenAICompatibleStream, splitProviderContent, type ProviderStreamUsage } from "./providerStream.js";
 import { createProviderDeadlineController, maxOutputTokensForStage, type ProviderTimeoutKind } from "./providerTimeouts.js";
+import { parseStructuredOutput } from "./structuredOutput.js";
 
 type FetchImplementation = (input: string, init?: RequestInit) => Promise<globalThis.Response>;
 
@@ -38,7 +39,7 @@ function extractProviderMessage(payload: unknown): string {
 
 function contentToText(content: unknown): string {
   if (typeof content === "string") return content;
-  if (Array.isArray(content)) return content.map((part) => typeof part === "string" ? part : part && typeof part === "object" && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "").join("");
+  if (Array.isArray(content)) return splitProviderContent(content).text;
   return content == null ? "" : JSON.stringify(content);
 }
 
@@ -233,12 +234,22 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
           }
           const choice = payload && typeof payload === "object" && Array.isArray((payload as { choices?: unknown }).choices) ? (payload as any).choices[0] : null;
           text = contentToText(choice?.message?.content);
+          const responseReasoning = choice?.message && typeof choice.message === "object" ? splitProviderContent(choice.message.content).reasoning : "";
+          if (responseReasoning) request.onReasoningDelta?.(responseReasoning);
         }
 
         if (!text.trim()) throw new ModelGatewayError("The provider returned an empty response.", "PROVIDER_UNAVAILABLE", 502, profile.provider);
         let parsed: unknown;
+        let repaired = false;
         if (request.responseSchema) {
-          try { parsed = JSON.parse(text); } catch { throw new ModelGatewayError("The provider returned invalid structured output.", "INVALID_STRUCTURED_OUTPUT", 502, profile.provider); }
+          try {
+            const structured = parseStructuredOutput(text);
+            parsed = structured.parsed;
+            text = structured.text;
+            repaired = structured.repaired;
+          } catch {
+            throw new ModelGatewayError(`The provider returned invalid structured output for ${profile.provider}/${request.modelId} (${wasStream ? "stream" : "json"} mode). Expected one JSON object or array.`, "INVALID_STRUCTURED_OUTPUT", 502, profile.provider);
+          }
         }
         const root = payload && typeof payload === "object" ? payload as { model?: unknown; usage?: ProviderStreamUsage } : {};
         const reasoning = normalizeProviderReasoning(payload);
@@ -255,7 +266,7 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
             profileId: profile.id,
             modelRequested: request.modelId,
             modelReported: typeof root.model === "string" ? root.model : null,
-            repaired: false,
+            repaired,
             offlineFallback: false,
             reasoning: streamedReasoning || reasoning.text,
             usage: clientUsage,
