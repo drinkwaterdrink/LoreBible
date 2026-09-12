@@ -10,7 +10,7 @@ function reasoningFromParts(value: unknown): string | undefined {
   for (const part of value) {
     const item = asRecord(part);
     const type = typeof item?.type === "string" ? item.type.toLowerCase() : "";
-    if (!item || (type !== "reasoning" && type !== "reasoning_content" && type !== "thought" && type !== "thinking")) continue;
+    if (!item || (type !== "reasoning" && type !== "reasoning_content" && type !== "thought" && type !== "thinking" && item.thought !== true && item.is_thought !== true)) continue;
     if (typeof item.text === "string") text = appendBoundedReasoning(text, item.text).text;
     else if (typeof item.content === "string") text = appendBoundedReasoning(text, item.content).text;
   }

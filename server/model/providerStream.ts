@@ -24,7 +24,7 @@ export interface ProviderStreamResult {
 
 function isReasoningPart(part: Record<string, unknown>): boolean {
   const type = typeof part.type === "string" ? part.type.toLowerCase() : "";
-  return type === "reasoning" || type === "reasoning_content" || type === "thinking" || type === "thought" || typeof part.reasoning === "string" || typeof part.reasoning_content === "string";
+  return type === "reasoning" || type === "reasoning_content" || type === "thinking" || type === "thought" || part.thought === true || part.is_thought === true || typeof part.reasoning === "string" || typeof part.reasoning_content === "string";
 }
 
 export function splitProviderContent(value: unknown): { text: string; reasoning: string } {
