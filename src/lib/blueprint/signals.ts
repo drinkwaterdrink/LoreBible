@@ -30,11 +30,13 @@ const FAMILIES: PhraseFamily[] = [
   { domain: "information", concept: "secrets", phrases: ["secret", "secrets", "conspiracy", "hidden identity", "hidden identities"] },
   { domain: "conflict", concept: "combat", phrases: ["combat", "war", "warfare", "battle", "battles", "armies", "duels"] },
   { domain: "information", concept: "investigation", phrases: ["investigation", "mystery", "detective", "clues"] },
+  { domain: "culture", concept: "rituals", phrases: ["ritual", "rituals"] },
+  { domain: "culture", concept: "culture", phrases: ["culture", "cultures", "custom", "customs"] },
   { domain: "world", concept: "autonomy", phrases: ["independent agendas", "offscreen activity", "living world", "world autonomy", "npc goals"] },
   { domain: "mode", concept: "sandbox", phrases: ["sandbox", "open exploration", "open world", "free exploration"] },
   { domain: "mode", concept: "arc", phrases: ["story arc", "narrative arc", "quest", "mission", "single weekend", "family visit"] },
   { domain: "scale", concept: "focused", phrases: ["focused romance", "two people", "single weekend", "single location", "small cast"] },
-  { domain: "scale", concept: "wide", phrases: ["large world", "continent", "continents", "multiple kingdoms", "galaxy", "full world", "full world package"] },
+  { domain: "scale", concept: "wide", phrases: ["large world", "massive city", "continent", "continents", "multiple kingdoms", "galaxy", "full world", "full world package"] },
   { domain: "target", concept: "individual_character", phrases: ["individual character", "character card", "single character"] },
   { domain: "target", concept: "scenario_card", phrases: ["scenario card"] },
   { domain: "target", concept: "narrator_world", phrases: ["narrator world"] },
@@ -44,6 +46,7 @@ const FAMILIES: PhraseFamily[] = [
   { domain: "target", concept: "world_book_primary", phrases: ["world book", "worldbook", "lorebook"] },
   { domain: "runtime", concept: "efficient", phrases: ["efficient runtime", "low token budget", "minimal runtime budget"] },
   { domain: "runtime", concept: "expansive", phrases: ["expansive runtime", "expansive runtime budget", "large runtime budget"] },
+  { domain: "runtime", concept: "semantic_recall", phrases: ["semantic recall", "vector retrieval", "embedding retrieval"] },
   { domain: "agency", concept: "player_control", phrases: ["force player decisions", "control player feelings", "script player actions", "force player attraction", "decide player consent"] },
 ];
 

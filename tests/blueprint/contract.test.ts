@@ -10,13 +10,17 @@ const validPlan: BlueprintPlanV1 = {
   buildIntensity: { value: "lean", status: "proposed", reason: "The supplied evidence is intentionally narrow.", evidenceRefs: ["take:pitch"] },
   generationQuality: { value: "balanced", status: "proposed", reason: "The current project setting is balanced.", evidenceRefs: ["settings:generation-quality"] },
   runtimeBudget: { value: "efficient", status: "proposed", reason: "The plan has a small proposed inventory.", evidenceRefs: ["inventory:nodes"] },
+  lorebookScale: { value: "compact", status: "proposed", reason: "The supported inventory is compact.", evidenceRefs: ["inventory:nodes"] },
+  lorebookRange: { min: 10, ideal: 18, max: 25 },
+  principalCastRange: { min: 0, ideal: 0, max: 0 },
+  rosterCastRange: { min: 0, ideal: 0, max: 0 },
   categories: [{
     id: "locations", label: "Locations", purpose: "Ground the scenario in explicit places.", justification: "The premise names a workplace.",
     status: "recommended", detail: "standard", targetRange: { min: 1, ideal: 2, max: 3 }, likelyRuntimeRole: "reference",
     candidateArchitectures: [{ value: "location_reference", status: "proposed", reason: "Places are explicitly named.", evidenceRefs: ["take:pitch"] }],
     userLocked: false, evidenceRefs: ["take:pitch"],
   }],
-  mechanicPacks: [{ id: "social_ecosystem", label: "Social Ecosystem", status: "optional", reason: "Social cues are present but narrow.", evidenceRefs: ["take:pitch"] }],
+  mechanicPacks: [{ id: "social_ecosystem", label: "Social Ecosystem", status: "optional", reason: "Social cues are present but narrow.", evidenceRefs: ["take:pitch"], architectureEffects: ["relationship entries"], runtimeRequirements: [], compilerRules: ["conditional retrieval"], testFixtures: ["near miss"], gracefulFallback: "Focused keywords" }],
   assessments: {
     ordinaryLife: { status: "supported", evidenceRefs: ["take:pitch"], gaps: [], explanation: "Routine evidence is available." },
     worldAutonomy: { status: "thin", evidenceRefs: ["take:pitch"], gaps: ["No independent activity is supplied."], explanation: "The premise does not establish independent activity." },

@@ -186,6 +186,28 @@ test("large casts alone cannot imply a narrator world and a single graph charact
 test("named mechanics follow their explicit activity evidence", () => {
   const output = plan(premiseInput("A living world sandbox with a story arc, mystery, rumors, factions, exploration, daily routines, and a calendar."));
   expect(output.mechanicPacks.map(item => item.id)).toEqual(expect.arrayContaining(["living_world", "mystery_architecture", "rumor_belief_truth", "faction_politics", "exploration", "procedural_ambience", "arc_state", "calendar_schedules"]));
+  for (const pack of output.mechanicPacks) {
+    expect(pack.architectureEffects.length).toBeGreaterThan(0);
+    expect(pack.compilerRules.length).toBeGreaterThan(0);
+    expect(pack.testFixtures.length).toBeGreaterThan(0);
+    expect(pack.gracefulFallback.length).toBeGreaterThan(0);
+  }
+});
+
+test("plans a supported lorebook scale and separates principal from roster cast", () => {
+  const compact = plan(focusedRomance());
+  expect(compact.lorebookScale.value).toBe("compact");
+  expect(compact.lorebookRange.max).toBeLessThanOrEqual(25);
+  const large = plan(premiseInput("A full world package with a massive city, factions, technology, cultures, species, locations, schedules, items, and ordinary daily life."));
+  expect(["large", "massive"]).toContain(large.lorebookScale.value);
+  expect(large.principalCastRange.ideal).toBeGreaterThan(0);
+  expect(large.rosterCastRange.ideal).toBeGreaterThan(large.principalCastRange.ideal);
+});
+
+test("standard category vocabulary stays premise-adaptive", () => {
+  const output = plan(premiseInput("A mystery involving clues, rumors, rituals, and an unusual local culture."));
+  expect(output.categories.map(item => item.label)).toEqual(expect.arrayContaining(["Clues", "Rumors", "Rituals", "Culture"]));
+  expect(output.categories.some(item => item.label === "Technology")).toBe(false);
 });
 
 test("non-negotiables and supported structural system types cite their evidence", () => {

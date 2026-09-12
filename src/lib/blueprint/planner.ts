@@ -82,6 +82,9 @@ const CATEGORY_PROFILES: CategoryProfile[] = [
   { id: "species", label: "Species", concepts: ["species"], purpose: "Describe evidenced species.", role: "reference" },
   { id: "events", label: "Events", concepts: ["events"], purpose: "Organize evidenced event context.", role: "reference" },
   { id: "investigation", label: "Investigation", concepts: ["investigation"], purpose: "Structure the evidenced investigation and clue boundaries.", role: "mixed" },
+  { id: "clues", label: "Clues", concepts: ["investigation"], purpose: "Keep discovery evidence focused and retrievable.", role: "mixed" },
+  { id: "rumors", label: "Rumors", concepts: ["knowledge"], purpose: "Separate circulating claims from established truth.", role: "ambient" },
+  { id: "rituals", label: "Rituals", concepts: ["rituals"], purpose: "Describe evidenced recurring or formal practices.", role: "reference" },
   { id: "factions", label: "Factions", concepts: ["factions"], purpose: "Describe evidenced collective interests and conflicts.", role: "mixed", diagnostic: true },
   { id: "magic_system", label: "Magic System", concepts: ["magic"], purpose: "Define evidenced magical capabilities and limits.", role: "reference", diagnostic: true },
   { id: "secrets", label: "Secrets", concepts: ["secrets"], purpose: "Plan explicitly requested hidden information without exposing facts.", role: "secret", diagnostic: true },
@@ -139,13 +142,15 @@ function recommendMechanicPacks(signals: BlueprintSignal[], mode: BlueprintWorld
     { id: "exploration", label: "Exploration", concepts: ["exploration", "sandbox"], excludedBy: ["exploration"], reason: "Explicit exploration supports discovery planning." },
     { id: "arc_state", label: "Arc State", concepts: ["arc"], reason: "Explicit directed progression supports tracking arc state." },
     { id: "calendar_schedules", label: "Calendar & Schedules", concepts: ["schedules"], reason: "Explicit time structures support schedule planning." },
+    { id: "semantic_recall", label: "Semantic Recall", concepts: ["semantic_recall"], reason: "Explicit semantic retrieval intent supports an embedding-dependent retrieval plan." },
   ];
   return profiles.flatMap<MechanicPackRecommendation>(profile => {
     const evidence = positives(signals, profile.concepts);
     const constraints = exclusions(signals, [profile.id, ...(profile.excludedBy ?? profile.concepts)]);
-    if (constraints.length) return [{ id: profile.id, label: profile.label, status: "ineligible" as const, reason: "An explicit constraint excludes this mechanic, including inferred support.", evidenceRefs: refs(constraints) }];
+    const metadata={architectureEffects:[`Plan ${profile.label} structures only where supported.`],runtimeRequirements:[],compilerRules:["Use conditional retrieval unless an accepted rule requires otherwise."],testFixtures:["Positive and near-miss activation cases."],gracefulFallback:"Use focused keyword entries without advanced runtime behavior."};
+    if (constraints.length) return [{ id: profile.id, label: profile.label, status: "ineligible" as const, reason: "An explicit constraint excludes this mechanic, including inferred support.", evidenceRefs: refs(constraints),...metadata }];
     if (!evidence.length) return [];
-    return [{ id: profile.id, label: profile.label, status: profile.id === "living_world" && mode === "arc" ? "optional" as const : "recommended" as const, reason: profile.reason, evidenceRefs: refs(evidence) }];
+    return [{ id: profile.id, label: profile.label, status: profile.id === "living_world" && mode === "arc" ? "optional" as const : "recommended" as const, reason: profile.reason, evidenceRefs: refs(evidence),...metadata }];
   });
 }
 
@@ -188,6 +193,12 @@ export function createBlueprintPlan(input: BlueprintPlanningInput, options: { cr
   const runtimeValues = new Set(runtimeSignals.map(signal => signal.concept));
   const runtime: RuntimeBudget = runtimeValues.size === 1 ? runtimeSignals[0].concept as RuntimeBudget : "balanced";
   const assessments = assessCoverage(signals, worldMode.value);
+  const inventory = estimateInventory(categories, artifactTargets.map(item => item.value), quality);
+  const wideScale = positives(signals,["wide"]).length > 0;
+  const lorebookScale = inventory.nodes.max > 120 ? "massive" : wideScale || inventory.nodes.max > 60 ? "large" : inventory.nodes.max > 25 ? "standard" : "compact";
+  const scaleRange = { compact:{min:10,ideal:18,max:25},standard:{min:25,ideal:42,max:60},large:{min:60,ideal:90,max:120},massive:{min:120,ideal:185,max:250} }[lorebookScale];
+  const principalCastRange = categories.find(item=>item.id==="principal_cast")?.targetRange ?? {min:0,ideal:lorebookScale==="large"||lorebookScale==="massive"?6:0,max:lorebookScale==="large"||lorebookScale==="massive"?10:0};
+  const rosterCastRange = categories.find(item=>item.id==="roster_cast")?.targetRange ?? {min:0,ideal:lorebookScale==="large"||lorebookScale==="massive"?12:0,max:lorebookScale==="large"||lorebookScale==="massive"?24:0};
   const findings: BlueprintPlanV1["findings"] = [];
   if (worldMode.value !== "arc") {
     for (const [key, code] of [["ordinaryLife", "ordinary_life"], ["worldAutonomy", "world_autonomy"]] as const) {
@@ -211,8 +222,9 @@ export function createBlueprintPlan(input: BlueprintPlanningInput, options: { cr
     interfaceMode: "smart_auto", artifactTargets, worldMode, buildIntensity: recommendIntensity(signals),
     generationQuality: proposal(quality, context.generationQuality ? "Use the explicitly supplied generation quality for call estimates." : "Balanced generation quality is the provisional default.", [], context.generationQuality ? "context:generationQuality" : "policy:default:generationQuality"),
     runtimeBudget: proposal(runtime, runtimeSignals.length ? "Explicit runtime requests determine the runtime budget; conflicting requests retain balanced." : "No explicit runtime request is evidenced; retain balanced.", runtimeSignals, "policy:default:runtimeBudget"),
+    lorebookScale: proposal(lorebookScale,"Supported category coverage determines the proposed lorebook scale.",signals.filter(signal=>signal.weight>0),"policy:default:lorebookScale"), lorebookRange:{...scaleRange}, principalCastRange:{...principalCastRange}, rosterCastRange:{...rosterCastRange},
     categories, mechanicPacks: recommendMechanicPacks(signals, worldMode.value), assessments,
-    inventory: estimateInventory(categories, artifactTargets.map(item => item.value), quality), findings, createdAt: options.createdAt,
+    inventory, findings, createdAt: options.createdAt,
   };
 }
 
