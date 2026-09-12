@@ -2,7 +2,7 @@
 
 **Planning baseline:** 2026-09-07 · application v0.3.0 · commit `0f2b4878423d2c75fb4bfe5ece449041c2d6038b`.
 
-**Status:** proposed long-term architecture, reconciled with the original remediation roadmap and the user's 150-section Production Studio proposal. These documents describe future work; they do not claim that work is implemented.
+**Status:** 9 of 17 ordered roadmap items are complete and 8 remain. M0 and M1 are complete; M2 Blueprint Studio is in progress. v0.46 shipped Stage 1 premise freshness, full-board Divergence history, and mobile Connections reliability. M2.2 editable and persisted Blueprint controls are next.
 
 LoreBible will become a creative production studio whose rich source world and carefully compiled runtime artifacts are deliberately different things. Creative quality takes precedence over speed and minimizing calls, while the user retains control over cost, accepted work, and scope.
 
@@ -24,7 +24,11 @@ Application changes are summarized in the project-level [changelog](../../CHANGE
 | M0.2 Neutral draft construction | Complete | New drafts preserve supplied material without legacy scenario-template content; verified across blank, domestic, social, and science-fiction fixtures. |
 | M0.3 Truthful generation failures | Complete | Creative routes preserve accepted work and report structured, actionable failures; local deterministic audits identify their source. |
 | M0.4 Project restoration | Complete | V2 projects and active drafts restore workflow, settings, angle history, and manuscripts; deletes persist; corrupt data is quarantined; mobile reloads retain work. |
-| M0.5 Divergence lineage | Next | Preserve immutable branch ancestry, target exact selected takes, and prevent index-based history mixing across rerolls. |
+| M0.5–M0.8 Foundation completion | Complete | Stable Divergence lineage, model discovery/gateway coverage, canonical artifact IR, native/portable serializers, Windows CI, and mobile workflow gates. |
+| M1 Project Graph foundation | Complete | Versioned graph migration, transactional repository, revision-safe commands, controlled editing, and graph-native preview. |
+| M2.1 Blueprint planning preview | Complete | Read-only premise-adaptive recommendations with evidence, revision checks, and mobile-safe inspection. |
+| v0.46 Reliability bridge | Complete | Explicit AI premise starters, recoverable full-board reroll history, and corrected mobile model-list positioning. |
+| M2.2 Editable Blueprint | Next | Persist accepted/overridden category, intensity, runtime, and mechanic decisions before Forge. |
 
 ## Recommended order
 
@@ -45,6 +49,6 @@ Validation, provenance, mobile usability, and capability evidence begin in M0/M1
 
 ## Next work
 
-Implement M0.5 Divergence Lineage next: pass the exact selected take through reroll and steering requests, preserve immutable parent IDs, and prevent reroll-all from mixing histories by array index. Then consolidate exports around a small internal representation before introducing the full Project Graph. Keep the existing manuscript interface working throughout.
+Implement M2.2 next: redesign Stage 3 around understandable, editable Blueprint decisions; preserve explicit user locks/omissions through save, load, and reanalysis; and retain migrated Physics values. The following approved slice adds manual step-by-step and optional single-request Forge execution so quota-limited providers never launch another bundle until the user explicitly requests it. Keep the original M0–M9 ordering authoritative after those releases.
 
 No calendar promises are assigned to the ten milestones: fixture availability, migration findings, and measured generation behavior determine readiness. Each milestone must ship a useful vertical slice rather than a collection of disconnected scaffolds.

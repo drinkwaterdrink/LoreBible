@@ -4,6 +4,26 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.46 — 2026-09-12
+
+### Added
+
+- Stage 1 can request four genuinely fresh, model-generated premise starters in one explicit call. The built-in examples remain clearly labeled offline starters, and a failed or cancelled request preserves the currently displayed cards.
+- Divergence now stores each successful four-angle generation as its own board. Previous/Next Board controls restore complete reroll-all results independently from each angle's version history, including across autosave and saved-project reloads.
+
+### Fixed
+
+- The mobile Connections model list resets to its first result after profile, search, sort, subscription-filter, favorite/order, or catalog changes, and touch scrolling snaps to complete model rows instead of leaving the first result clipped.
+
+### Why
+
+- Static Stage 1 examples were being mistaken for generated results, reroll-all had lost its prior full-board history, and nested mobile scrolling could strand the model picker between rows. This release makes those boundaries explicit and recoverable before the larger Blueprint redesign.
+
+### Validation boundary
+
+- Automated contract, route, client, component, persistence, and launcher checks cover the new premise stream, strict four-item validation, failure preservation, board migration/history, and model-list reset behavior. No paid live-provider premise request was made; actual provider quality, latency, and quota remain runtime-dependent.
+- The ordered Production Studio roadmap remains 9 of 17 complete with 8 remaining. v0.47 / M2.2 editable and persisted Blueprint controls are next; v0.48 is the approved resumable Forge slice.
+
 ## v0.45 — 2026-09-11
 
 ### Fixed

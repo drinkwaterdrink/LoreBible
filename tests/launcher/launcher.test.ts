@@ -9,7 +9,7 @@ test("launcher starts from its own repository path and polls health without cred
   expect(launcher).toContain("$appRoot = Split-Path -Parent $PSScriptRoot");
   expect(launcher).toContain("/api/health");
   expect(launcher).toContain("Start-Process \"http://localhost:3000\"");
-  expect(launcher).toContain('$expectedVersion = "0.45"');
+  expect(launcher).toContain('$expectedVersion = "0.46"');
   expect(launcher).toContain('selectedModelGenerationTest');
   expect(launcher).not.toContain("GEMINI_API_KEY");
 });
@@ -31,7 +31,7 @@ test("test launcher uses an isolated port and the server accepts a configured po
   expect(launcher).toContain('$env:PORT = "$testPort"');
   expect(launcher).toContain('http://localhost:$testPort');
   expect(launcher).toContain('LoreBible\\test-logs');
-  expect(launcher).toContain('$expectedVersion = "0.45"');
+  expect(launcher).toContain('$expectedVersion = "0.46"');
   expect(launcher).toContain('selectedModelGenerationTest');
   expect(server).toContain("process.env.PORT");
   expect(server).not.toContain("const PORT = 3000;");
