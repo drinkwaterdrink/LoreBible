@@ -61,9 +61,9 @@ test("gateway maps provider authentication failures", async () => {
   })).rejects.toMatchObject({ code: "AUTHENTICATION_FAILED", status: 401 });
 });
 
-test("gateway rejects non-curated model IDs before network access", async () => {
-  let called = false;
-  const { gateway, profile } = await makeGateway(async () => { called = true; return new Response("ok"); });
+test("gateway rejects model IDs that the provider does not report", async () => {
+  const requests: string[] = [];
+  const { gateway, profile } = await makeGateway(async (input) => { requests.push(input); return new Response(JSON.stringify({ data: [] }), { headers: { "Content-Type": "application/json" } }); });
   await expect(gateway.generate({
     profileId: profile.id,
     modelId: "provider/invented-model",
@@ -73,7 +73,7 @@ test("gateway rejects non-curated model IDs before network access", async () => 
     stageName: "Test",
     timeoutMs: 5000,
   })).rejects.toBeInstanceOf(ModelGatewayError);
-  expect(called).toBe(false);
+  expect(requests).toEqual(["https://openrouter.ai/api/v1/models"]);
 });
 
 test("gateway accepts a custom model ID saved on the selected profile", async () => {
@@ -272,6 +272,34 @@ test("gateway accepts a provider-reported Gemini model without requiring a custo
   expect(requests).toEqual([
     "https://generativelanguage.googleapis.com/v1beta/openai/models",
     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+  ]);
+  expect(response.text).toBe("provider model response");
+});
+
+test("gateway accepts a provider-reported NanoGPT model without requiring a custom save", async () => {
+  const path = `${process.env.TEMP || process.cwd()}\\lore-bible-gateway-test-${crypto.randomUUID()}.json`;
+  const store = createProfileStore(path, protector);
+  const profile = await store.upsert({ name: "NanoGPT", provider: "nanogpt", apiKey: "nano-secret" });
+  const requests: string[] = [];
+  const gateway = createModelGateway(store, async (input) => {
+    requests.push(input);
+    if (input.endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "google/gemini-flash-lite-latest" }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ model: "google/gemini-flash-lite-latest", choices: [{ message: { content: "provider model response" } }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+
+  const response = await gateway.generate({
+    profileId: profile.id,
+    modelId: "google/gemini-flash-lite-latest",
+    systemInstruction: "system",
+    userPrompt: "user",
+    reasoningEffort: "low",
+    stageName: "NanoGPT Provider Model",
+    timeoutMs: 5000,
+  });
+
+  expect(requests).toEqual([
+    "https://nano-gpt.com/api/v1/models",
+    "https://nano-gpt.com/api/v1/chat/completions",
   ]);
   expect(response.text).toBe("provider model response");
 });

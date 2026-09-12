@@ -4,6 +4,28 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.43 — 2026-09-11
+
+### Fixed
+
+- Provider-reported NanoGPT models, including Google Gemini model IDs exposed by NanoGPT, can now pass the same profile check as curated and saved custom models instead of being rejected as "not configured."
+- The Connections panel now identifies an older server process when its health response lacks the v0.43 capabilities, which explains stale 404s and missing catalog metadata after a frontend-only refresh.
+- NanoGPT's Subscription only filter now reports missing subscription metadata instead of silently looking empty.
+- Both Windows launchers now require the matching server version/capabilities before opening the app, so they no longer treat an older process on port 3000/3001 as the current build.
+
+### Added
+
+- Copy diagnostics in Connections & Models. The report includes app/server versions, capability flags, provider/profile metadata, selected model, catalog metadata, active filter, and the last visible error; API keys and encrypted credential material are excluded.
+- The selected-model test now gives a specific restart message when an old server process does not have the generation-test route.
+
+### Why
+
+- Connection success only proves authentication and model listing. A model can still be rejected at the generation gateway or the browser can be running a newer UI against an older server process. v0.43 makes both boundaries visible and debuggable.
+
+### Validation boundary
+
+- Automated tests cover provider-reported NanoGPT generation, stale-server error handling, runtime capability checks, diagnostics redaction, model sorting/filtering, and existing connection behavior. Live provider availability, subscription membership, quota, and long-form generation still require the selected-model test against the current running server.
+
 ## v0.42 — 2026-09-11
 
 ### Added

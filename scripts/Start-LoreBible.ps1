@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 $appRoot = Split-Path -Parent $PSScriptRoot
+$expectedVersion = "0.43"
 Set-Location -LiteralPath $appRoot
 
 if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
@@ -8,12 +9,17 @@ if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
 
 $healthUri = "http://127.0.0.1:3000/api/health"
 $healthy = $false
-try {
-  $probe = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 1
-  $healthy = $probe.StatusCode -eq 200
-} catch {
-  $healthy = $false
+function Test-LoreBibleHealth {
+  try {
+    $probe = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 1
+    if ($probe.StatusCode -ne 200) { return $false }
+    $payload = $probe.Content | ConvertFrom-Json
+    return $payload.status -eq "ok" -and $payload.version -eq $expectedVersion -and $payload.capabilities.selectedModelGenerationTest -eq $true -and $payload.capabilities.connectionModelMetadata -eq $true
+  } catch {
+    return $false
+  }
 }
+$healthy = Test-LoreBibleHealth
 
 if (-not $healthy) {
   $localBase = $env:LOCALAPPDATA
@@ -27,17 +33,12 @@ if (-not $healthy) {
   $deadline = (Get-Date).AddSeconds(30)
   do {
     Start-Sleep -Milliseconds 500
-    try {
-      $probe = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 1
-      $healthy = $probe.StatusCode -eq 200
-    } catch {
-      $healthy = $false
-    }
+    $healthy = Test-LoreBibleHealth
   } while (-not $healthy -and (Get-Date) -lt $deadline)
 }
 
 if (-not $healthy) {
-  throw "Lore Bible did not become healthy within 30 seconds. See the local launcher log under %LOCALAPPDATA%\LoreBible\logs."
+  throw "Lore Bible did not become healthy at v$expectedVersion within 30 seconds. A previous server may still own port 3000; close that process and relaunch. See the local launcher log under %LOCALAPPDATA%\LoreBible\logs."
 }
 
 Start-Process "http://localhost:3000"

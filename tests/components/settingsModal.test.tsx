@@ -25,6 +25,7 @@ test("connections dialog renders with no saved model selection", () => {
   expect(html).toContain("NanoGPT Popular");
   expect(html).toContain("NanoGPT subscription first");
   expect(html).toContain("Favorites stay at the top");
+  expect(html).toContain("Copy diagnostics");
   expect(html).not.toContain("value=\"gemini\" disabled=\"\"");
 });
 

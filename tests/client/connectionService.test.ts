@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createCatalogRequestTracker, listConnectionModels, listConnections, saveConnection, testModelGeneration } from "../../src/services/connectionsService";
+import { createCatalogRequestTracker, getRuntimeInfo, listConnectionModels, listConnections, saveConnection, testModelGeneration } from "../../src/services/connectionsService";
 
 test("connection service refuses a response containing secret fields", async () => {
   const originalFetch = globalThis.fetch;
@@ -78,5 +78,21 @@ test("generation test sends only the selected model id", async () => {
     }) as typeof fetch;
     expect(await testModelGeneration("profile-a", "gemini-2.5-flash")).toMatchObject({ status: "generated" });
     expect(body).toEqual({ modelId: "gemini-2.5-flash" });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("generation test explains when the browser is connected to a stale server", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response("<!doctype html><html>old server</html>", { status: 404, headers: { "Content-Type": "text/html" } })) as unknown as typeof fetch;
+  try {
+    await expect(testModelGeneration("profile-a", "gemini-2.5-flash")).rejects.toThrow("selected-model test is unavailable on this server");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("runtime info is read without exposing credentials", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ status: "ok", version: "0.42", capabilities: { selectedModelGenerationTest: true } }), { status: 200 })) as unknown as typeof fetch;
+  try {
+    await expect(getRuntimeInfo()).resolves.toMatchObject({ version: "0.42" });
   } finally { globalThis.fetch = originalFetch; }
 });

@@ -66,7 +66,6 @@ async function providerReportsModel(
   modelId: string,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  if (profile.provider !== "gemini") return false;
   try {
     const response = await fetchImpl(`${profile.baseUrl.replace(/\/+$/, "")}/models`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Check, KeyRound, Loader2, Plus, Save, Star, Trash2, X, Zap } from "lucide-react";
+import { Check, Clipboard, KeyRound, Loader2, Plus, Save, Star, Trash2, X, Zap } from "lucide-react";
+import { APP_VERSION } from "../version";
 import type { ModelSelection, ProviderId } from "../contracts/generation";
 import {
   deleteConnection,
@@ -10,10 +11,12 @@ import {
   saveConnection,
   testConnection,
   testModelGeneration,
+  getRuntimeInfo,
   type AvailableModel,
   type ConnectionProfile,
 } from "../services/connectionsService";
 import { filterAndSortModels, readFavoriteModelIds, toggleFavoriteModel, type ModelSort } from "../lib/modelPresentation";
+import { formatConnectionDiagnostics, runtimeCompatibilityMessage, type RuntimeInfo } from "../lib/runtimeDiagnostics";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -60,11 +63,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   const [modelSort, setModelSort] = useState<ModelSort>("alphabetical");
   const [subscriptionOnly, setSubscriptionOnly] = useState(false);
   const [favoriteModelIds, setFavoriteModelIds] = useState<string[]>(() => typeof localStorage === "undefined" ? [] : readFavoriteModelIds(localStorage.getItem(FAVORITES_KEY)));
+  const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null);
+  const [runtimeInfoLoaded, setRuntimeInfoLoaded] = useState(false);
   const catalogRequests = useRef(createCatalogRequestTracker());
 
   const selectedProfile = useMemo(() => profiles.find((profile) => profile.id === draft.id) || null, [profiles, draft.id]);
   const displayedModels = useMemo(() => filterAndSortModels(models, { sort: modelSort, favorites: favoriteModelIds, subscriptionOnly: draft.provider === "nanogpt" && subscriptionOnly }), [models, modelSort, favoriteModelIds, subscriptionOnly, draft.provider]);
   const hasPopularity = models.some((model) => model.popularRank !== undefined);
+  const hasSubscriptionMetadata = models.some((model) => model.subscriptionIncluded !== undefined);
+  const runtimeWarning = runtimeInfoLoaded ? runtimeCompatibilityMessage(runtimeInfo, APP_VERSION) : null;
 
   const toggleFavorite = (id: string) => {
     const next = toggleFavoriteModel(favoriteModelIds, id);
@@ -74,6 +81,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
 
   const refresh = async () => {
     setError(null);
+    setRuntimeInfoLoaded(false);
+    void getRuntimeInfo().then(setRuntimeInfo).catch(() => setRuntimeInfo(null)).finally(() => setRuntimeInfoLoaded(true));
     try {
       const next = await listConnections();
       setProfiles(next);
@@ -164,6 +173,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
     finally { setBusy(false); }
   };
 
+  const handleCopyDiagnostics = async () => {
+    const text = formatConnectionDiagnostics({
+      appVersion: APP_VERSION,
+      runtime: runtimeInfo,
+      browser: typeof navigator === "undefined" ? "unknown" : navigator.userAgent,
+      profile: selectedProfile ? { id: selectedProfile.id, name: selectedProfile.name, provider: selectedProfile.provider, baseUrl: selectedProfile.baseUrl, hasSecret: selectedProfile.hasSecret } : null,
+      selectedModelId,
+      catalog: models,
+      sort: modelSort,
+      subscriptionOnly,
+      error,
+    });
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+      setStatus("Diagnostics copied. They contain no API key or encrypted credential material.");
+    } catch {
+      setError("Could not copy diagnostics. Allow clipboard access, or send a screenshot of this panel instead.");
+    }
+  };
+
   const handleDelete = async () => {
     if (!draft.id || draft.id === "environment-gemini") return;
     setBusy(true); setError(null);
@@ -212,6 +242,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
             </div>
           </aside>
           <div className="p-5 md:min-h-0 md:overflow-y-auto">
+            {runtimeWarning && <div className="mb-4 border border-[var(--gold)]/50 bg-[var(--gold)]/10 px-3 py-2 text-xs text-[var(--graphite)]">{runtimeWarning}</div>}
             {error && <div className="mb-4 border border-red-800/40 bg-red-950/10 px-3 py-2 text-xs text-red-700">{error}</div>}
             {status && <div className="mb-4 border border-emerald-800/30 bg-emerald-950/10 px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Check size={13} />{status}</div>}
             <div className="grid sm:grid-cols-2 gap-3">
@@ -228,10 +259,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               </div>
               <p className="mb-2 text-[10px] text-[var(--graphite)]">Favorites stay at the top of every sort. NanoGPT badges and ranking come from its live catalog.</p>
               {draft.provider === "nanogpt" && !hasPopularity && models.length > 0 && <p className="mb-2 text-[10px] text-[var(--gold)]">NanoGPT popularity ranking is temporarily unavailable; no ranking is being guessed.</p>}
+              {draft.provider === "nanogpt" && subscriptionOnly && models.length > 0 && !hasSubscriptionMetadata && <p className="mb-2 text-[10px] text-[var(--gold)]">NanoGPT subscription metadata is unavailable for this catalog. Restart the current server or turn off Subscription only.</p>}
               {draft.id === "environment-gemini" ? <p className="text-xs text-[var(--graphite)]">Gemini environment credentials are available to the server but do not use the curated OpenRouter/NanoGPT catalog.</p> : draft.id ? <div className="space-y-1">{displayedModels.map((model) => <div key={model.id} className={`flex items-start gap-2 px-2 py-2 border ${model.available === false ? "opacity-45" : "border-transparent hover:border-[var(--ink-soft)]"}`}><label className="flex min-w-0 flex-1 items-start gap-2"><input type="radio" name="model" disabled={model.available === false} checked={selectedModelId === model.id} onChange={() => onSelectionChange({ profileId: draft.id!, modelId: model.id })} className="mt-1" /><span className="min-w-0"><span className="block text-xs font-mono-ui break-all">{model.label || model.id}</span>{model.label !== model.id && <span className="block text-[9px] font-mono-ui break-all text-[var(--graphite)]">{model.id}</span>}<span className="block text-[10px] text-[var(--graphite)]">{model.custom ? "Custom model" : model.providerReported ? "Provider model" : model.reasoning === "required" ? "Reasoning model" : "Standard model"}{model.subscriptionIncluded ? " · subscription included" : ""}{model.created ? ` · added ${new Date(model.created * 1000).toLocaleDateString()}` : ""}{model.available === false ? " · not reported by provider" : ""}</span></span></label><button type="button" aria-label={`${favoriteModelIds.includes(model.id) ? "Unfavorite" : "Favorite"} ${model.id}`} aria-pressed={favoriteModelIds.includes(model.id)} onClick={() => toggleFavorite(model.id)} className={`shrink-0 p-1 ${favoriteModelIds.includes(model.id) ? "text-[var(--gold)]" : "text-[var(--graphite)] hover:text-[var(--gold)]"}`}><Star size={14} fill={favoriteModelIds.includes(model.id) ? "currentColor" : "none"} /></button></div>)}{displayedModels.length === 0 && <p className="text-xs text-[var(--graphite)]">{models.length ? "No models match this filter." : "Save a profile to load its model catalog."}</p>}<button type="button" onClick={() => onSelectionChange(null)} className="mt-2 text-[10px] uppercase tracking-wider text-[var(--graphite)] hover:text-[var(--ink)]">Use default Gemini/offline path</button></div> : <p className="text-xs text-[var(--graphite)]">Create or select a provider profile to choose a curated or provider-reported model.</p>}
             </div>
             {draft.id !== "environment-gemini" && <div className="mt-6 border-t border-[var(--ink-soft)] pt-4"><h3 className="text-xs font-apparatus uppercase tracking-widest">Custom models</h3><p className="mt-1 text-[11px] text-[var(--graphite)]">Add the exact model ID accepted by this provider.</p><div className="mt-2 flex gap-2"><input id="custom-model-id" value={customModelInput} onChange={(event) => setCustomModelInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleAddCustomModel(); } }} className="input-paper min-w-0 flex-1 font-mono-ui text-xs" placeholder="provider/model-id:thinking" /><button type="button" onClick={handleAddCustomModel} className="btn-secondary shrink-0 px-3 py-2 text-[10px] uppercase tracking-wider">Add model</button></div>{draft.customModelIds.length > 0 && <div className="mt-3 space-y-1">{draft.customModelIds.map((id) => <div key={id} className="flex items-center gap-2 border border-[var(--ink-soft)] px-2 py-1.5"><span className="min-w-0 flex-1 break-all font-mono-ui text-[11px]">{id}</span><span className="text-[9px] uppercase tracking-wider text-[var(--gold)]">Custom</span><button type="button" onClick={() => handleRemoveCustomModel(id)} aria-label={`Remove custom model ${id}`} className="p-1 text-[var(--graphite)] hover:text-red-700"><X size={12} /></button></div>)}</div>}<p className="mt-2 text-[10px] text-[var(--graphite)]">Save the connection after changing this list.</p></div>}
-            <div className="mt-6 flex flex-wrap items-center gap-2">{draft.id !== "environment-gemini" && <button type="button" onClick={handleSave} disabled={busy} className="btn-primary py-2 px-3 text-[11px] uppercase tracking-wider flex items-center gap-1.5"><Save size={13} /> Save securely</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleTest} disabled={busy} className="btn-secondary py-2 px-3 text-[11px] uppercase tracking-wider">Test connection</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleGenerationTest} disabled={busy || !selectedModelId} className="btn-secondary py-2 px-3 text-[11px] uppercase tracking-wider">Test selected model</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleDelete} disabled={busy} className="ml-auto text-[var(--graphite)] hover:text-red-700 p-2" title="Delete connection"><Trash2 size={15} /></button>}</div>
+            <div className="mt-6 flex flex-wrap items-center gap-2">{draft.id !== "environment-gemini" && <button type="button" onClick={handleSave} disabled={busy} className="btn-primary py-2 px-3 text-[11px] uppercase tracking-wider flex items-center gap-1.5"><Save size={13} /> Save securely</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleTest} disabled={busy} className="btn-secondary py-2 px-3 text-[11px] uppercase tracking-wider">Test connection</button>}{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleGenerationTest} disabled={busy || !selectedModelId} className="btn-secondary py-2 px-3 text-[11px] uppercase tracking-wider">Test selected model</button>}<button type="button" onClick={handleCopyDiagnostics} disabled={busy} className="btn-secondary py-2 px-3 text-[11px] uppercase tracking-wider flex items-center gap-1.5"><Clipboard size={13} /> Copy diagnostics</button>{draft.id && draft.id !== "environment-gemini" && <button type="button" onClick={handleDelete} disabled={busy} className="ml-auto text-[var(--graphite)] hover:text-red-700 p-2" title="Delete connection"><Trash2 size={15} /></button>}</div>
             {draft.id && draft.id !== "environment-gemini" && <p className="mt-2 text-[10px] text-[var(--graphite)]">Testing the selected model sends a small real generation request and may use provider quota or balance.</p>}
             {isCompleteModelSelection(selection) && <p className="mt-3 text-[10px] font-mono-ui text-[var(--graphite)]">Selected: {selection.modelId}</p>}
           </div>

@@ -81,6 +81,7 @@ test("connection APIs persist and expose profile-scoped custom models", async ()
       reasoning: "optional",
       available: true,
       custom: true,
+      subscriptionIncluded: false,
     });
   });
 });
@@ -97,6 +98,7 @@ test("NanoGPT models include live recency, subscription membership, and official
     const body = await (await fetch(`${baseUrl}/api/connections/${profile.id}/models`)).json();
     expect(body.models.find((model: { id: string }) => model.id === "z-ai/glm-5.3")).toMatchObject({ created: 100, popularRank: 1, subscriptionIncluded: true });
     expect(body.models.find((model: { id: string }) => model.id === "vendor/newest")).toMatchObject({ label: "Newest Model", created: 200, popularRank: 2 });
+    expect(body.models.find((model: { id: string }) => model.id === "vendor/newest").subscriptionIncluded).toBe(false);
   });
 });
 

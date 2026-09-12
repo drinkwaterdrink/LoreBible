@@ -1,4 +1,5 @@
 import type { ModelSelection, ProviderId } from "../contracts/generation";
+import type { RuntimeInfo } from "../lib/runtimeDiagnostics";
 
 export interface ConnectionProfile {
   id: string;
@@ -26,10 +27,16 @@ export interface AvailableModel {
   subscriptionIncluded?: boolean;
 }
 
-async function readJson<T>(response: Response): Promise<T> {
-  const body = await response.json().catch(() => ({}));
+async function readJson<T>(response: Response, options?: { missingRouteMessage?: string }): Promise<T> {
+  const raw = await response.text().catch(() => "");
+  let body: unknown = {};
+  try { body = raw ? JSON.parse(raw) : {}; } catch { body = raw; }
   assertRedactedPayload(body);
-  if (!response.ok) throw new Error((body as { message?: string; error?: string }).message || (body as { error?: string }).error || `Request failed with HTTP ${response.status}`);
+  if (!response.ok) {
+    const providerMessage = body && typeof body === "object" ? (body as { message?: string; error?: string }).message || (body as { error?: string }).error : "";
+    const fallback = response.status === 404 && options?.missingRouteMessage && typeof body !== "object" ? options.missingRouteMessage : `Request failed with HTTP ${response.status}`;
+    throw new Error(providerMessage || fallback);
+  }
   return body as T;
 }
 
@@ -76,7 +83,11 @@ export async function testModelGeneration(id: string, modelId: string): Promise<
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ modelId }),
-  }));
+  }), { missingRouteMessage: "The selected-model test is unavailable on this server. Restart LoreBible from the current shortcut and reload the page." });
+}
+
+export async function getRuntimeInfo(): Promise<RuntimeInfo> {
+  return readJson<RuntimeInfo>(await fetch("/api/health"));
 }
 
 export interface CatalogRequestTracker {

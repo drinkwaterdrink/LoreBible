@@ -123,6 +123,7 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
       const providerModels = normalizeProviderModelCatalog(profile.provider, payload);
       const available = new Set(providerModels.map((model) => model.id));
       let subscriptionIds = new Set<string>();
+      let subscriptionMetadataAvailable = false;
       let popularRanks = new Map<string, number>();
       if (profile.provider === "nanogpt") {
         const supplemental = await Promise.allSettled([
@@ -132,6 +133,7 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
         if (supplemental[0].status === "fulfilled" && supplemental[0].value.ok) {
           const subscriptionPayload: unknown = await supplemental[0].value.json().catch(() => null);
           subscriptionIds = new Set(normalizeProviderModelCatalog("nanogpt", subscriptionPayload).map((model) => model.id));
+          subscriptionMetadataAvailable = true;
         }
         if (supplemental[1].status === "fulfilled" && supplemental[1].value.ok) {
           const html = await supplemental[1].value.text().catch(() => "");
@@ -144,7 +146,7 @@ export function registerConnectionRoutes(app: Application, dependencies: Connect
         .filter((id) => !curatedIds.has(id))
         .map((id) => ({ id, label: id, reasoning: "optional" as const, available: true, custom: true }));
       const metadata = new Map(providerModels.map((model) => [model.id, model]));
-      const decorate = <T extends { id: string }>(model: T) => ({ ...model, ...(metadata.get(model.id)?.created === undefined ? {} : { created: metadata.get(model.id)!.created }), ...(subscriptionIds.has(model.id) ? { subscriptionIncluded: true } : {}), ...(popularRanks.has(model.id) ? { popularRank: popularRanks.get(model.id) } : {}) });
+      const decorate = <T extends { id: string }>(model: T) => ({ ...model, ...(metadata.get(model.id)?.created === undefined ? {} : { created: metadata.get(model.id)!.created }), ...(subscriptionMetadataAvailable ? { subscriptionIncluded: subscriptionIds.has(model.id) } : {}), ...(popularRanks.has(model.id) ? { popularRank: popularRanks.get(model.id) } : {}) });
       const providerReported = providerModels
         .filter((model) => !curatedIds.has(model.id) && !customIds.has(model.id))
         .map((model) => decorate({ ...model, reasoning: "optional" as const, available: true, providerReported: true }));

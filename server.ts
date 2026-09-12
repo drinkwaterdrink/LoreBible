@@ -31,6 +31,8 @@ import { createModelGateway, ModelGatewayError, type ModelGateway } from "./serv
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
 import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
+import { APP_VERSION } from "./src/version.js";
+import { RUNTIME_CAPABILITIES } from "./src/lib/runtimeDiagnostics.js";
 
 dotenv.config();
 
@@ -266,6 +268,8 @@ async function executeSelectedModelWithRetry<T>(params: {
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
+    version: APP_VERSION,
+    capabilities: { ...RUNTIME_CAPABILITIES, selectedModelGenerationTest: Boolean(connectionStore) },
     hasApiKey: !!process.env.GEMINI_API_KEY,
     environmentModel: ENV_GEMINI_MODEL,
   });
