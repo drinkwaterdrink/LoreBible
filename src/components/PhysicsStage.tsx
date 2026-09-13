@@ -2,6 +2,7 @@ import React from "react";
 import { PhysicsConfig } from "../types";
 import { LINGUISTIC_BASES } from "../lib/wordBanks";
 import { Sliders, ArrowRight, BookOpen, Skull, Flame } from "lucide-react";
+import type { ForgeExecutionPreference } from "../contracts/blueprintSelection";
 
 export const STANDARD_GENRES = [
   "Drama & Psychological Realism",
@@ -31,8 +32,8 @@ interface PhysicsStageProps {
   onProceed: () => void;
   isCanonActive: boolean;
   chosenTitle: string;
-  forgeExecutionMode?: "continuous" | "step_by_step";
-  onChangeForgeExecutionMode?: (mode: "continuous" | "step_by_step") => void;
+  forgeExecutionMode?: ForgeExecutionPreference;
+  onChangeForgeExecutionMode?: (mode: ForgeExecutionPreference) => void;
 }
 
 export const PhysicsStage: React.FC<PhysicsStageProps> = ({
@@ -654,10 +655,11 @@ export const PhysicsStage: React.FC<PhysicsStageProps> = ({
         <p className="text-xs text-[var(--graphite)] font-manuscript leading-relaxed">
           Choose whether Forge runs every remaining bundle automatically or pauses after each validated bundle. Completed bundles are kept if a later request fails.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {([
             ["continuous", "Continuous", "Run all remaining bundles automatically."],
             ["step_by_step", "One bundle at a time", "Pause after each bundle so you decide when the next API call begins."],
+            ["single_request", "Single provider request", "Request the complete Forge result in one call when supported, avoiding back-to-back bundle calls."],
           ] as const).map(([value, label, description]) => (
             <label key={value} className="flex items-start gap-3 border border-[var(--ink-soft)] p-3 cursor-pointer bg-[var(--vellum-raised)]">
               <input type="radio" name="forge-execution-mode" value={value} checked={forgeExecutionMode === value} onChange={() => onChangeForgeExecutionMode?.(value)} className="mt-0.5" />

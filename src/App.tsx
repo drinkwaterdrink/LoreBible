@@ -51,14 +51,17 @@ import { Menu, Feather, X, PlusCircle, Save } from "lucide-react";
 import { AppVersionBadge } from "./components/AppVersionBadge";
 import { StorageRecoveryNotice } from "./components/StorageRecoveryNotice";
 import { ProjectGraphPanel } from "./components/ProjectGraphPanel";
-import { BlueprintPreviewPanel } from "./components/BlueprintPreviewPanel";
+import { BlueprintStudio } from "./components/BlueprintStudio";
 import { compileGraphPreview, listPreparedProjectGraphs, loadProjectGraph, prepareProjectGraph, previewBlueprint, renameGraphEntity, type PreparedProjectGraphSummary } from "./services/projectGraphService";
 import type { ProjectGraphV1 } from "./contracts/projectGraph";
 import type { ProjectGraphArtifactPreview } from "./lib/projectGraph/artifactCompiler";
 import type { BlueprintPlanV1 } from "./contracts/blueprint";
+import type { BlueprintSelectionV1, ForgeExecutionPreference } from "./contracts/blueprintSelection";
 import type { PremiseSuggestionSet } from "./contracts/premiseSuggestions";
 import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext";
 import { abortBlueprintRequest, findBlueprintSourceProject, getBlueprintFailure, shouldClearBlueprintPlan } from "./lib/blueprint/previewLifecycle";
+import { commitBlueprintStudioDraft, createBlueprintStudioDraft } from "./lib/blueprint/studioLifecycle";
+import { withEverydayLifeDetail } from "./lib/blueprint/selection";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -207,7 +210,8 @@ export default function App() {
   const [isForging, setIsForging] = useState(false);
   const [forgeError, setForgeError] = useState<string | null>(null);
   const [forgeActivity, setForgeActivity] = useState<ActivityState>(() => ({ ...activeActivity("forge", "Ready"), startedAt: null, status: "idle", lastEventAt: null }));
-  const [forgeExecutionMode, setForgeExecutionMode] = useState<"continuous" | "step_by_step">("continuous");
+  const [blueprintSelection, setBlueprintSelection] = useState<BlueprintSelectionV1 | null>(initialPersistence.active?.blueprintSelection || null);
+  const [forgeExecutionMode, setForgeExecutionMode] = useState<ForgeExecutionPreference>(initialPersistence.active?.blueprintSelection?.forgeExecutionPreference || "continuous");
   const forgeControllerRef = useRef<AbortController | null>(null);
 
   // Vault & Modals
@@ -297,6 +301,7 @@ export default function App() {
           selectedTakeId,
           divergenceBoards,
           activeDivergenceBoardId,
+          blueprintSelection,
           settings,
           provenance,
         }));
@@ -306,7 +311,7 @@ export default function App() {
       }
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [activeDivergenceBoardId, canon, currentStage, divergenceBoards, document, maxUnlockedStage, parse, physics, provenance, selectedTakeId, settings, sparkText, takes, workspaceWriteBlocked]);
+  }, [activeDivergenceBoardId, blueprintSelection, canon, currentStage, divergenceBoards, document, maxUnlockedStage, parse, physics, provenance, selectedTakeId, settings, sparkText, takes, workspaceWriteBlocked]);
 
   useEffect(() => () => {
     anchorControllerRef.current?.abort();
@@ -423,6 +428,7 @@ export default function App() {
     activeDivergenceBoardId,
     settings,
     provenance,
+    blueprintSelection,
   });
 
   // Explicit Save Scenario handler with wax seal animation
@@ -486,6 +492,8 @@ export default function App() {
     setDivergenceBoards([]);
     setActiveDivergenceBoardId(null);
     setDocument(null);
+    setBlueprintSelection(null);
+    setForgeExecutionMode("continuous");
     setProvenance([]);
     setStreamedSections({});
     setBuildLogs([]);
@@ -904,6 +912,8 @@ export default function App() {
     setDivergenceBoards(restored.divergenceBoards);
     setActiveDivergenceBoardId(restored.activeDivergenceBoardId);
     setSettings(restored.settings);
+    setBlueprintSelection(restored.blueprintSelection);
+    setForgeExecutionMode(restored.blueprintSelection?.forgeExecutionPreference || "continuous");
     setProvenance(restored.provenance);
     setStreamedSections({});
     setBuildLogs([]);
@@ -1096,6 +1106,19 @@ export default function App() {
     blueprintControllerRef.current = null;
     setBlueprintBusy(false);
     setIsBlueprintOpen(false);
+  };
+
+  const handleSaveBlueprint = (draft: BlueprintSelectionV1) => {
+    try {
+      const accepted = commitBlueprintStudioDraft(draft);
+      setBlueprintSelection(accepted);
+      setForgeExecutionMode(accepted.forgeExecutionPreference);
+      setPhysics((current) => withEverydayLifeDetail(current, accepted.everydayLifeDetail));
+      setIsBlueprintOpen(false);
+      triggerToast("Blueprint saved to this project.");
+    } catch (error) {
+      setBlueprintError(error instanceof Error ? error.message : "Blueprint could not be saved.");
+    }
   };
 
   return (
@@ -1499,7 +1522,7 @@ export default function App() {
         />
       )}
 
-      {isBlueprintOpen && blueprintPlan && <BlueprintPreviewPanel plan={blueprintPlan} onClose={closeBlueprint} />}
+      {isBlueprintOpen && blueprintPlan && <BlueprintStudio plan={blueprintPlan} initialSelection={createBlueprintStudioDraft(blueprintPlan, blueprintSelection)} onSave={handleSaveBlueprint} onCancel={closeBlueprint} />}
 
       <SettingsModal
         isOpen={isSettingsOpen}
