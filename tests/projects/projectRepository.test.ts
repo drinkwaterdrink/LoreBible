@@ -16,3 +16,21 @@ test("reports corruption without replacing the primary",async()=>{const dir=awai
 test("rejects credentials and traversal IDs stay encoded under root",async()=>{const dir=await root();const repo=createProjectRepository(dir);const unsafe=graph("../../escape");(unsafe.extensions as any).apiKey="secret";await expect(repo.create(unsafe)).rejects.toMatchObject({code:"credential_rejected"});const derived=join(dir,Buffer.from("../../escape").toString("base64url"),"project.json");expect(derived.startsWith(dir)).toBe(true);});
 
 test("preserves the accepted edit and graph-native preview across a fresh repository instance",async()=>{const dir=await root();const repo=createProjectRepository(dir);await repo.create(graph("restart-proof"));const changed=await repo.apply("restart-proof",{commandId:"rename",expectedRevision:1,issuedAt:"2026-09-09T00:00:00Z",command:{type:"entity.rename",entityId:"e1",name:"Mara Vale"}});const before=compileProjectGraphArtifacts(changed.graph,()=>1_788_912_001);const reloaded=await createProjectRepository(dir).load("restart-proof");expect(reloaded).toEqual(changed.graph);const after=compileProjectGraphArtifacts(reloaded!,()=>1_788_912_001);expect(after).toEqual(before);expect(after.sourceRevision).toBe(2);});
+
+test("persists Forge bundle checkpoints and attempt provenance across repository restarts",async()=>{
+  const dir=await root();const repo=createProjectRepository(dir);await repo.create(graph("forge-persistence"));
+  let result=await repo.apply("forge-persistence",{commandId:"init",expectedRevision:1,issuedAt:"2026-09-12T10:00:00Z",command:{type:"forge.initialize",buildId:"build/1",inputFingerprint:"sha256:abc",executionMode:"step_by_step"}});
+  result=await repo.apply("forge-persistence",{commandId:"start",expectedRevision:2,issuedAt:"2026-09-12T10:01:00Z",command:{type:"forge.batch.begin",buildId:"build/1",bundleIndex:0,attemptId:"attempt/1",provider:"gemini",modelId:"flash",route:"gemini_native",inputFingerprint:"sha256:abc",sourceRevision:1}});
+  result=await repo.apply("forge-persistence",{commandId:"complete",expectedRevision:3,issuedAt:"2026-09-12T10:02:00Z",command:{type:"forge.batch.complete",buildId:"build/1",bundleIndex:0,attemptId:"attempt/1",sections:{core:{title:"World"},user:{},worldPhysics:{},status:{}},inputFingerprint:"sha256:abc",sourceRevision:1}});
+  const reloaded=await createProjectRepository(dir).load("forge-persistence");
+  expect(reloaded).toEqual(result.graph);
+  expect((reloaded!.builds[0] as any).checkpoint.completedBundleCount).toBe(1);
+  expect((reloaded!.builds[0] as any).batches[0].attempts[0]).toMatchObject({provider:"gemini",modelId:"flash",route:"gemini_native",status:"complete"});
+});
+
+test("rejects a stale Forge transition after unrelated graph edits",async()=>{
+  const dir=await root();const repo=createProjectRepository(dir);await repo.create(graph("forge-stale"));
+  await repo.apply("forge-stale",{commandId:"init",expectedRevision:1,issuedAt:"x",command:{type:"forge.initialize",buildId:"build/1",inputFingerprint:"sha256:abc",executionMode:"continuous"}});
+  await repo.apply("forge-stale",{commandId:"rename",expectedRevision:2,issuedAt:"x",command:{type:"entity.rename",entityId:"e1",name:"Mara Vale"}});
+  await expect(repo.apply("forge-stale",{commandId:"start",expectedRevision:3,issuedAt:"x",command:{type:"forge.batch.begin",buildId:"build/1",bundleIndex:0,attemptId:"attempt/1",provider:"gemini",modelId:"flash",route:"gemini_native",inputFingerprint:"sha256:abc",sourceRevision:1}})).rejects.toMatchObject({code:"invalid_command"});
+});

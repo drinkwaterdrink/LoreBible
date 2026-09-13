@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { parseProjectGraph } from "../../src/lib/projectGraph/validation";
+import { createForgeBuild } from "../../src/lib/projectGraph/forgeBuilds";
 
 const graph = () => ({
   schema: "lorebible.project-graph/v1",
@@ -48,4 +49,22 @@ test("requires directional relationships and valid knowledge endpoints", () => {
     expect(result.issues.some((issue) => issue.path === "relationships[0].targetEntityId")).toBe(true);
     expect(result.issues.some((issue) => issue.path === "knowledge[0].factId")).toBe(true);
   }
+});
+
+test("rejects malformed durable Forge builds instead of accepting an unusable checkpoint", () => {
+  const value = graph() as any;
+  value.builds = [{ id:"build:one", kind:"forge", schema:"lorebible.forge-build/v1", stage:"forge", status:"active", artifactIds:[], sourceRevision:1, executionMode:"continuous", inputFingerprint:"sha256:abc", createdAt:"x", updatedAt:"x", batches:[], checkpoint:{completedBundleCount:1,sections:{core:{}}} }];
+  const result = parseProjectGraph(value);
+  expect(result.ok).toBe(false);
+  if ("issues" in result) expect(result.issues.some((issue) => issue.path === "builds[0].batches")).toBe(true);
+});
+
+test("rejects Forge checkpoints that disagree with completed bundle records", () => {
+  const value = graph() as any;
+  const build = createForgeBuild({ id:"build:one", sourceRevision:1, inputFingerprint:"sha256:abc", executionMode:"continuous", createdAt:"x" });
+  build.batches[0].status="complete";build.batches[0].sections={core:{},user:{},worldPhysics:{},status:{}};
+  value.builds=[build];
+  const result=parseProjectGraph(value);
+  expect(result.ok).toBe(false);
+  if("issues" in result)expect(result.issues.some((issue)=>issue.path==="builds[0].checkpoint")).toBe(true);
 });

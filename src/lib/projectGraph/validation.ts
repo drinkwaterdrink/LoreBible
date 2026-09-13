@@ -24,6 +24,22 @@ export function parseProjectGraph(value: unknown): ProjectGraphParseResult {
   const entityIds = new Set((value.entities as any[]).map((item) => item.id));
   const factIds = new Set((value.canon as any[]).map((item) => item.id));
   const artifactIds = new Set((value.artifacts as any[]).map((item) => item.id));
+  (value.builds as any[]).forEach((item, index) => {
+    if (item?.kind !== "forge") return;
+    const prefix = `builds[${index}]`;
+    if (item.schema !== "lorebible.forge-build/v1") issues.push({ path: `${prefix}.schema`, message: "Unsupported Forge build schema." });
+    if (!Number.isSafeInteger(item.sourceRevision) || item.sourceRevision < 1 || !Number.isSafeInteger(item.lastTransitionRevision) || item.lastTransitionRevision <= item.sourceRevision || typeof item.inputFingerprint !== "string" || !item.inputFingerprint) issues.push({ path: prefix, message: "Forge source identity is invalid." });
+    if (!Array.isArray(item.batches) || item.batches.length !== 6) issues.push({ path: `${prefix}.batches`, message: "Forge build requires six ordered bundle records." });
+    if (!record(item.checkpoint) || !Number.isSafeInteger(item.checkpoint.completedBundleCount) || !record(item.checkpoint.sections)) issues.push({ path: `${prefix}.checkpoint`, message: "Forge checkpoint is invalid." });
+    if (Array.isArray(item.batches)) item.batches.forEach((batch:any,batchIndex:number)=>{
+      if (!record(batch) || batch.index !== batchIndex || !Array.isArray(batch.expectedKeys) || !Array.isArray(batch.attempts) || !record(batch.sections)) issues.push({ path: `${prefix}.batches[${batchIndex}]`, message: "Forge bundle record is invalid." });
+    });
+    if(Array.isArray(item.batches)&&record(item.checkpoint)&&record(item.checkpoint.sections)){
+      let completed=0;let gap=false;const merged:Record<string,unknown>={};
+      for(const batch of item.batches){if(batch?.status==="complete"){if(gap){issues.push({path:`${prefix}.batches`,message:"Completed Forge bundles must be contiguous."});break;}completed++;if(record(batch.sections))Object.assign(merged,batch.sections);}else gap=true;}
+      if(item.checkpoint.completedBundleCount!==completed||JSON.stringify(item.checkpoint.sections)!==JSON.stringify(merged))issues.push({path:`${prefix}.checkpoint`,message:"Forge checkpoint does not match its completed bundle records."});
+    }
+  });
   (value.canon as any[]).forEach((item, index) => { if (!entityIds.has(item.subjectId)) issues.push({ path: `canon[${index}].subjectId`, message: "Unknown entity." }); });
   (value.entities as any[]).forEach((item, index) => (item.factIds || []).forEach((id: string) => { if (!factIds.has(id)) issues.push({ path: `entities[${index}].factIds`, message: `Unknown fact ${id}.` }); }));
   (value.relationships as any[]).forEach((item, index) => {

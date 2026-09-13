@@ -20,7 +20,21 @@ export interface OwnershipRecord { id: string; factId: string; owner: "character
 export interface SourceEvidence { id: string; kind: "user_input" | "saved_project" | "generated_output" | "lumiverse_documentation" | "external_reference"; locator: string; checksum?: string; observedAt?: string; }
 export interface DependencyEdge { id: string; fromId: string; toId: string; type: "references" | "embeds" | "activates" | "assumes" | "mirrors" | "generated_from"; status: "canon" | "provisional" | "broken" | "deprecated"; origin: GraphOrigin; }
 export interface ArtifactRecord { id: string; type: string; status: "planned" | "draft" | "ready" | "validated" | "released" | "deprecated" | "deferred"; origin: GraphOrigin; displayName: string | null; filename: string | null; version: string | null; sourceFactIds: string[]; }
-export interface BuildRecord { id: string; stage: string; status: "pending" | "active" | "complete" | "failed" | "cancelled"; artifactIds: string[]; sourceRevision: number; }
+export type BuildStatus = "pending" | "active" | "complete" | "failed" | "cancelled";
+export interface BuildRecord { id: string; stage: string; status: BuildStatus; artifactIds: string[]; sourceRevision: number; kind?: string; }
+export interface ForgeAttemptRecord { id: string; provider: string; modelId: string; route: string; status: "active" | "complete" | "failed" | "cancelled"; startedAt: string; finishedAt: string | null; diagnostic?: { code: string; message: string }; }
+export interface ForgeBatchRecord { index: number; name: string; expectedKeys: string[]; status: BuildStatus; sections: Record<string, unknown>; attempts: ForgeAttemptRecord[]; acceptedCommandId: string | null; }
+export interface ForgeBuildRecordV1 extends BuildRecord {
+  kind: "forge";
+  schema: "lorebible.forge-build/v1";
+  executionMode: "continuous" | "step_by_step" | "single_request";
+  inputFingerprint: string;
+  lastTransitionRevision: number;
+  createdAt: string;
+  updatedAt: string;
+  batches: ForgeBatchRecord[];
+  checkpoint: { completedBundleCount: number; sections: Record<string, unknown> };
+}
 export interface ValidationFinding { id: string; severity: "blocker" | "major" | "minor" | "info"; code: string; path: string; message: string; evidence?: unknown; }
 export interface DecisionRecord { id: string; question: string; decision: unknown; status: "accepted" | "proposed" | "superseded"; origin: GraphOrigin; }
 export interface UnresolvedRecord { id: string; code: string; path: string; message: string; severity: "blocker" | "major" | "minor" | "info"; }

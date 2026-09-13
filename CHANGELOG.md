@@ -4,6 +4,29 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.53 — 2026-09-13
+
+### Added
+
+- A versioned durable Forge build record now represents all six bundles as explicit pending, active, complete, failed, or cancelled work inside the canonical Project Graph.
+- Every Forge attempt can record its safe provider, model ID, actual gateway route, timestamps, result state, and bounded failure diagnostic without storing credentials.
+- Project Graph commands can initialize Forge builds and atomically begin, complete, fail, or cancel individual bundle attempts through the existing transactional repository.
+- Restart-safe checkpoints preserve accepted bundle sections, enforce contiguous generation order, and allow a failed or cancelled bundle to retry with a newly selected model.
+
+### Changed
+
+- Forge bundle completion now validates the exact expected section set before accepting it into a canonical checkpoint.
+- Resume validation rejects a changed creative-input fingerprint or source revision instead of silently combining stale and current work.
+- Project Graph validation now rejects malformed native Forge build records while continuing to accept older graphs whose existing build records predate this feature.
+
+### Why
+
+- Long Forge runs need durable, auditable ownership outside browser memory. Provider success and acceptance into the Project Graph are separate state transitions, so a reload or provider failure no longer has to invalidate completed work.
+
+### Validation boundary
+
+- The durable state machine, cancellation/retry behavior, command application, atomic repository reload, and graph validation are deterministically tested. The current `/api/forge` streaming route still uses its existing client checkpoint contract; wiring that route and mobile Forge UI to these canonical records is the next M3.1 slice and is not claimed here.
+
 ## v0.52 — 2026-09-12
 
 ### Added
