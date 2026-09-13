@@ -1,0 +1,30 @@
+import React from "react";
+import type { BlueprintPlanV1, EstimateRange } from "../../contracts/blueprint";
+import type { BlueprintSelectionV1, BlueprintInterfaceMode, LorebookScale } from "../../contracts/blueprintSelection";
+
+const words=(value:string)=>value.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase());
+const options=<T extends string>(values:readonly T[])=>values.map(value=><option key={value} value={value}>{words(value)}</option>);
+const RANGE_FIELDS=["min","ideal","max"] as const;
+const RANGE_LABELS={min:"Minimum",ideal:"Ideal",max:"Maximum"} as const;
+
+export function RangeEditor({label,value,onChange}:{label:string;value:EstimateRange;onChange:(value:EstimateRange)=>void}){
+  return <fieldset className="border p-3"><legend className="font-apparatus text-xs uppercase">{label}</legend><div className="grid grid-cols-1 min-[360px]:grid-cols-3 gap-2">{RANGE_FIELDS.map(field=><label key={field} className="text-xs"><span className="block mb-1">{RANGE_LABELS[field]}</span><input aria-label={`${label} ${field}`} type="number" min={0} value={value[field]} onChange={event=>onChange({...value,[field]:Number(event.target.value)})} className="w-full border bg-transparent p-2"/></label>)}</div></fieldset>;
+}
+
+export function BlueprintPrimaryControls({plan,selection,onField}:{plan:BlueprintPlanV1;selection:BlueprintSelectionV1;onField:<K extends keyof BlueprintSelectionV1>(key:K,value:BlueprintSelectionV1[K])=>void}){
+  const editable=selection.interfaceMode!=="smart_auto";
+  const select=<K extends keyof BlueprintSelectionV1>(label:string,key:K,values:readonly string[],reason:string)=><label className="border p-3 block"><span className="font-apparatus text-[10px] uppercase tracking-wider block">{label}</span><select aria-label={label} disabled={!editable} value={String(selection[key])} onChange={event=>onField(key,event.target.value as BlueprintSelectionV1[K])} className="w-full mt-2 border bg-transparent p-2">{options(values)}</select><span className="text-xs block mt-2 text-[var(--graphite)]">{reason}</span></label>;
+  return <section aria-label="Blueprint controls" className="space-y-3"><h3 className="font-apparatus uppercase text-xs">Recommended build</h3><div className="grid sm:grid-cols-2 gap-3">
+    {select("World mode","worldMode",["arc","sandbox","hybrid"],plan.worldMode.reason)}
+    {select("Build intensity","buildIntensity",["lean","rich","deluxe","obsessive"],plan.buildIntensity.reason)}
+    {select("Generation quality","generationQuality",["fast","balanced","deep_craft","production"],plan.generationQuality.reason)}
+    {select("Runtime budget","runtimeBudget",["efficient","balanced","expansive"],plan.runtimeBudget.reason)}
+    {select("Lorebook size","lorebookScale",["compact","standard","large","massive","custom"],plan.lorebookScale.reason)}
+    {select("Forge execution","forgeExecutionPreference",["continuous","step_by_step","single_request"],"Choose whether Forge continues automatically, pauses after a validated bundle, or uses one provider request.")}
+  </div><label className="border p-3 block"><span className="font-apparatus text-[10px] uppercase tracking-wider block">Ordinary-life coverage</span><input aria-label="Ordinary-life coverage" disabled={!editable} type="range" min={1} max={5} value={selection.everydayLifeDetail} onChange={event=>onField("everydayLifeDetail",Number(event.target.value))} className="w-full mt-3"/><span className="text-xs block mt-1">{["","Minimal","Light","Balanced","Rich","Immersive"][selection.everydayLifeDetail]} · Controls how much routine, leisure, social texture, and harmless daily life the world receives.</span></label>
+  {selection.interfaceMode==="expert"&&<div className="space-y-3"><RangeEditor label="Exact lorebook range" value={selection.lorebookRange} onChange={value=>onField("lorebookRange",value)}/><RangeEditor label="Principal cast range" value={selection.principalCastRange} onChange={value=>onField("principalCastRange",value)}/><RangeEditor label="Roster cast range" value={selection.rosterCastRange} onChange={value=>onField("rosterCastRange",value)}/></div>}
+  </section>;
+}
+
+export const BLUEPRINT_MODES:readonly BlueprintInterfaceMode[]=["smart_auto","guided","expert"];
+export const LOREBOOK_SCALES:readonly LorebookScale[]=["compact","standard","large","massive","custom"];

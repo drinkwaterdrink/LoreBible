@@ -1,0 +1,25 @@
+import React,{useEffect,useRef,useState}from"react";
+import{X}from"lucide-react";
+import type{BlueprintPlanV1}from"../contracts/blueprint";
+import{parseBlueprintSelectionV1,type BlueprintSelectionV1}from"../contracts/blueprintSelection";
+import{addBlueprintCategory,removeBlueprintCategory,setLorebookScale,updateBlueprintCategory,updateBlueprintField,updateBlueprintMechanic}from"../lib/blueprint/selection";
+import{BlueprintPrimaryControls,BLUEPRINT_MODES}from"./blueprint/BlueprintPrimaryControls";
+import{BlueprintCategoryEditor}from"./blueprint/BlueprintCategoryEditor";
+import{BlueprintMechanicEditor}from"./blueprint/BlueprintMechanicEditor";
+
+interface Props{plan:BlueprintPlanV1;initialSelection:BlueprintSelectionV1;onSave:(selection:BlueprintSelectionV1)=>void;onCancel:()=>void}
+const words=(value:string)=>value.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase());
+export const BlueprintStudio:React.FC<Props>=({plan,initialSelection,onSave,onCancel})=>{
+  const[draft,setDraft]=useState(()=>structuredClone(initialSelection));const[issues,setIssues]=useState<string[]>([]);const dialogRef=useRef<HTMLElement>(null);
+  useEffect(()=>{const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;dialogRef.current?.focus();const key=(event:KeyboardEvent)=>{if(event.key==="Escape")onCancel();};document.addEventListener("keydown",key);return()=>{document.removeEventListener("keydown",key);previous?.focus();};},[onCancel]);
+  const field=<K extends keyof BlueprintSelectionV1>(key:K,value:BlueprintSelectionV1[K])=>setDraft(current=>key==="lorebookScale"?setLorebookScale(current,value as BlueprintSelectionV1["lorebookScale"]):updateBlueprintField(current,key as never,value as never));
+  const save=()=>{const parsed=parseBlueprintSelectionV1(draft);if("issues"in parsed){setIssues(parsed.issues.map(issue=>`${issue.path}: ${issue.message}`));return;}onSave(structuredClone(parsed.value));};
+  return <div className="fixed inset-0 z-[70] bg-black/60 p-2 sm:p-6 flex justify-center"><section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="blueprint-studio-title" tabIndex={-1} className="manuscript-sheet bg-[var(--vellum)] w-full max-w-5xl max-h-[96dvh] flex flex-col overflow-hidden"><header className="sticky top-0 z-10 bg-[var(--vellum-raised)] border-b p-4 flex items-start justify-between gap-3"><div><p className="font-apparatus text-[10px] uppercase tracking-widest text-[var(--rubric)]">Blueprint Studio · {words(draft.interfaceMode)}</p><h2 id="blueprint-studio-title" className="font-manuscript text-2xl">Recommended build</h2><p className="text-xs">Graph revision {plan.source.projectRevision} · Changes stay local until saved.</p></div><button type="button" onClick={onCancel} aria-label="Cancel Blueprint edits"><X/></button></header><nav aria-label="Blueprint interface mode" className="grid grid-cols-3 border-b">{BLUEPRINT_MODES.map(mode=><button type="button" key={mode} aria-pressed={draft.interfaceMode===mode} onClick={()=>field("interfaceMode",mode)} className={`p-3 text-xs font-apparatus ${draft.interfaceMode===mode?"bg-[var(--rubric)] text-white":""}`}>{words(mode)}</button>)}</nav><div className="overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-7">
+    <BlueprintPrimaryControls plan={plan} selection={draft} onField={field}/>
+    <section className="border p-3"><h3 className="font-apparatus uppercase text-xs">Artifact package</h3><p className="text-sm mt-2">{draft.artifactTargets.map(words).join(", ")}</p>{plan.artifactTargets.map(item=><p key={item.value} className="text-xs mt-2"><strong>{words(item.value)}:</strong> {item.reason}</p>)}</section>
+    <BlueprintCategoryEditor selection={draft} onCategory={(id,patch)=>setDraft(current=>updateBlueprintCategory(current,id,patch))} onAdd={(label,explanation)=>setDraft(current=>addBlueprintCategory(current,label,explanation))} onRemove={id=>setDraft(current=>removeBlueprintCategory(current,id))}/>
+    <BlueprintMechanicEditor selection={draft} onMechanic={(id,enabled)=>setDraft(current=>updateBlueprintMechanic(current,id,enabled))}/>
+    <section className="grid md:grid-cols-2 gap-3"><article className="border p-3"><h3 className="font-apparatus uppercase text-xs">Ordinary-life coverage</h3><p className="text-sm mt-2">{plan.assessments.ordinaryLife.explanation}</p></article><article className="border p-3"><h3 className="font-apparatus uppercase text-xs">World autonomy</h3><p className="text-sm mt-2">{plan.assessments.worldAutonomy.explanation}</p></article></section>
+    {!!issues.length&&<section role="alert" className="border border-[var(--rubric)] p-3"><strong>Blueprint needs attention</strong>{issues.map(issue=><p className="text-xs mt-1" key={issue}>{issue}</p>)}</section>}
+  </div><footer className="sticky bottom-0 safe-area-bottom z-10 border-t bg-[var(--vellum-raised)] p-3 flex flex-col-reverse sm:flex-row sm:justify-end gap-2"><button type="button" onClick={onCancel} className="btn-secondary">Cancel</button><button type="button" onClick={save} className="btn-primary">Save Blueprint</button></footer></section></div>;
+};
