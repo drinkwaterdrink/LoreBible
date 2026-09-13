@@ -4,6 +4,17 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.60 — 2026-09-13
+
+### Fixed
+
+- Stage 3 “Plan Lorebook Size” now opens the actual Guided Blueprint editor instead of exposing the internal Project Graph Beta panel.
+- Blueprint planning omits blank optional Physics strings before validation, so ordinary projects using default genre, horror, humor, linguistic-base, and margin fields no longer fail with “Blueprint preview request is invalid.”
+
+### Validation boundary
+
+- Regression tests cover default Physics request validity and the distinction between Vault-launched graph tooling and workflow-launched Blueprint editing. Existing tests continue to cover the mobile editor, 2,000–40,000 custom slider, presets, persistence, and Forge brief. Live provider generation and Lumiverse runtime behavior are not implied.
+
 ## v0.59 — 2026-09-13
 
 ### Fixed

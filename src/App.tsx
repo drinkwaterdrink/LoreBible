@@ -59,7 +59,7 @@ import type { BlueprintPlanV1 } from "./contracts/blueprint";
 import type { BlueprintSelectionV1, ForgeExecutionPreference } from "./contracts/blueprintSelection";
 import type { PremiseSuggestionSet } from "./contracts/premiseSuggestions";
 import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext";
-import { abortBlueprintRequest, findBlueprintSourceProject, findPreparedGraphForDocument, getBlueprintFailure, shouldClearBlueprintPlan } from "./lib/blueprint/previewLifecycle";
+import { abortBlueprintRequest, findBlueprintSourceProject, findPreparedGraphForDocument, getBlueprintFailure, shouldClearBlueprintPlan, shouldOpenProjectGraphPanel } from "./lib/blueprint/previewLifecycle";
 import { commitBlueprintStudioDraft, createBlueprintStudioDraft } from "./lib/blueprint/studioLifecycle";
 import { updateBlueprintField, withEverydayLifeDetail } from "./lib/blueprint/selection";
 
@@ -222,6 +222,7 @@ export default function App() {
   const [preparedGraphs, setPreparedGraphs] = useState<PreparedProjectGraphSummary[]>([]);
   const [preparingGraphId, setPreparingGraphId] = useState<string | null>(null);
   const [activeGraph, setActiveGraph] = useState<ProjectGraphV1 | null>(null);
+  const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
   const [graphPreview, setGraphPreview] = useState<ProjectGraphArtifactPreview | null>(null);
   const [blueprintPlan, setBlueprintPlan] = useState<BlueprintPlanV1 | null>(null);
   const [blueprintError, setBlueprintError] = useState<string | null>(null);
@@ -1023,6 +1024,7 @@ export default function App() {
     try {
       const result = await prepareProjectGraph(project);
       acceptActiveGraph(result.graph);
+      setIsGraphPanelOpen(shouldOpenProjectGraphPanel("vault"));
       setGraphPreview(null);
       setIsVaultOpen(false);
       await refreshPreparedGraphs();
@@ -1058,6 +1060,7 @@ export default function App() {
         : await prepareProjectGraph(sourceProject);
       if (controller.signal.aborted) return;
       acceptActiveGraph(prepared.graph);
+      setIsGraphPanelOpen(shouldOpenProjectGraphPanel("workflow_blueprint"));
       setPreparedGraphs(existing ? summaries : await listPreparedProjectGraphs());
       const revision = prepared.graph.project.revision ?? 1;
       const context = createBlueprintPlanningContext(sourceProject, { projectId: prepared.graph.project.id, projectRevision: revision });
@@ -1084,6 +1087,7 @@ export default function App() {
   const handleOpenGraph = async (projectId: string) => {
     try {
       acceptActiveGraph(await loadProjectGraph(projectId));
+      setIsGraphPanelOpen(shouldOpenProjectGraphPanel("vault"));
       setGraphPreview(null);
       setIsVaultOpen(false);
     } catch (error) {
@@ -1557,7 +1561,7 @@ export default function App() {
         onOpenGraph={handleOpenGraph}
       />
 
-      {activeGraph && (
+      {activeGraph && isGraphPanelOpen && (
         <ProjectGraphPanel
           graph={activeGraph}
           preview={graphPreview}
@@ -1570,6 +1574,7 @@ export default function App() {
           onOpenBlueprint={() => setIsBlueprintOpen(true)}
           onClose={() => {
             closeBlueprint();
+            setIsGraphPanelOpen(false);
             setActiveGraph(null);
             setGraphPreview(null);
           }}

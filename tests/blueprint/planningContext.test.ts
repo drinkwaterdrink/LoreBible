@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { createBlueprintPlanningContext } from "../../src/lib/blueprint/planningContext";
 import { createSavedProjectV2, type SavedLoreBibleProjectV2 } from "../../src/lib/projectPersistence";
+import { parseBlueprintPreviewRequest } from "../../src/contracts/blueprint";
+import { DEFAULT_PHYSICS } from "../../src/lib/scenarioDraft";
 
 const project = createSavedProjectV2({
   document: {
@@ -98,4 +100,14 @@ test("omits the selected take when its saved selection cannot be resolved", () =
   const context = createBlueprintPlanningContext({ ...project, workflow: { ...project.workflow, selectedTakeId: "missing" } }, { projectId: "graph-1", projectRevision: 3 });
 
   expect(context.selectedTake).toBeUndefined();
+});
+
+test("default blank optional Physics fields produce a valid Blueprint request", () => {
+  const defaultProject = { ...project, workflow: { ...project.workflow, physics: DEFAULT_PHYSICS } };
+  const context = createBlueprintPlanningContext(defaultProject, { projectId: "graph-1", projectRevision: 3 });
+  const parsed = parseBlueprintPreviewRequest({ expectedRevision: 3, context });
+
+  expect(parsed.ok).toBe(true);
+  expect(context.physicsConstraints).not.toHaveProperty("genre");
+  expect(context.physicsConstraints).not.toHaveProperty("mustInclude");
 });

@@ -51,24 +51,29 @@ function pickTake(take: DivergenceTake): NonNullable<BlueprintPlanningContextV1[
 }
 
 function pickPhysics(physics: PhysicsConfig): BlueprintPhysicsConstraintsV1 {
-  return {
+  const constraints: BlueprintPhysicsConstraintsV1 = {
     density: physics.density,
     densityTokens: physics.densityTokens,
     strangeness: physics.strangeness,
     mundanity: physics.mundanity,
-    genre: physics.genre,
-    subgenre: physics.subgenre,
     violence: physics.violence,
-    horror: physics.horror,
     romance: physics.romance,
-    humor: physics.humor,
     pacing: physics.pacing,
     explicitContent: physics.explicitContent,
     playerDeath: physics.playerDeath,
-    linguisticBase: physics.linguisticBase,
-    mustInclude: physics.mustInclude,
-    mustAvoid: physics.mustAvoid,
   };
+  for (const [key, value] of [
+    ["genre", physics.genre],
+    ["subgenre", physics.subgenre],
+    ["horror", physics.horror],
+    ["humor", physics.humor],
+    ["linguisticBase", physics.linguisticBase],
+    ["mustInclude", physics.mustInclude],
+    ["mustAvoid", physics.mustAvoid],
+  ] as const) {
+    if (typeof value === "string" && value.trim()) constraints[key] = value.trim();
+  }
+  return constraints;
 }
 
 export function createBlueprintPlanningContext(
