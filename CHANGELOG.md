@@ -4,6 +4,29 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.54 — 2026-09-13
+
+### Added
+
+- The live Forge endpoint now binds matching prepared Project Graphs to the durable six-bundle records introduced in v0.53.
+- Server-side creative-input fingerprints select the correct resumable build without treating a provider/model change as a new world.
+- Forge recovery discovers saved graph checkpoints after a browser reload and restores completed sections, progress, and safe retry diagnostics to the Stage 4 interface.
+- Single-request Forge responses are divided into six atomically accepted graph checkpoints while still using only one provider generation call.
+
+### Changed
+
+- Provider attempts are recorded before generation; validated sections are accepted afterward, keeping provider success distinct from canonical graph acceptance.
+- An active attempt left behind by a stopped server is marked as safely interrupted and becomes retryable on the next request.
+- Projects without a matching prepared Project Graph retain the existing V2/browser checkpoint behavior.
+
+### Why
+
+- Durable records only protect users when the real generation route and mobile recovery UI consume them. This connects the tested foundation without replacing the established V2 workflow or increasing provider-call count.
+
+### Validation boundary
+
+- Coordinator persistence, process-restart recovery, input fingerprinting, model-switch compatibility, single-request checkpoint acceptance, client request forwarding, focused UI behavior, full tests, TypeScript, build, and diff checks are validated. Live provider and forced process-kill behavior remain runtime tests rather than automated certification.
+
 ## v0.53 — 2026-09-13
 
 ### Added

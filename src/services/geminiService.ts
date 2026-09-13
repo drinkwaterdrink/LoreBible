@@ -198,6 +198,7 @@ export async function streamForgeDocument(
     settings?: GenerationSettings;
     resumeSections?: Record<string,unknown>;
     executionMode?: "continuous"|"step_by_step"|"single_request";
+    graphProjectId?: string;
   },
   callbacks: ForgeCallbacks,
   signal?: AbortSignal,

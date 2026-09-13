@@ -52,7 +52,7 @@ import { AppVersionBadge } from "./components/AppVersionBadge";
 import { StorageRecoveryNotice } from "./components/StorageRecoveryNotice";
 import { ProjectGraphPanel } from "./components/ProjectGraphPanel";
 import { BlueprintStudio } from "./components/BlueprintStudio";
-import { compileGraphPreview, listPreparedProjectGraphs, loadProjectGraph, prepareProjectGraph, previewBlueprint, renameGraphEntity, type PreparedProjectGraphSummary } from "./services/projectGraphService";
+import { compileGraphPreview, listPreparedProjectGraphs, loadForgeRecovery, loadProjectGraph, prepareProjectGraph, previewBlueprint, renameGraphEntity, type PreparedProjectGraphSummary } from "./services/projectGraphService";
 import type { ProjectGraphV1 } from "./contracts/projectGraph";
 import type { ProjectGraphArtifactPreview } from "./lib/projectGraph/artifactCompiler";
 import type { BlueprintPlanV1 } from "./contracts/blueprint";
@@ -229,6 +229,7 @@ export default function App() {
   const [blueprintBusy, setBlueprintBusy] = useState(false);
   const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
   const blueprintControllerRef = useRef<AbortController | null>(null);
+  useEffect(()=>{if(currentStage!==4||!document||isForging||Object.keys(streamedSections).length)return;let cancelled=false;void(async()=>{try{const summaries=await listPreparedProjectGraphs();const match=summaries.find(item=>item.legacyDocumentId===document.id);if(!match)return;const result=await loadForgeRecovery(match.id,{sparkText,parse,canon,physics,chosenTake:takes.find(t=>t.id===selectedTakeId)||takes[0]});const recovered=result.recovery;if(cancelled||!recovered)return;acceptActiveGraph(result.graph);setStreamedSections(recovered.sections);if(recovered.completedBundleCount===recovered.totalBundleCount){setDocument(current=>current?{...current,...recovered.sections} as LoreBibleDocument:current);setMaxUnlockedStage(previous=>previous<5?5:previous);}setForgeActivity(state=>({...state,status:recovered.status==="failed"?"error":"complete",progress:{task:"forge",phase:recovered.status==="failed"?"error":"complete",label:recovered.status==="failed"?(recovered.diagnostic?.message??"Forge interrupted. Ready to retry."):`Bundle ${recovered.completedBundleCount} saved. Ready to continue.`,completedSteps:recovered.completedBundleCount,totalSteps:recovered.totalBundleCount}}));if(recovered.status==="failed")setForgeError(recovered.diagnostic?.message??"Forge interrupted. Ready to retry.");}catch{}})();return()=>{cancelled=true};},[currentStage,document?.id,isForging,sparkText,parse,canon,physics,takes,selectedTakeId]);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => {
@@ -803,6 +804,8 @@ export default function App() {
   // Proceed from Stage 3 (PHYSICS) -> Stage 4 (FORGE)
   const handleStartForge = async (resumeExisting = false) => {
     const chosenTake = takes.find((t) => t.id === selectedTakeId) || takes[0];
+    const graphSourceDocumentId=typeof activeGraph?.extensions?.legacyDocumentId==="string"?activeGraph.extensions.legacyDocumentId:null;
+    const graphProjectId=activeGraph&&document&&graphSourceDocumentId===document.id?activeGraph.project.id:undefined;
     forgeControllerRef.current?.abort();
     const controller = new AbortController();
     forgeControllerRef.current = controller;
@@ -823,6 +826,7 @@ export default function App() {
         settings,
         resumeSections:resumeExisting?streamedSections:{},
         executionMode: forgeExecutionMode,
+        graphProjectId,
       },
       {
         onLog: (log) => {
@@ -885,6 +889,7 @@ export default function App() {
       },
       controller.signal,
     );
+    if(graphProjectId){try{acceptActiveGraph(await loadProjectGraph(graphProjectId));}catch(error){triggerToast(error instanceof Error?error.message:"Could not refresh the durable Forge checkpoint.");}}
     if (forgeControllerRef.current === controller) forgeControllerRef.current = null;
   };
 

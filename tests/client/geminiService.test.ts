@@ -75,7 +75,7 @@ test("Forge client dispatches structured progress and cancellation", async () =>
   } }), { status: 200 });}) as unknown as typeof fetch;
   const seen: string[] = [];
   try {
-    await streamForgeDocument({ sparkText: "x", parse: {} as any, canon: {} as any, physics: {} as any, chosenTake: {} as any, resumeSections:{core:{title:"Saved"}}, executionMode:"continuous" }, {
+    await streamForgeDocument({ sparkText: "x", parse: {} as any, canon: {} as any, physics: {} as any, chosenTake: {} as any, resumeSections:{core:{title:"Saved"}}, executionMode:"continuous",graphProjectId:"graph/one" }, {
       onLog: () => undefined,
       onSection: () => undefined,
       onComplete: () => undefined,
@@ -86,6 +86,7 @@ test("Forge client dispatches structured progress and cancellation", async () =>
     expect(seen).toEqual(["Bundle 1", "Forge stopped."]);
     expect(body.resumeSections.core.title).toBe("Saved");
     expect(body.executionMode).toBe("continuous");
+    expect(body.graphProjectId).toBe("graph/one");
   } finally { globalThis.fetch = originalFetch; }
 });
 

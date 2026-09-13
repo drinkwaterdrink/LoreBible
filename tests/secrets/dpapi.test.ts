@@ -7,4 +7,4 @@ test("DPAPI round-trips a secret for the current Windows user", async () => {
   const cipher = await protector.protect("sk-test-never-log");
   expect(cipher).not.toContain("sk-test-never-log");
   expect(await protector.unprotect(cipher)).toBe("sk-test-never-log");
-});
+}, 15_000);

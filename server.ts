@@ -33,6 +33,7 @@ import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
 import { createForgeResumePlan, selectForgeBundleSections, type ForgeExecutionMode } from "./server/generation/forgeResume.js";
 import { createForgeGenerationBatches } from "./server/generation/forgeBatches.js";
+import { createForgeProjectCoordinator, type ActiveForgeAttempt, type PreparedForgeProject } from "./server/generation/forgeProjectCoordinator.js";
 import { FORGE_REQUIRED_FIELDS, sanitizeForgeSectionEntries } from "./server/generation/forgeValidation.js";
 import { formatForgeBundleFailure } from "./server/generation/forgeDiagnostics.js";
 import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
@@ -47,7 +48,9 @@ const PORT = Number.isInteger(requestedPort) && requestedPort > 0 && requestedPo
 
 app.use(express.json({ limit: "5mb" }));
 
-registerProjectRoutes(app, { repository: createProjectRepository(resolveDefaultProjectRepositoryPath()) });
+const projectRepository = createProjectRepository(resolveDefaultProjectRepositoryPath());
+const forgeProjectCoordinator = createForgeProjectCoordinator(projectRepository);
+registerProjectRoutes(app, { repository: projectRepository });
 
 // Connection profiles are persisted outside the repository and encrypted with
 // Windows DPAPI. The route layer is isolated so generation can report a
@@ -1364,7 +1367,7 @@ REQUIREMENTS:
 
 // 3. Document Forge endpoint (Sequential 6-Bundle Generation over SSE)
 app.post("/api/forge", async (req, res) => {
-  const { sparkText, parse, canon, physics, chosenTake, settings, resumeSections = {}, executionMode = "continuous" } = req.body;
+  const { sparkText, parse, canon, physics, chosenTake, settings, resumeSections = {}, executionMode = "continuous", graphProjectId } = req.body;
   const requestLifecycle = createRequestAbortSignal(req, res);
   const session = createSseSession(res, "forge");
   session.startHeartbeat();
@@ -1393,8 +1396,13 @@ app.post("/api/forge", async (req, res) => {
 
   sendEvent("log", { stage: "init", label: "Reading the spark and canonical registers…", status: "active" });
 
+  let durableForge:PreparedForgeProject|null=null;
+  if(typeof graphProjectId==="string"&&graphProjectId){
+    try{durableForge=await forgeProjectCoordinator.prepare(graphProjectId,{sparkText,parse,canon,physics,chosenTake},executionMode as ForgeExecutionMode);}
+    catch(error){sendEvent("error",{code:"FORGE_PROJECT_UNAVAILABLE",message:error instanceof Error?error.message:"Durable Forge project could not be prepared."});return;}
+  }
   let resumePlan;
-  try { resumePlan=createForgeResumePlan(resumeSections,executionMode as ForgeExecutionMode); }
+  try { resumePlan=createForgeResumePlan(durableForge?.resumeSections??resumeSections,executionMode as ForgeExecutionMode); }
   catch(error){sendEvent("error",{code:"INVALID_REQUEST",message:error instanceof Error?error.message:"Invalid Forge checkpoint."});return;}
   const doc: Record<string, any> = {
     id: "doc-" + Date.now(),
@@ -1919,7 +1927,14 @@ Adhere strictly to all system constraints: no trope labels, no negations in seed
 Emit strictly valid JSON matching the schema for this bundle.`;
 
       let bundleResult: Record<string, any> | null = null;
+      let durableAttempt:ActiveForgeAttempt|null=null;
+      let durableProvenance:{provider:string;modelId:string;route:string}|null=null;
       try {
+        if(durableForge){
+          const metadata=modelSelection?.profileId&&connectionStore?await connectionStore.getMetadata(modelSelection.profileId):null;
+          durableProvenance={provider:metadata?.provider??"environment_gemini",modelId:modelSelection?.modelId??ENV_GEMINI_MODEL??"gemini-environment",route:modelSelection?"openai_compatible":"legacy_environment"};
+          durableAttempt=await forgeProjectCoordinator.begin(durableForge,{bundleIndex:i,...durableProvenance});
+        }
         bundleResult = await executeGeminiWithRetry<Record<string, any>>({
           ai,
           systemInstruction,
@@ -1943,6 +1958,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
         });
       } catch (bundleErr: any) {
         if (requestLifecycle.signal.aborted || (bundleErr instanceof ModelGatewayError && bundleErr.code === "CLIENT_DISCONNECTED")) {
+          if(durableAttempt)await forgeProjectCoordinator.cancel(durableAttempt).catch(()=>undefined);
           session.finish({ type: "cancelled", task: "forge", message: "Forge stopped." });
           cleanup();
           return;
@@ -1954,6 +1970,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
           bundleErr instanceof ModelGatewayError ? bundleErr.provider : undefined,
           bundleErr instanceof ModelGatewayError ? bundleErr.timeoutKind : undefined,
         ), { operation: "forge" });
+        if(durableAttempt)await forgeProjectCoordinator.fail(durableAttempt,failure.code).catch(()=>undefined);
         session.finish({ type: "error", task: "forge", message: failure.message, code: failure.code, action: failure.action, retryable: failure.retryable, retryAfterMs: failure.retryAfterMs });
         cleanup();
         return;
@@ -1968,6 +1985,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
         // Provider-compatible endpoints occasionally append top-level metadata
         // such as `keys`. Merge only the schema-owned sections.
         const selectedBundle = selectForgeBundleSections(bundleResult, bundle.keys);
+        const acceptedSections:Record<string,unknown>={};
         if (selectedBundle.ignoredKeys.length) sendEvent("log", { stage: bundle.keys[0], label: `${bundle.name} ignored provider metadata: ${selectedBundle.ignoredKeys.join(", ")}`, status: "done" });
         // Merge and stream sections as they arrive.
         for (const [key, val] of Object.entries(selectedBundle.sections)) {
@@ -1975,8 +1993,12 @@ Emit strictly valid JSON matching the schema for this bundle.`;
             ? sanitizeForgeSectionEntries(key, val)
             : val;
           doc[key] = sanitizedVal;
+          acceptedSections[key]=sanitizedVal;
           sendEvent("section", { key, data: sanitizedVal });
         }
+        if(durableAttempt&&executionMode==="single_request"){
+          durableForge=await forgeProjectCoordinator.completeRange(durableAttempt,acceptedSections,resumePlan.endBundleIndexExclusive,durableProvenance!);
+        }else if(durableAttempt)durableForge=await forgeProjectCoordinator.complete(durableAttempt,acceptedSections);
       } catch (validationError) {
         const failure = normalizeGenerationFailure(new ModelGatewayError(
           formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", validationError instanceof Error ? validationError.message : "Structured output validation failed."),
@@ -1984,6 +2006,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
           validationError instanceof ModelGatewayError ? validationError.status : 502,
           validationError instanceof ModelGatewayError ? validationError.provider : undefined,
         ), { operation: "forge" });
+        if(durableAttempt)await forgeProjectCoordinator.fail(durableAttempt,failure.code).catch(()=>undefined);
         session.finish({ type: "error", task: "forge", message: failure.message, code: failure.code, action: failure.action, retryable: failure.retryable, retryAfterMs: failure.retryAfterMs });
         cleanup();
         return;
@@ -1997,13 +2020,13 @@ Emit strictly valid JSON matching the schema for this bundle.`;
       session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `${bundle.name} complete`, completedSteps: generationBatch.completedBundleCount, totalSteps: bundles.length });
     }
 
-    if(resumePlan.endBundleIndexExclusive<bundles.length){sendEvent("done",{document:doc,complete:false,nextBundleIndex:resumePlan.endBundleIndexExclusive});return;}
+    if(resumePlan.endBundleIndexExclusive<bundles.length){sendEvent("done",{document:doc,complete:false,nextBundleIndex:resumePlan.endBundleIndexExclusive,graphProject:durableForge?{projectId:durableForge.projectId,buildId:durableForge.buildId,revision:durableForge.graph.project.revision}:undefined});return;}
     if (doc.core?.title) {
       doc.title = doc.core.title;
     }
 
     sendEvent("log", { stage: "final", label: "Manuscript inked and bound across all 6 bundles", status: "done" });
-    sendEvent("done", { document: doc });
+    sendEvent("done", { document: doc, graphProject:durableForge?{projectId:durableForge.projectId,buildId:durableForge.buildId,revision:durableForge.graph.project.revision}:undefined });
   } catch (err: any) {
     if (requestLifecycle.signal.aborted) {
       session.finish({ type: "cancelled", task: "forge", message: "Forge stopped." });

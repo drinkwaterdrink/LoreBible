@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 10 of 17 ordered roadmap items complete; 7 remain. M2 Blueprint Studio is complete. v0.52 added independent 40k-capable lore-library/runtime budgets and canonical categorized lore titles. v0.53 begins M3.1 with validated, transactional Project Graph records for six durable Forge bundles, retries, failures, cancellations, and restart-safe checkpoints. Connecting the live Forge stream and mobile controls to those records remains the next M3.1 slice; M4.1 foundation work is partially complete. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 11 of 17 ordered roadmap items complete; 6 remain. M2 Blueprint Studio and M3.1 durable Forge integration are complete. v0.54 connects live continuous, step-by-step, and single-request Forge generation to restart-safe Project Graph checkpoints while preserving the V2 compatibility path. M3.2 graph-native category generation is next; M4.1 foundation work is partially complete. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 
@@ -86,7 +86,7 @@ Introduce artifact composition, world mode, independent intensity/quality/runtim
 
 **Depends on:** M1 storage/build records and M2 accepted inventory. **Outcome:** multi-batch generation can stop, restart, and resume without losing completed work.
 
-**Progress:** In progress. v0.53 added the canonical `lorebible.forge-build/v1` state machine and transactional Project Graph commands. Six ordered bundle records retain accepted sections and safe attempt provenance across repository restarts; retries may change models, and failure/cancellation does not erase earlier checkpoints. The live `/api/forge` route and Forge UI still use the v0.48 client checkpoint path until the next slice binds them to these records.
+**Progress:** M3.1 complete. v0.53 added the canonical `lorebible.forge-build/v1` state machine and transactional Project Graph commands. v0.54 connects matching prepared graphs to the live Forge route, restores checkpoints to Stage 4 after reload, recovers interrupted attempts, and atomically maps a one-call response across all six bundle records. M3.2 will replace document-shaped generation ownership with graph-native category candidates and derived manuscript rendering.
 
 Implement orchestration before expanding specialist count. Generate the first category into graph candidates; accept atomically; derive manuscript. Expand one category at a time. Add cross-linking, principal/roster writers, knowledge claims, independent pressures, continuity/agency/autonomy audits and scoped regeneration. Reuse existing gateway and progress/cancellation contracts.
 

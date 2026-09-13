@@ -7,6 +7,7 @@ import {
   createForgeBuild,
   failForgeBatch,
   resumeForgeBuild,
+  findRecoverableForgeBuild,
 } from "../../src/lib/projectGraph/forgeBuilds";
 
 function graph(): ProjectGraphV1 {
@@ -89,4 +90,11 @@ test("build state can live inside the canonical graph without changing existing 
   value.builds.push(build);
   expect(value.project.id).toBe("project/forge");
   expect(value.builds[0].kind).toBe("forge");
+});
+
+test("finds the newest durable checkpoint for UI recovery",()=>{
+  const value=graph();const older=createForgeBuild({id:"build/old",sourceRevision:7,inputFingerprint:"a",executionMode:"continuous",createdAt:"a"});const newer=createForgeBuild({id:"build/new",sourceRevision:7,inputFingerprint:"b",executionMode:"continuous",createdAt:"b"});
+  const active=beginForgeBatch(newer,{bundleIndex:0,attemptId:"attempt/1",provider:"gemini",modelId:"gemini-flash",route:"openai_compatible",startedAt:"c"});const completed=completeForgeBatch(active,{bundleIndex:0,attemptId:"attempt/1",commandId:"done",sections:{core:{title:"Recovered"},user:{},worldPhysics:{},status:{}},completedAt:"d"});value.builds=[older,completed];
+  expect(findRecoverableForgeBuild(value,"b")).toMatchObject({buildId:"build/new",completedBundleCount:1,sections:{core:{title:"Recovered"}}});
+  expect(findRecoverableForgeBuild(value,"missing")).toBeNull();
 });

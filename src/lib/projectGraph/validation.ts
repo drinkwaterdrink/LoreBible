@@ -1,4 +1,5 @@
 import { PROJECT_GRAPH_SCHEMA, USER_AGENCY_RESERVATIONS, type ProjectGraphV1 } from "../../contracts/projectGraph";
+import { canonicalizeJson } from "./canonicalJson";
 
 export type ProjectGraphParseResult = { ok: true; value: ProjectGraphV1 } | { ok: false; issues: Array<{ path: string; message: string }> };
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -37,7 +38,7 @@ export function parseProjectGraph(value: unknown): ProjectGraphParseResult {
     if(Array.isArray(item.batches)&&record(item.checkpoint)&&record(item.checkpoint.sections)){
       let completed=0;let gap=false;const merged:Record<string,unknown>={};
       for(const batch of item.batches){if(batch?.status==="complete"){if(gap){issues.push({path:`${prefix}.batches`,message:"Completed Forge bundles must be contiguous."});break;}completed++;if(record(batch.sections))Object.assign(merged,batch.sections);}else gap=true;}
-      if(item.checkpoint.completedBundleCount!==completed||JSON.stringify(item.checkpoint.sections)!==JSON.stringify(merged))issues.push({path:`${prefix}.checkpoint`,message:"Forge checkpoint does not match its completed bundle records."});
+      if(item.checkpoint.completedBundleCount!==completed||canonicalizeJson(item.checkpoint.sections)!==canonicalizeJson(merged))issues.push({path:`${prefix}.checkpoint`,message:"Forge checkpoint does not match its completed bundle records."});
     }
   });
   (value.canon as any[]).forEach((item, index) => { if (!entityIds.has(item.subjectId)) issues.push({ path: `canon[${index}].subjectId`, message: "Unknown entity." }); });

@@ -2,7 +2,7 @@
 
 **Status:** living master architecture and implementation blueprint, not a claim that every described capability exists. **Current delivery baseline:** v0.52 on the `test` branch, 2026-09-12. **Primary target:** Lumiverse. **Companions:** [delivery roadmap](delivery-roadmap.md), [requirement traceability](requirements-traceability.md), and [capability evidence](capability-evidence.md).
 
-**Progress:** 10 of 17 ordered roadmap items are complete and 7 remain. M0, M1, and M2 Blueprint Studio are complete. v0.52 began M4.1 foundations with independent 40k-capable lore-library/runtime budgets and canonical categorized lore titles. M3.1 durable graph-native Forge batches are next.
+**Progress:** 11 of 17 ordered roadmap items are complete and 6 remain. M0, M1, M2 Blueprint Studio, and M3.1 durable Forge integration are complete. v0.54 connects real Forge generation and reload recovery to canonical Project Graph checkpoints. M3.2 graph-native category generation is next; v0.52's independent 40k-capable budgets and canonical categorized titles remain the opening M4.1 foundation.
 
 ## 1. Product constitution
 
@@ -338,7 +338,7 @@ The roadmap is delivered as bounded vertical slices. A milestone is complete onl
 
 ## 16. Immediate post-v0.52 sequence
 
-1. **M3.1 durable Forge batches.** Move the current six-bundle checkpoint into the project store with explicit pending, active, complete, and failed records. One-bundle mode waits for the user; continuous mode observes provider pacing; retry starts at the failed batch and may use a newly selected model.
+1. **M3.1 durable Forge batches — Complete in v0.53–v0.54.** The six-bundle checkpoint lives in the project store with explicit pending, active, complete, failed, and cancelled records. One-bundle mode waits for the user; continuous mode preserves provider pacing; single-request mode atomically accepts one response across the same bundle ledger; retry starts at the interrupted batch and may use a newly selected model.
 2. **M3.2 graph-native category generation.** Generate principal and roster cast, directional relationships, knowledge claims, temporal facts, independent goals, and world pressures into stable records while retaining the manuscript as a derived view.
 3. **M4.1 dynamic lore planning.** Convert accepted Blueprint categories into a Lore Manifest with premise-dependent categories, concise `[Category] Name` titles, approximate entry-count targets, canonical ownership, visibility, temporality, and expected runtime role.
 4. **M4.2 retrieval architecture.** Plan precise primary/secondary keys, selective logic, scan depth, position, order, priority, sticky/cooldown/delay, bounded recursion, groups, probability, and vector fallback only when justified and supported.

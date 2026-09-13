@@ -1,4 +1,4 @@
-import type { ForgeBuildRecordV1 } from "../../contracts/projectGraph";
+import type { ForgeBuildRecordV1, ProjectGraphV1 } from "../../contracts/projectGraph";
 import { FORGE_BUNDLE_KEYS, type ForgeExecutionMode } from "../../../server/generation/forgeResume";
 
 const BUNDLE_NAMES = [
@@ -89,3 +89,5 @@ export function cancelForgeBatch(build: ForgeBuildRecordV1, input: { bundleIndex
   if (batch.status !== "active" || !attempt || attempt.status !== "active") throw new ForgeBuildError("Only the active Forge attempt can be cancelled.", "invalid_transition");
   attempt.status = "cancelled"; attempt.finishedAt = input.cancelledAt; batch.status = "cancelled"; next.status = "cancelled"; next.updatedAt = input.cancelledAt; return next;
 }
+
+export function findRecoverableForgeBuild(graph:ProjectGraphV1,inputFingerprint:string){const build=[...graph.builds].reverse().find((item)=>item.kind==="forge"&&(item as ForgeBuildRecordV1).schema==="lorebible.forge-build/v1"&&(item as ForgeBuildRecordV1).inputFingerprint===inputFingerprint)as ForgeBuildRecordV1|undefined;if(!build)return null;return{buildId:build.id,status:build.status,completedBundleCount:build.checkpoint.completedBundleCount,totalBundleCount:build.batches.length,sections:structuredClone(build.checkpoint.sections),diagnostic:[...build.batches].reverse().flatMap(batch=>[...batch.attempts].reverse()).find(attempt=>attempt.status==="failed")?.diagnostic??null};}
