@@ -32,6 +32,7 @@ import { createModelGateway, ModelGatewayError, type ModelGateway } from "./serv
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
 import { createForgeResumePlan, selectForgeBundleSections, type ForgeExecutionMode } from "./server/generation/forgeResume.js";
+import { createForgeGenerationBatches } from "./server/generation/forgeBatches.js";
 import { FORGE_REQUIRED_FIELDS, sanitizeForgeSectionEntries } from "./server/generation/forgeValidation.js";
 import { formatForgeBundleFailure } from "./server/generation/forgeDiagnostics.js";
 import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
@@ -1884,8 +1885,10 @@ app.post("/api/forge", async (req, res) => {
   ];
 
   try {
-    for (let i = resumePlan.startBundleIndex; i < resumePlan.endBundleIndexExclusive; i++) {
-      const bundle = bundles[i];
+    const generationBatches = createForgeGenerationBatches(bundles, resumePlan.startBundleIndex, resumePlan.endBundleIndexExclusive, executionMode as ForgeExecutionMode);
+    for (const generationBatch of generationBatches) {
+      const i = generationBatch.startBundleIndex;
+      const bundle = generationBatch.bundle;
       session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Forging bundle ${i + 1} of ${bundles.length}: ${bundle.name}`, completedSteps: i, totalSteps: bundles.length });
       sendEvent("log", {
         stage: bundle.keys[0],
@@ -1991,7 +1994,7 @@ Emit strictly valid JSON matching the schema for this bundle.`;
         label: `${bundle.name} — inked and verified`,
         status: "done",
       });
-      session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `${bundle.name} complete`, completedSteps: i + 1, totalSteps: bundles.length });
+      session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `${bundle.name} complete`, completedSteps: generationBatch.completedBundleCount, totalSteps: bundles.length });
     }
 
     if(resumePlan.endBundleIndexExclusive<bundles.length){sendEvent("done",{document:doc,complete:false,nextBundleIndex:resumePlan.endBundleIndexExclusive});return;}
