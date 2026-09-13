@@ -59,7 +59,7 @@ import type { BlueprintPlanV1 } from "./contracts/blueprint";
 import type { BlueprintSelectionV1, ForgeExecutionPreference } from "./contracts/blueprintSelection";
 import type { PremiseSuggestionSet } from "./contracts/premiseSuggestions";
 import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext";
-import { abortBlueprintRequest, findBlueprintSourceProject, getBlueprintFailure, shouldClearBlueprintPlan } from "./lib/blueprint/previewLifecycle";
+import { abortBlueprintRequest, findBlueprintSourceProject, findPreparedGraphForDocument, getBlueprintFailure, shouldClearBlueprintPlan } from "./lib/blueprint/previewLifecycle";
 import { commitBlueprintStudioDraft, createBlueprintStudioDraft } from "./lib/blueprint/studioLifecycle";
 import { updateBlueprintField, withEverydayLifeDetail } from "./lib/blueprint/selection";
 
@@ -1051,10 +1051,14 @@ export default function App() {
     setBlueprintError(null);
     setBlueprintReloadRequired(false);
     try {
-      const prepared = await prepareProjectGraph(sourceProject);
+      const summaries = await listPreparedProjectGraphs();
+      const existing = findPreparedGraphForDocument(sourceProject.document.id, summaries);
+      const prepared = existing
+        ? { status: "already_prepared", graph: await loadProjectGraph(existing.id) }
+        : await prepareProjectGraph(sourceProject);
       if (controller.signal.aborted) return;
       acceptActiveGraph(prepared.graph);
-      await refreshPreparedGraphs();
+      setPreparedGraphs(existing ? summaries : await listPreparedProjectGraphs());
       const revision = prepared.graph.project.revision ?? 1;
       const context = createBlueprintPlanningContext(sourceProject, { projectId: prepared.graph.project.id, projectRevision: revision });
       const plan = await previewBlueprint(prepared.graph.project.id, { expectedRevision: revision, context }, controller.signal);

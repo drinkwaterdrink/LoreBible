@@ -4,6 +4,17 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.59 — 2026-09-13
+
+### Fixed
+
+- Opening “Plan Lorebook Size” now reuses the prepared Project Graph already associated with the active manuscript instead of trying to migrate a duplicate graph.
+- Existing graph edits and Forge checkpoints remain intact while the Blueprint preview receives the latest Stage 3 premise and Physics inputs.
+
+### Validation boundary
+
+- A regression test covers matching prepared graphs by their legacy document identity, alongside the existing Blueprint launch, editing, persistence, and Forge-brief suites. Live provider generation and Lumiverse runtime behavior are not implied.
+
 ## v0.58 — 2026-09-13
 
 ### Fixed
