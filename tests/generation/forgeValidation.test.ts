@@ -31,3 +31,15 @@ test("Forge validation names the missing relationship field instead of hiding it
     keys: ["Mara", "Ivo"],
   }])).toThrow("relationshipWeb entry 1 is missing required content: relation");
 });
+
+const completeNpcFields={name:"Mara",role:"Ferry keeper",wants:"Keep the crossing independent.",body:"Weathered coat and brass spectacles.",voice:"Brief, dry observations.",notDefault:"Repairs clocks when anxious.",holds:"The night ledger.",connection:"Knows the quay families.",castTier:"principal",independentActivity:"Audits crossings and repairs the west signal."};
+
+test("new Forge NPC entries require explicit cast tier and independent activity",()=>{
+  expect(FORGE_REQUIRED_FIELDS.npcs).toContain("independentActivity");
+  const [npc]=sanitizeForgeSectionEntries("npcs",[{fields:completeNpcFields,keys:["Mara"]}]);
+  expect(npc.fields).toMatchObject({castTier:"principal",independentActivity:"Audits crossings and repairs the west signal."});
+});
+
+test("Forge rejects an unsupported NPC cast tier",()=>{
+  expect(()=>sanitizeForgeSectionEntries("npcs",[{fields:{...completeNpcFields,castTier:"hero"},keys:["Mara"]}])).toThrow("npcs entry 1 has unsupported castTier");
+});

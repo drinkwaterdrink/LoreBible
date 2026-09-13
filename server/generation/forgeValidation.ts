@@ -4,7 +4,7 @@ export const FORGE_REQUIRED_FIELDS: Record<string, readonly string[]> = {
   rules: ["rule", "profits", "pays"],
   locations: ["name", "function", "mood", "whatsWrong"],
   factions: ["name", "publicFace", "trueAgenda", "independentWant", "stanceTowardUser"],
-  npcs: ["name", "role", "wants", "body", "voice", "notDefault", "holds", "connection"],
+  npcs: ["name", "role", "wants", "body", "voice", "notDefault", "holds", "connection", "castTier", "independentActivity"],
   relationshipWeb: ["source", "target", "bond", "pressure", "relation"],
   knowledgeMap: ["truth", "knows", "suspects", "surfacesWhen"],
   items: ["name", "whatItDoes", "costOrLimit", "unfiredGun"],
@@ -28,6 +28,7 @@ export function sanitizeForgeSectionEntries(sectionKey: string, entries: unknown
       const reasons = [...missing, ...(!Array.isArray(keys) || keys.length === 0 ? ["keys"] : [])];
       throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} is missing required content: ${reasons.join(", ")}.`, "INVALID_STRUCTURED_OUTPUT", 502);
     }
+    if(sectionKey==="npcs"&&!(["principal","roster"] as unknown[]).includes(fields.castTier))throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} has unsupported castTier.`,"INVALID_STRUCTURED_OUTPUT",502);
     return { ...record, id: record.id || `${sectionKey}-${idx + 1}`, locked: Boolean(record.locked) };
   });
 }

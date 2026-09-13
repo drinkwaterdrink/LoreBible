@@ -25,7 +25,13 @@ export interface BuildRecord { id: string; stage: string; status: BuildStatus; a
 export interface ForgeAttemptRecord { id: string; provider: string; modelId: string; route: string; status: "active" | "complete" | "failed" | "cancelled"; startedAt: string; finishedAt: string | null; diagnostic?: { code: string; message: string }; }
 export interface ForgeBatchRecord { index: number; name: string; expectedKeys: string[]; status: BuildStatus; sections: Record<string, unknown>; attempts: ForgeAttemptRecord[]; acceptedCommandId: string | null; }
 export type ForgeCategoryRecordKind = "entity" | "relationship" | "knowledge" | "temporal_fact" | "section" | "empty_collection";
-export interface ForgeCategoryRecordV1 { id:string; schema:"lorebible.forge-category-record/v1"; buildId:string; bundleIndex:number; sectionKey:string; categoryId:string; recordKind:ForgeCategoryRecordKind; ordinal:number; sourceEntryId:string|null; semanticName:string|null; status:"proposed"; origin:"generated"; payload:unknown; }
+export type ForgeCastTier = "principal" | "roster" | "unclassified";
+export type ForgeSpecialistProjectionV1 =
+  | { kind:"entity"; entityType:EntityType; name:string|null; castTier:ForgeCastTier; independentGoal:string|null; independentActivity:string|null }
+  | { kind:"relationship"; sourceName:string|null; targetName:string|null; publicDynamic:string|null; tension:string|null; direction:string|null }
+  | { kind:"knowledge"; truth:string|null; knownBy:string|null; suspectedBy:string|null; surfacesWhen:string|null }
+  | { kind:"temporal_fact"; temporalClass:"historical"|"current"; label:string|null; timing:string|null; consequence:string|null };
+export interface ForgeCategoryRecordV1 { id:string; schema:"lorebible.forge-category-record/v1"; buildId:string; bundleIndex:number; sectionKey:string; categoryId:string; recordKind:ForgeCategoryRecordKind; ordinal:number; sourceEntryId:string|null; semanticName:string|null; status:"proposed"; origin:"generated"; payload:unknown; projection?:ForgeSpecialistProjectionV1; }
 export interface ForgeBuildRecordV1 extends BuildRecord {
   kind: "forge";
   schema: "lorebible.forge-build/v1";

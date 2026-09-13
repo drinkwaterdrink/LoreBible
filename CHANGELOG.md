@@ -4,6 +4,26 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.57 — 2026-09-13
+
+### Added
+
+- Forge category proposals now carry typed specialist projections for entities, directional relationships, knowledge boundaries, and historical/current facts while retaining their original manuscript payloads losslessly.
+- New NPC generation explicitly distinguishes principal and roster cast and records meaningful independent activity outside the player's immediate orbit.
+
+### Changed
+
+- Bundle 3 now asks for NPC-to-NPC relationships and separates truth, knowledge, suspicion, and discovery conditions instead of centering every connection on `{{user}}`.
+- Project Graph validation rejects malformed specialist projections, while v0.55–v0.56 checkpoints without projections remain compatible and are enriched when rebuilt from accepted sections.
+
+### Why
+
+- M3.2 requires structured world intelligence before canon acceptance and retrieval engineering can reason about cast depth, world autonomy, knowledge separation, and temporal routing.
+
+### Validation boundary
+
+- Deterministic projection, legacy compatibility, payload/manuscript parity, stricter new-NPC validation, checkpoint behavior, full tests, TypeScript, production build, and diff checks are validated. The projections remain generated proposals rather than accepted canon; entity cross-link resolution and live provider quality sampling remain future work.
+
 ## v0.56 — 2026-09-13
 
 ### Added
