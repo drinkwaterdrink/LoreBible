@@ -4,6 +4,33 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.51 — 2026-09-12
+
+### Added
+
+- Stage 3 now has an editable, mobile-first Blueprint Studio with Smart Auto, Guided, and Expert views.
+- Guided controls cover artifact outputs, Arc/Sandbox/Hybrid mode, build intensity, generation quality, runtime budget, lorebook size, ordinary-life coverage, lore categories, optional mechanic packs, and Forge execution preference.
+- Expert mode adds exact lorebook, principal-cast, roster-cast, and category ranges plus planned runtime-role metadata.
+- Users can add scenario-specific custom lore categories. Custom entries receive safe stable IDs and survive recommendation refreshes.
+- Blueprint fields, categories, and mechanics can be locked so refreshed recommendations preserve explicit user decisions and omissions.
+- Forge now has a genuine **Single provider request** mode that combines all remaining bundle schemas into one call, including checkpointed resumes.
+
+### Changed
+
+- The former “mundanity” concept is presented as ordinary-life coverage with five plain-language levels while preserving the existing saved value.
+- Blueprint edits stay local until **Save Blueprint**. Cancel leaves the last accepted selection untouched; Save validates and commits the complete selection atomically.
+- Accepted Blueprint selections now travel through active-workspace autosave and Vault project saves, and restore their Forge execution preference.
+- Advanced mechanic choices are explicitly labeled as planned intent until later Lore Production compiler stages implement and validate them.
+
+### Why
+
+- Users need control over what a premise actually requires before spending provider quota. World breadth, model effort, lorebook size, runtime prompt cost, and call pacing solve different problems and should not be collapsed into one density slider.
+- Mobile users need Save and Cancel available without scrolling through every category, and quota-limited AI Studio workflows need a real one-call alternative rather than a mislabeled six-call path.
+
+### Validation boundary
+
+- Selection invariants, immutable edits, recommendation reconciliation, custom-category IDs, mobile server rendering, persistence round trips, Forge batching/resume behavior, the full test suite, TypeScript, and the production build are validated before release. Browser-rendered ergonomics and live provider behavior remain separate runtime observations.
+
 ## v0.50 — 2026-09-12
 
 ### Fixed

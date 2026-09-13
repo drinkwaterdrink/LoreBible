@@ -29,3 +29,14 @@ test("expert mode exposes exact ranges and runtime architecture without horizont
   for(const text of ["Exact lorebook range","Principal cast range","Roster cast range","Runtime role","Minimum","Ideal","Maximum"])expect(html).toContain(text);
   expect(html).not.toContain("overflow-x-auto");
 });
+
+test("guided mode exposes selectable artifact outputs while preventing an empty package",()=>{
+  const plan=createBlueprintPlan(cozyBakery(),{createdAt:"2026-09-12T12:00:00.000Z"});
+  const selection={...createBlueprintSelection(plan),interfaceMode:"guided" as const};
+  const html=renderToString(<BlueprintStudio plan={plan} initialSelection={selection} onSave={()=>{}} onCancel={()=>{}}/>);
+  expect(html).toContain("Choose artifact outputs");
+  expect(html).toContain("Full World Package");
+  expect(html).toContain("World Book Primary");
+  expect(html).toContain('name="artifact-target"');
+  expect(html).toContain("Keep at least one output selected");
+});

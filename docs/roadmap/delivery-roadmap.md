@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 9 of 17 ordered roadmap items complete (M0.1–M1); 8 remain. M2 Blueprint Studio is in progress: M2.1 shipped a read-only, premise-adaptive planning preview in v0.41. Reliability releases through v0.50 then closed Stage 1 freshness, full-board Divergence history, mobile Connections, provider diagnostics, cross-browser IDs, and initial resumable Forge-control gaps without changing the milestone count. M2.2 editable and persisted Blueprint controls are next, followed by durable graph-native Forge batches. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 10 of 17 ordered roadmap items complete; 7 remain. M2 Blueprint Studio is complete: M2.1 shipped premise-adaptive recommendations and v0.51 added persisted Smart/Guided/Expert controls, custom categories, locks, mechanics, sizing, and Forge preferences. Reliability releases through v0.50 closed generation and mobile prerequisites. M3.1 durable graph-native Forge batches are next. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 

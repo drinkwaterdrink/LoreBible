@@ -1,8 +1,8 @@
 # LoreBible Production Studio: north-star roadmap
 
-**Current delivery baseline:** 2026-09-12 · application v0.50 · `test` branch.
+**Current delivery baseline:** 2026-09-12 · application v0.51 · `test` branch.
 
-**Status:** 9 of 17 ordered roadmap items are complete and 8 remain. M0 and M1 are complete; M2 Blueprint Studio is in progress. Reliability releases through v0.50 stabilized premise freshness, Divergence history, mobile Connections, resumable Forge controls, provider diagnostics, and cross-browser generation IDs. M2.2 editable and persisted Blueprint controls are next.
+**Status:** 10 of 17 ordered roadmap items are complete and 7 remain. M0, M1, and M2 Blueprint Studio are complete. v0.51 shipped editable, persisted Smart/Guided/Expert Blueprint decisions and genuine single-request Forge generation. M3.1 durable graph-native Forge batches are next.
 
 LoreBible will become a creative production studio whose rich source world and carefully compiled runtime artifacts are deliberately different things. Creative quality takes precedence over speed and minimizing calls, while the user retains control over cost, accepted work, and scope.
 
@@ -28,7 +28,8 @@ Application changes are summarized in the project-level [changelog](../../CHANGE
 | M1 Project Graph foundation | Complete | Versioned graph migration, transactional repository, revision-safe commands, controlled editing, and graph-native preview. |
 | M2.1 Blueprint planning preview | Complete | Read-only premise-adaptive recommendations with evidence, revision checks, and mobile-safe inspection. |
 | v0.46–v0.50 Reliability bridge | Complete | Fresh premise starters, recoverable board history, mobile model ergonomics, manual Forge checkpoints, truthful provider diagnostics, and browser-safe generation IDs. |
-| M2.2 Editable Blueprint | Next | Persist accepted/overridden category, intensity, runtime, and mechanic decisions before Forge. |
+| M2.2 Editable Blueprint | Complete | Mobile Smart/Guided/Expert controls persist accepted categories, custom categories, locks, intensity, runtime, mechanics, and Forge execution preference. |
+| M3.1 Durable graph-native Forge batches | Next | Persist batch manifests in the project store and resume generation directly into canonical graph records. |
 
 ## Recommended order
 
@@ -49,6 +50,6 @@ Validation, provenance, mobile usability, and capability evidence begin in M0/M1
 
 ## Next work
 
-Implement M2.2 next: redesign Stage 3 around understandable, editable Blueprint decisions; preserve explicit user locks/omissions through save, load, and reanalysis; and retain migrated Physics values. The following approved slice adds manual step-by-step and optional single-request Forge execution so quota-limited providers never launch another bundle until the user explicitly requests it. Keep the original M0–M9 ordering authoritative after those releases.
+Implement M3.1 next: persist explicit Forge batch manifests in the server-side project store, resume after the last validated batch, preserve completed work across reloads, and allow a newly selected model to continue the failed batch. Keep the original M0–M9 ordering authoritative.
 
 No calendar promises are assigned to the ten milestones: fixture availability, migration findings, and measured generation behavior determine readiness. Each milestone must ship a useful vertical slice rather than a collection of disconnected scaffolds.
