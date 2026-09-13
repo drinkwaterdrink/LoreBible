@@ -37,6 +37,8 @@ test("accepted bundles resume after reload without regenerating completed work",
   expect(resumeForgeBuild(reloaded, "sha256:abc", 7)).toMatchObject({ nextBundleIndex: 1, complete: false });
   expect(reloaded.checkpoint.sections.core).toEqual({ title: "A" });
   expect(reloaded.batches[0].status).toBe("complete");
+  expect(reloaded.categoryRecords?.map((record) => record.sectionKey)).toEqual(["core", "user", "worldPhysics", "status"]);
+  expect(Object.fromEntries(reloaded.categoryRecords!.map((record) => [record.sectionKey, record.payload]))).toEqual(reloaded.checkpoint.sections);
 });
 
 test("a failed retry preserves prior sections and can use a newly selected model", () => {
@@ -49,6 +51,17 @@ test("a failed retry preserves prior sections and can use a newly selected model
   expect(build.checkpoint.completedBundleCount).toBe(1);
   expect(build.batches[1].attempts.map((attempt) => attempt.modelId)).toEqual(["model-a", "model-b"]);
   expect(build.batches[1].status).toBe("active");
+});
+
+test("continuing a legacy checkpoint backfills records for previously completed bundles",()=>{
+  let build=createForgeBuild({id:"build/legacy",sourceRevision:7,inputFingerprint:"sha256:abc",executionMode:"continuous",createdAt:"a"});
+  build=beginForgeBatch(build,{bundleIndex:0,attemptId:"attempt/1",provider:"gemini",modelId:"gemini-flash",route:"gemini_native",startedAt:"b"});
+  build=completeForgeBatch(build,{bundleIndex:0,attemptId:"attempt/1",commandId:"done/1",sections:{core:{title:"Kept"},user:{},worldPhysics:{},status:{}},completedAt:"c"});
+  delete build.categoryRecords;
+  build=beginForgeBatch(build,{bundleIndex:1,attemptId:"attempt/2",provider:"gemini",modelId:"gemini-flash",route:"gemini_native",startedAt:"d"});
+  build=completeForgeBatch(build,{bundleIndex:1,attemptId:"attempt/2",commandId:"done/2",sections:{locations:[],factions:[]},completedAt:"e"});
+  expect(build.checkpoint.sections.core).toEqual({title:"Kept"});
+  expect(new Set(build.categoryRecords!.map(record=>record.sectionKey))).toEqual(new Set(["core","user","worldPhysics","status","locations","factions"]));
 });
 
 test("persisted attempt metadata is bounded and rejects credential-like values", () => {

@@ -1,5 +1,6 @@
 import { PROJECT_GRAPH_SCHEMA, USER_AGENCY_RESERVATIONS, type ProjectGraphV1 } from "../../contracts/projectGraph";
 import { canonicalizeJson } from "./canonicalJson";
+import { deriveForgeSectionsFromCategoryRecords } from "./forgeCategoryRecords";
 
 export type ProjectGraphParseResult = { ok: true; value: ProjectGraphV1 } | { ok: false; issues: Array<{ path: string; message: string }> };
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -40,6 +41,7 @@ export function parseProjectGraph(value: unknown): ProjectGraphParseResult {
       for(const batch of item.batches){if(batch?.status==="complete"){if(gap){issues.push({path:`${prefix}.batches`,message:"Completed Forge bundles must be contiguous."});break;}completed++;if(record(batch.sections))Object.assign(merged,batch.sections);}else gap=true;}
       if(item.checkpoint.completedBundleCount!==completed||canonicalizeJson(item.checkpoint.sections)!==canonicalizeJson(merged))issues.push({path:`${prefix}.checkpoint`,message:"Forge checkpoint does not match its completed bundle records."});
     }
+    if(item.categoryRecords!==undefined){if(!Array.isArray(item.categoryRecords))issues.push({path:`${prefix}.categoryRecords`,message:"Forge category records must be an array."});else{const recordIds=new Set<string>();let validCategoryRecords=true;for(const[recordIndex,candidate]of item.categoryRecords.entries()){const path=`${prefix}.categoryRecords[${recordIndex}]`;const valid=record(candidate)&&typeof candidate.id==="string"&&candidate.id.length>0&&candidate.schema==="lorebible.forge-category-record/v1"&&candidate.buildId===item.id&&candidate.status==="proposed"&&candidate.origin==="generated"&&typeof candidate.sectionKey==="string"&&typeof candidate.categoryId==="string"&&Number.isSafeInteger(candidate.bundleIndex)&&Number.isSafeInteger(candidate.ordinal);if(!valid){validCategoryRecords=false;issues.push({path,message:"Forge category record is invalid."});continue;}if(recordIds.has(candidate.id))issues.push({path:`${path}.id`,message:"Duplicate Forge category record ID."});recordIds.add(candidate.id);}if(validCategoryRecords&&record(item.checkpoint)&&record(item.checkpoint.sections)&&canonicalizeJson(deriveForgeSectionsFromCategoryRecords(item.categoryRecords))!==canonicalizeJson(item.checkpoint.sections))issues.push({path:`${prefix}.categoryRecords`,message:"Forge category records do not derive the accepted checkpoint."});}}
   });
   (value.canon as any[]).forEach((item, index) => { if (!entityIds.has(item.subjectId)) issues.push({ path: `canon[${index}].subjectId`, message: "Unknown entity." }); });
   (value.entities as any[]).forEach((item, index) => (item.factIds || []).forEach((id: string) => { if (!factIds.has(id)) issues.push({ path: `entities[${index}].factIds`, message: `Unknown fact ${id}.` }); }));

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { parseProjectGraph } from "../../src/lib/projectGraph/validation";
-import { createForgeBuild } from "../../src/lib/projectGraph/forgeBuilds";
+import { beginForgeBatch, completeForgeBatch, createForgeBuild } from "../../src/lib/projectGraph/forgeBuilds";
 
 const graph = () => ({
   schema: "lorebible.project-graph/v1",
@@ -67,4 +67,17 @@ test("rejects Forge checkpoints that disagree with completed bundle records", ()
   const result=parseProjectGraph(value);
   expect(result.ok).toBe(false);
   if("issues" in result)expect(result.issues.some((issue)=>issue.path==="builds[0].checkpoint")).toBe(true);
+});
+
+test("rejects Forge category records that no longer derive the accepted checkpoint", () => {
+  const value = graph() as any;
+  let build = createForgeBuild({ id:"build:categories", sourceRevision:1, inputFingerprint:"sha256:abc", executionMode:"continuous", createdAt:"x" });
+  build = beginForgeBatch(build,{bundleIndex:0,attemptId:"attempt/one",provider:"gemini",modelId:"gemini-flash",route:"openai_compatible",startedAt:"x"});
+  build = completeForgeBatch(build,{bundleIndex:0,attemptId:"attempt/one",commandId:"done",sections:{core:{title:"Accepted"},user:{},worldPhysics:{},status:{}},completedAt:"y"});
+  build.categoryRecords![0].payload={title:"Tampered"};value.builds=[build];const parsed=parseProjectGraph(value);
+  expect(parsed.ok).toBe(false);if("issues" in parsed)expect(parsed.issues.some(issue=>issue.path.includes("categoryRecords"))).toBe(true);
+});
+
+test("reports malformed Forge category records without throwing",()=>{
+  const value=graph() as any;const build=createForgeBuild({id:"build:malformed-categories",sourceRevision:1,inputFingerprint:"sha256:abc",executionMode:"continuous",createdAt:"x"}) as any;build.categoryRecords=[null];value.builds=[build];expect(()=>parseProjectGraph(value)).not.toThrow();const parsed=parseProjectGraph(value);expect(parsed.ok).toBe(false);if("issues" in parsed)expect(parsed.issues.some(issue=>issue.path.includes("categoryRecords"))).toBe(true);
 });

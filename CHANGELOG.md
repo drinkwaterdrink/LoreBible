@@ -4,6 +4,27 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.55 — 2026-09-13
+
+### Added
+
+- Forge bundle completion now projects provider sections into stable typed `lorebible.forge-category-record/v1` proposal records inside the durable Project Graph.
+- Category records preserve section identity, category identity, record kind, source entry ID, semantic name, ordinal, and lossless payload without turning generated material into accepted canon.
+- The manuscript checkpoint is derived from category records, so the current editor remains compatible while graph-native ownership begins.
+
+### Changed
+
+- Existing v0.54 Forge builds without category records are backfilled deterministically when the next bundle is accepted; completed work is not lost or duplicated.
+- Graph validation rejects duplicate, malformed, or checkpoint-inconsistent category records.
+
+### Why
+
+- M3.2 needs Forge to produce structured world data before later retrieval, canon, and artifact systems can reason about it. This is the first safe slice: it introduces the graph boundary without a destructive manuscript rewrite or extra model calls.
+
+### Validation boundary
+
+- Category projection, reverse manuscript derivation, legacy checkpoint backfill, graph parity validation, full test suite, TypeScript, production build, and diff checks are validated. Specialist category writers, canon acceptance, Lumiverse runtime behavior, and full-fidelity CHARX embedding remain future roadmap work.
+
 ## v0.54 — 2026-09-13
 
 ### Added

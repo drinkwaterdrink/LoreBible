@@ -25,6 +25,8 @@ test("persists Forge bundle checkpoints and attempt provenance across repository
   const reloaded=await createProjectRepository(dir).load("forge-persistence");
   expect(reloaded).toEqual(result.graph);
   expect((reloaded!.builds[0] as any).checkpoint.completedBundleCount).toBe(1);
+  expect((reloaded!.builds[0] as any).categoryRecords).toHaveLength(4);
+  expect((reloaded!.builds[0] as any).categoryRecords[0]).toMatchObject({sectionKey:"core",categoryId:"world",status:"proposed"});
   expect((reloaded!.builds[0] as any).batches[0].attempts[0]).toMatchObject({provider:"gemini",modelId:"flash",route:"gemini_native",status:"complete"});
 });
 

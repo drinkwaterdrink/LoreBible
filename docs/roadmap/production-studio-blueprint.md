@@ -2,7 +2,7 @@
 
 **Status:** living master architecture and implementation blueprint, not a claim that every described capability exists. **Current delivery baseline:** v0.52 on the `test` branch, 2026-09-12. **Primary target:** Lumiverse. **Companions:** [delivery roadmap](delivery-roadmap.md), [requirement traceability](requirements-traceability.md), and [capability evidence](capability-evidence.md).
 
-**Progress:** 11 of 17 ordered roadmap items are complete and 6 remain. M0, M1, M2 Blueprint Studio, and M3.1 durable Forge integration are complete. v0.54 connects real Forge generation and reload recovery to canonical Project Graph checkpoints. M3.2 graph-native category generation is next; v0.52's independent 40k-capable budgets and canonical categorized titles remain the opening M4.1 foundation.
+**Progress:** 11 of 17 ordered roadmap items are complete and 6 remain. M0, M1, M2 Blueprint Studio, and M3.1 durable Forge integration are complete. v0.54 connects real Forge generation and reload recovery to canonical Project Graph checkpoints. v0.55 begins M3.2 with stable typed proposed category records and derived manuscript rendering; specialist category generation and canon acceptance are still in progress. v0.52's independent 40k-capable budgets and canonical categorized titles remain the opening M4.1 foundation.
 
 ## 1. Product constitution
 

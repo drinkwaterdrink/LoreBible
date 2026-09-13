@@ -1,5 +1,6 @@
 import type { ForgeBuildRecordV1, ProjectGraphV1 } from "../../contracts/projectGraph";
 import { FORGE_BUNDLE_KEYS, type ForgeExecutionMode } from "../../../server/generation/forgeResume";
+import { deriveForgeSectionsFromCategoryRecords, projectForgeSections } from "./forgeCategoryRecords";
 
 const BUNDLE_NAMES = [
   "Core, User, World Physics, and Status",
@@ -40,6 +41,7 @@ export function createForgeBuild(input: { id: string; sourceRevision: number; in
     sourceRevision: input.sourceRevision, lastTransitionRevision: input.sourceRevision + 1, executionMode: input.executionMode, inputFingerprint: input.inputFingerprint,
     createdAt: input.createdAt, updatedAt: input.createdAt,
     batches: FORGE_BUNDLE_KEYS.map((keys, index) => ({ index, name: BUNDLE_NAMES[index], expectedKeys: [...keys], status: "pending", sections: {}, attempts: [], acceptedCommandId: null })),
+    categoryRecords: [],
     checkpoint: { completedBundleCount: 0, sections: {} },
   };
 }
@@ -72,7 +74,8 @@ export function completeForgeBatch(build: ForgeBuildRecordV1, input: { bundleInd
   if (extra.length) throw new ForgeBuildError(`Forge bundle contains unexpected section ${extra[0]}.`, "invalid_sections");
   batch.sections = structuredClone(input.sections); batch.status = "complete"; batch.acceptedCommandId = input.commandId;
   attempt.status = "complete"; attempt.finishedAt = input.completedAt;
-  Object.assign(next.checkpoint.sections, structuredClone(input.sections));
+  next.categoryRecords=next.batches.flatMap(item=>item.status==="complete"?projectForgeSections(next.id,item.index,item.sections):[]);
+  next.checkpoint.sections=deriveForgeSectionsFromCategoryRecords(next.categoryRecords);
   next.checkpoint.completedBundleCount = next.batches.filter((item) => item.status === "complete").length;
   next.status = next.checkpoint.completedBundleCount === next.batches.length ? "complete" : "active"; next.updatedAt = input.completedAt; return next;
 }

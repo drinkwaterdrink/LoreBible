@@ -24,6 +24,8 @@ export type BuildStatus = "pending" | "active" | "complete" | "failed" | "cancel
 export interface BuildRecord { id: string; stage: string; status: BuildStatus; artifactIds: string[]; sourceRevision: number; kind?: string; }
 export interface ForgeAttemptRecord { id: string; provider: string; modelId: string; route: string; status: "active" | "complete" | "failed" | "cancelled"; startedAt: string; finishedAt: string | null; diagnostic?: { code: string; message: string }; }
 export interface ForgeBatchRecord { index: number; name: string; expectedKeys: string[]; status: BuildStatus; sections: Record<string, unknown>; attempts: ForgeAttemptRecord[]; acceptedCommandId: string | null; }
+export type ForgeCategoryRecordKind = "entity" | "relationship" | "knowledge" | "temporal_fact" | "section" | "empty_collection";
+export interface ForgeCategoryRecordV1 { id:string; schema:"lorebible.forge-category-record/v1"; buildId:string; bundleIndex:number; sectionKey:string; categoryId:string; recordKind:ForgeCategoryRecordKind; ordinal:number; sourceEntryId:string|null; semanticName:string|null; status:"proposed"; origin:"generated"; payload:unknown; }
 export interface ForgeBuildRecordV1 extends BuildRecord {
   kind: "forge";
   schema: "lorebible.forge-build/v1";
@@ -33,6 +35,8 @@ export interface ForgeBuildRecordV1 extends BuildRecord {
   createdAt: string;
   updatedAt: string;
   batches: ForgeBatchRecord[];
+  /** Optional while reading v0.53-v0.54 saved builds; every new completion populates this collection. */
+  categoryRecords?: ForgeCategoryRecordV1[];
   checkpoint: { completedBundleCount: number; sections: Record<string, unknown> };
 }
 export interface ValidationFinding { id: string; severity: "blocker" | "major" | "minor" | "info"; code: string; path: string; message: string; evidence?: unknown; }
