@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 11 of 17 ordered roadmap items complete; 6 remain. M2 Blueprint Studio and M3.1 durable Forge integration are complete. v0.54 connects live continuous, step-by-step, and single-request Forge generation to restart-safe Project Graph checkpoints while preserving the V2 compatibility path. v0.55 begins M3.2 with deterministic typed category records and derived manuscript projection; full specialist category generation, acceptance, and cross-linking remain in progress. M4.1 foundation work is partially complete. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 11 of 17 ordered roadmap items complete; 6 remain. M2 Blueprint Studio and M3.1 durable Forge integration are complete. v0.55 began M3.2 with deterministic typed category records and derived manuscript projection. v0.56 makes the accepted Blueprint materially steer live Forge coverage and records structural evidence for Lumiverse's native attached-World-Book envelope. Full specialist category generation, acceptance, cross-linking, and production native-module serialization remain in progress. M4.1 foundation work is partially complete. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 
@@ -74,7 +74,7 @@ Copy/import SavedProjectV2 without discarding unknown fields. Keep original raw 
 
 **Depends on:** M1 contracts/store; M0 Divergence reliability. **Outcome:** a user can inspect and override a premise-specific build inventory before spending on Forge.
 
-**Progress:** In progress. M2.1 shipped in v0.41 with a proposal-only Smart Auto preview: sanitized V2 context, evidence-backed deterministic recommendations, revision-checked Project Graph API, and mobile-safe inspection UI. v0.46 added explicit AI-generated premise starters and recoverable full-board Divergence history as reliability prerequisites. It does not persist Blueprint choices or alter Physics/Forge. M2.2 adds editable, locked, and persisted Blueprint controls while retaining the 9-of-17 roadmap count.
+**Progress:** Complete. M2.1 shipped in v0.41 with a proposal-only Smart Auto preview. Later releases added editable, locked, persisted Smart/Guided/Expert choices, independent library/runtime budgets, 40k-capable sizing, and mobile-safe controls. v0.56 carries the accepted selection into live Forge prompts and durable input fingerprints, so Blueprint now changes production behavior rather than remaining a preview.
 
 Introduce artifact composition, world mode, independent intensity/quality/runtime controls, dynamic Lore Matrix, category explanations, principal/roster targets, pack eligibility, and Smart/Guided/Expert surfaces. Migrate Physics into constraints while retaining its old saved values. Recommendations are proposed, not silently canon.
 
@@ -86,7 +86,7 @@ Introduce artifact composition, world mode, independent intensity/quality/runtim
 
 **Depends on:** M1 storage/build records and M2 accepted inventory. **Outcome:** multi-batch generation can stop, restart, and resume without losing completed work.
 
-**Progress:** M3.1 complete. v0.53 added the canonical `lorebible.forge-build/v1` state machine and transactional Project Graph commands. v0.54 connects matching prepared graphs to the live Forge route, restores checkpoints to Stage 4 after reload, recovers interrupted attempts, and atomically maps a one-call response across all six bundle records. v0.55 begins M3.2: each accepted bundle now produces stable typed proposed category records and the legacy manuscript checkpoint is derived from those records, including compatibility backfill for older builds. Specialist writers, canon acceptance, cross-linking, and scoped regeneration remain to be delivered before M3.2 exits.
+**Progress:** M3.1 complete. v0.53 added the canonical `lorebible.forge-build/v1` state machine and transactional Project Graph commands. v0.54 connects matching prepared graphs to the live Forge route, restores checkpoints to Stage 4 after reload, recovers interrupted attempts, and atomically maps a one-call response across all six bundle records. v0.55 began M3.2 with stable typed proposed category records and derived manuscript checkpoints. v0.56 adds the accepted Blueprint brief to each live batch and its checkpoint fingerprint, including premise-dependent category, cast, ordinary-life, and library-size targets. Specialist writers, canon acceptance, cross-linking, and scoped regeneration remain before M3.2 exits.
 
 Implement orchestration before expanding specialist count. Generate the first category into graph candidates; accept atomically; derive manuscript. Expand one category at a time. Add cross-linking, principal/roster writers, knowledge claims, independent pressures, continuity/agency/autonomy audits and scoped regeneration. Reuse existing gateway and progress/cancellation contracts.
 

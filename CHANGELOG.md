@@ -4,6 +4,27 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.56 — 2026-09-13
+
+### Added
+
+- Guided and Expert Blueprint modes now provide a touch-friendly 2,000–40,000 token lore-library control with live entry-count estimates; Auto, Compact, Standard, Large, and Massive presets remain available.
+- Forge receives a validated, concise production brief derived from the accepted Blueprint, including authored library size, separate runtime budget, cast ranges, category coverage, mechanic choices, and ordinary-life depth.
+- A sanitized native Lumiverse CHARX evidence fixture and deterministic parity comparator cover the observed `lumiverse_modules.json.world_books` envelope and its standalone World Book equivalent.
+
+### Changed
+
+- Accepted Blueprint choices now participate in the durable Forge fingerprint, preventing a changed build plan from silently resuming an incompatible checkpoint.
+- Native World Book parsing accepts nullable and numeric field forms observed in the supplied contemporary Lumiverse export without guessing unobserved enum meanings.
+
+### Why
+
+- Lorebook size must control useful world coverage before expensive generation, not merely export formatting or paragraph length. The attached-book evidence also creates the structural foundation for a future verified full-fidelity CHARX serializer.
+
+### Validation boundary
+
+- Blueprint projection, request transport, fingerprint separation, mobile controls, token/entry estimation, native fixture parsing, and static attached-versus-standalone parity are validated. Live provider output quality, Lumiverse import/round-trip behavior, unexercised native enum variants, and production `lumiverse_modules.json` emission are not yet verified.
+
 ## v0.55 — 2026-09-13
 
 ### Added

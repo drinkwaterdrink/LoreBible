@@ -39,6 +39,8 @@ import { formatForgeBundleFailure } from "./server/generation/forgeDiagnostics.j
 import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
 import { APP_VERSION } from "./src/version.js";
 import { RUNTIME_CAPABILITIES } from "./src/lib/runtimeDiagnostics.js";
+import { parseBlueprintSelectionV1, type BlueprintSelectionV1 } from "./src/contracts/blueprintSelection.js";
+import { createForgeBlueprintBrief, formatForgeBlueprintBrief } from "./server/generation/forgeBlueprintBrief.js";
 
 dotenv.config();
 
@@ -1367,7 +1369,7 @@ REQUIREMENTS:
 
 // 3. Document Forge endpoint (Sequential 6-Bundle Generation over SSE)
 app.post("/api/forge", async (req, res) => {
-  const { sparkText, parse, canon, physics, chosenTake, settings, resumeSections = {}, executionMode = "continuous", graphProjectId } = req.body;
+  const { sparkText, parse, canon, physics, chosenTake, settings, blueprintSelection, resumeSections = {}, executionMode = "continuous", graphProjectId } = req.body;
   const requestLifecycle = createRequestAbortSignal(req, res);
   const session = createSseSession(res, "forge");
   session.startHeartbeat();
@@ -1396,9 +1398,20 @@ app.post("/api/forge", async (req, res) => {
 
   sendEvent("log", { stage: "init", label: "Reading the spark and canonical registers…", status: "active" });
 
+  let acceptedBlueprintSelection: BlueprintSelectionV1 | undefined;
+  if (blueprintSelection !== undefined) {
+    const parsedBlueprint = parseBlueprintSelectionV1(blueprintSelection);
+    if ("issues" in parsedBlueprint) {
+      sendEvent("error", { code: "INVALID_REQUEST", message: `Accepted Blueprint is invalid: ${parsedBlueprint.issues[0]?.path || "selection"} ${parsedBlueprint.issues[0]?.message || "could not be parsed."}` });
+      return;
+    }
+    acceptedBlueprintSelection = parsedBlueprint.value;
+  }
+  const forgeBlueprintBrief = createForgeBlueprintBrief(acceptedBlueprintSelection);
+
   let durableForge:PreparedForgeProject|null=null;
   if(typeof graphProjectId==="string"&&graphProjectId){
-    try{durableForge=await forgeProjectCoordinator.prepare(graphProjectId,{sparkText,parse,canon,physics,chosenTake},executionMode as ForgeExecutionMode);}
+    try{durableForge=await forgeProjectCoordinator.prepare(graphProjectId,{sparkText,parse,canon,physics,chosenTake,blueprintSelection:acceptedBlueprintSelection},executionMode as ForgeExecutionMode);}
     catch(error){sendEvent("error",{code:"FORGE_PROJECT_UNAVAILABLE",message:error instanceof Error?error.message:"Durable Forge project could not be prepared."});return;}
   }
   let resumePlan;
@@ -1905,7 +1918,7 @@ app.post("/api/forge", async (req, res) => {
       });
 
       // Build context incorporating previously established sections
-      const context = buildSharedContext({
+      const sharedContext = buildSharedContext({
         sparkText,
         parse,
         canon,
@@ -1913,6 +1926,7 @@ app.post("/api/forge", async (req, res) => {
         physics,
         existingDoc: doc,
       });
+      const context = forgeBlueprintBrief ? `${sharedContext}\n\n${formatForgeBlueprintBrief(forgeBlueprintBrief)}` : sharedContext;
 
       const systemInstruction = bundle.includeExample
         ? `${GENERATOR_RULES}\n\n${FORMAT_EXAMPLE}`

@@ -4,8 +4,9 @@ import type { ProjectGraphArtifactPreview } from "../lib/projectGraph/artifactCo
 import type { ProjectGraphChangeResult } from "../lib/projectGraph/commands";
 import { parseBlueprintPlan, type BlueprintPlanV1, type BlueprintPreviewRequestV1 } from "../contracts/blueprint";
 import { createClientId } from "../lib/clientId";
+import type { BlueprintSelectionV1 } from "../contracts/blueprintSelection";
 export interface PreparedProjectGraphSummary{id:string;name:string|null;revision:number;status:string;legacyDocumentId:string|null}
-export interface ForgeRecoverySource{sparkText:unknown;parse:unknown;canon:unknown;physics:unknown;chosenTake:unknown}
+export interface ForgeRecoverySource{sparkText:unknown;parse:unknown;canon:unknown;physics:unknown;chosenTake:unknown;blueprintSelection?:BlueprintSelectionV1}
 export interface ForgeRecovery{buildId:string;status:string;completedBundleCount:number;totalBundleCount:number;sections:Record<string,unknown>;diagnostic:{code:string;message:string}|null}
 export class ProjectGraphApiError extends Error{constructor(message:string,public code:string,public status:number,public actualRevision?:number){super(message);this.name="ProjectGraphApiError";}}
 function redact(value:unknown,path="response"):void{if(!value||typeof value!=="object")return;for(const[k,v]of Object.entries(value)){if(/^(api[_-]?key|credential|access[_-]?token|secret[_-]?key)$/i.test(k))throw new Error(`Project Graph API returned credential-shaped data at ${path}.${k}.`);redact(v,`${path}.${k}`);}}

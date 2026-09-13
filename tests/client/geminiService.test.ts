@@ -1,6 +1,20 @@
 import { expect, test } from "bun:test";
-import { fetchDivergenceTakes, fetchSingleDivergenceTake, fetchVariantsApi, generatePremiseSuggestionsApi, parseSparkApi, pushEntryApi, regenerateSectionApi, rerollEntryApi, streamForgeDocument } from "../../src/services/geminiService";
+import { createForgeRequestPayload, fetchDivergenceTakes, fetchSingleDivergenceTake, fetchVariantsApi, generatePremiseSuggestionsApi, parseSparkApi, pushEntryApi, regenerateSectionApi, rerollEntryApi, streamForgeDocument } from "../../src/services/geminiService";
 import { GenerationRequestError } from "../../src/contracts/generationFailure";
+import { blueprintSelectionFixture } from "../fixtures/blueprintSelection";
+
+test("Forge request payload preserves the accepted Blueprint selection", () => {
+  const payload = createForgeRequestPayload({
+    sparkText: "x",
+    parse: {} as any,
+    canon: {} as any,
+    physics: {} as any,
+    chosenTake: {} as any,
+    blueprintSelection: blueprintSelectionFixture,
+  });
+
+  expect(payload.blueprintSelection).toEqual(blueprintSelectionFixture);
+});
 
 test("parseSparkApi forwards the caller abort signal", async () => {
   const originalFetch = globalThis.fetch;
@@ -75,7 +89,7 @@ test("Forge client dispatches structured progress and cancellation", async () =>
   } }), { status: 200 });}) as unknown as typeof fetch;
   const seen: string[] = [];
   try {
-    await streamForgeDocument({ sparkText: "x", parse: {} as any, canon: {} as any, physics: {} as any, chosenTake: {} as any, resumeSections:{core:{title:"Saved"}}, executionMode:"continuous",graphProjectId:"graph/one" }, {
+    await streamForgeDocument({ sparkText: "x", parse: {} as any, canon: {} as any, physics: {} as any, chosenTake: {} as any, blueprintSelection:blueprintSelectionFixture, resumeSections:{core:{title:"Saved"}}, executionMode:"continuous",graphProjectId:"graph/one" }, {
       onLog: () => undefined,
       onSection: () => undefined,
       onComplete: () => undefined,
@@ -87,6 +101,7 @@ test("Forge client dispatches structured progress and cancellation", async () =>
     expect(body.resumeSections.core.title).toBe("Saved");
     expect(body.executionMode).toBe("continuous");
     expect(body.graphProjectId).toBe("graph/one");
+    expect(body.blueprintSelection).toEqual(blueprintSelectionFixture);
   } finally { globalThis.fetch = originalFetch; }
 });
 

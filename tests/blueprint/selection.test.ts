@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createBlueprintPlan } from "../../src/lib/blueprint/planner";
-import { addBlueprintCategory, createBlueprintSelection, removeBlueprintCategory, reconcileBlueprintSelection, setLorebookScale, updateBlueprintCategory, updateBlueprintField, updateBlueprintMechanic } from "../../src/lib/blueprint/selection";
+import { addBlueprintCategory, createBlueprintSelection, removeBlueprintCategory, reconcileBlueprintSelection, setLoreLibraryTarget, setLorebookScale, updateBlueprintCategory, updateBlueprintField, updateBlueprintMechanic } from "../../src/lib/blueprint/selection";
 import { familyVisit, warTornKingdom } from "../fixtures/blueprintPremises";
 
 const options = { createdAt: "2026-09-12T12:00:00.000Z" };
@@ -31,6 +31,25 @@ test("scale presets and custom ranges are independent of generation quality", ()
   const custom = setLorebookScale(massive, "custom", { min: 5, ideal: 11, max: 18 });
   expect(custom.lorebookRange).toEqual({ min: 5, ideal: 11, max: 18 });
   expect(custom.generationQuality).toBe(selection.generationQuality);
+});
+
+test("custom authored-lore targets update estimated entries without touching runtime budget", () => {
+  const selection = createBlueprintSelection(createBlueprintPlan(familyVisit(), options));
+  const changed = setLoreLibraryTarget(selection, 5_000, "2026-09-12T13:00:00.000Z");
+
+  expect(changed.loreLibraryBudget).toEqual({ mode: "custom", targetTokens: 5_000, maxTokens: 5_000 });
+  expect(changed.lorebookScale).toBe("custom");
+  expect(changed.lorebookRange).toEqual({ min: 6, ideal: 12, max: 17 });
+  expect(changed.runtimeTokenBudget).toEqual(selection.runtimeTokenBudget);
+  expect(changed.updatedAt).toBe("2026-09-12T13:00:00.000Z");
+});
+
+test("custom authored-lore targets preserve a user-locked expert entry range", () => {
+  const selection = createBlueprintSelection(createBlueprintPlan(familyVisit(), options));
+  selection.lorebookRange = { min: 7, ideal: 9, max: 11 };
+  selection.lockedFields.push("lorebookRange");
+
+  expect(setLoreLibraryTarget(selection, 40_000).lorebookRange).toEqual({ min: 7, ideal: 9, max: 11 });
 });
 
 test("field and category mutations are immutable, timestamped, and locked", () => {

@@ -7,6 +7,9 @@ export const LOREBOOK_SCALE_RANGES: Readonly<Record<Exclude<LorebookScale,"custo
 };
 export const LORE_LIBRARY_TOKEN_PRESETS={compact:10_000,standard:20_000,large:30_000,massive:40_000} as const;
 export const RUNTIME_TOKEN_PRESETS={efficient:2_000,balanced:8_000,expansive:12_000} as const;
+export const MIN_LORE_LIBRARY_TOKENS=2_000;
+export const MAX_LORE_LIBRARY_TOKENS=40_000;
+export const LORE_LIBRARY_TOKEN_STEP=1_000;
 const clone=<T>(value:T):T=>structuredClone(value);
 const castRange=(plan:BlueprintPlanV1,id:string):EstimateRange=>clone(plan.categories.find(category=>category.id===id)?.targetRange??{min:0,ideal:0,max:0});
 
@@ -24,6 +27,27 @@ export function reconcileBlueprintSelection(current:BlueprintSelectionV1,plan:Bl
   proposed.interfaceMode=current.interfaceMode; proposed.lorebookScale=current.lorebookScale; proposed.lorebookRange=clone(current.lorebookRange); proposed.forgeExecutionPreference=current.forgeExecutionPreference; proposed.lockedFields=[...current.lockedFields]; proposed.createdAt=current.createdAt; proposed.updatedAt=plan.createdAt; return proposed;
 }
 export function setLorebookScale(selection:BlueprintSelectionV1,scale:LorebookScale,customRange?:EstimateRange):BlueprintSelectionV1{return{...clone(selection),lorebookScale:scale,lorebookRange:clone(scale==="custom"?(customRange??selection.lorebookRange):LOREBOOK_SCALE_RANGES[scale])};}
+const LORE_RANGE_ANCHORS:ReadonlyArray<readonly[number,Readonly<EstimateRange>]>=[
+  [2_000,{min:4,ideal:8,max:12}],
+  [10_000,LOREBOOK_SCALE_RANGES.compact],
+  [20_000,LOREBOOK_SCALE_RANGES.standard],
+  [30_000,LOREBOOK_SCALE_RANGES.large],
+  [40_000,LOREBOOK_SCALE_RANGES.massive],
+];
+export function estimateLorebookRangeForTokens(tokens:number):EstimateRange{
+  const bounded=Math.min(MAX_LORE_LIBRARY_TOKENS,Math.max(MIN_LORE_LIBRARY_TOKENS,Math.round(tokens/LORE_LIBRARY_TOKEN_STEP)*LORE_LIBRARY_TOKEN_STEP));
+  const upperIndex=LORE_RANGE_ANCHORS.findIndex(([anchor])=>anchor>=bounded);
+  if(upperIndex<=0)return clone(LORE_RANGE_ANCHORS[0][1]);
+  const[upperTokens,upper]=LORE_RANGE_ANCHORS[upperIndex];const[lowerTokens,lower]=LORE_RANGE_ANCHORS[upperIndex-1];const ratio=(bounded-lowerTokens)/(upperTokens-lowerTokens);
+  return{min:Math.round(lower.min+(upper.min-lower.min)*ratio),ideal:Math.round(lower.ideal+(upper.ideal-lower.ideal)*ratio),max:Math.round(lower.max+(upper.max-lower.max)*ratio)};
+}
+export function setLoreLibraryTarget(selection:BlueprintSelectionV1,tokens:number,now?:string):BlueprintSelectionV1{
+  const target=Math.min(MAX_LORE_LIBRARY_TOKENS,Math.max(MIN_LORE_LIBRARY_TOKENS,Math.round(tokens/LORE_LIBRARY_TOKEN_STEP)*LORE_LIBRARY_TOKEN_STEP));
+  const next=stamped(clone(selection),now);next.lorebookScale="custom";next.loreLibraryBudget={mode:"custom",targetTokens:target,maxTokens:target};
+  if(!next.lockedFields.includes("lorebookRange"))next.lorebookRange=estimateLorebookRangeForTokens(target);
+  for(const field of ["lorebookScale","loreLibraryBudget"])if(!next.lockedFields.includes(field))next.lockedFields.push(field);
+  return verified(next);
+}
 export const getEverydayLifeDetail=(physics:PhysicsConfig)=>physics.mundanity;
 export const withEverydayLifeDetail=(physics:PhysicsConfig,value:number):PhysicsConfig=>({...physics,mundanity:value});
 

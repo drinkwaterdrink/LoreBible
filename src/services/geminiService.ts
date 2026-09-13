@@ -24,6 +24,7 @@ import type { GenerationProgressEvent, GenerationStreamEvent, GenerationUsage } 
 import { consumeGenerationSse } from "./sseStream";
 import { GenerationRequestError, parseGenerationFailurePayload } from "../contracts/generationFailure";
 import { parsePremiseSuggestionSet, type PremiseSuggestionSet } from "../contracts/premiseSuggestions";
+import type { BlueprintSelectionV1 } from "../contracts/blueprintSelection";
 
 async function throwResponseFailure(res: Response, fallback: string): Promise<never> {
   const data = await res.json().catch(() => null);
@@ -188,18 +189,25 @@ export interface ForgeCallbacks {
   onCancelled?: (message: string) => void;
 }
 
+export interface ForgeRequestParams {
+  sparkText: string;
+  parse: SparkParse;
+  canon: CanonConfig;
+  physics: PhysicsConfig;
+  chosenTake: DivergenceTake;
+  settings?: GenerationSettings;
+  blueprintSelection?: BlueprintSelectionV1;
+  resumeSections?: Record<string,unknown>;
+  executionMode?: "continuous"|"step_by_step"|"single_request";
+  graphProjectId?: string;
+}
+
+export function createForgeRequestPayload(params: ForgeRequestParams): ForgeRequestParams {
+  return structuredClone(params);
+}
+
 export async function streamForgeDocument(
-  params: {
-    sparkText: string;
-    parse: SparkParse;
-    canon: CanonConfig;
-    physics: PhysicsConfig;
-    chosenTake: DivergenceTake;
-    settings?: GenerationSettings;
-    resumeSections?: Record<string,unknown>;
-    executionMode?: "continuous"|"step_by_step"|"single_request";
-    graphProjectId?: string;
-  },
+  params: ForgeRequestParams,
   callbacks: ForgeCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -207,7 +215,7 @@ export async function streamForgeDocument(
     const res = await fetch("/api/forge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
+      body: JSON.stringify(createForgeRequestPayload(params)),
       signal,
     });
 

@@ -1,0 +1,30 @@
+import type { BlueprintSelectionV1 } from "../../src/contracts/blueprintSelection";
+
+export const blueprintSelectionFixture: BlueprintSelectionV1 = {
+  schema: "lorebible.blueprint-selection/v1",
+  projectId: "project:fixture",
+  sourceProjectRevision: 3,
+  sourceRecommendationFingerprint: "fixture-fingerprint",
+  interfaceMode: "guided",
+  artifactTargets: ["scenario_card", "world_book_primary"],
+  worldMode: "sandbox",
+  buildIntensity: "deluxe",
+  generationQuality: "production",
+  runtimeBudget: "balanced",
+  lorebookScale: "custom",
+  lorebookRange: { min: 80, ideal: 120, max: 160 },
+  loreLibraryBudget: { mode: "custom", targetTokens: 40_000, maxTokens: 40_000 },
+  runtimeTokenBudget: { mode: "custom", tokens: 8_000 },
+  principalCastRange: { min: 4, ideal: 7, max: 10 },
+  rosterCastRange: { min: 8, ideal: 16, max: 24 },
+  everydayLifeDetail: 4,
+  categories: [
+    { id: "people", label: "People", purpose: "Living cast", justification: "Social premise", status: "required", detail: "rich", targetRange: { min: 12, ideal: 20, max: 28 }, likelyRuntimeRole: "reference", candidateArchitectures: ["principal_and_roster"], userLocked: true, userExplanation: "Keep the ensemble broad.", custom: false },
+    { id: "factions", label: "Factions", purpose: "Formal organizations", justification: "Not present", status: "omitted", detail: "light", targetRange: { min: 0, ideal: 0, max: 0 }, likelyRuntimeRole: "reference", candidateArchitectures: [], userLocked: true, userExplanation: "Domestic premise.", custom: false },
+  ],
+  mechanicPacks: [],
+  forgeExecutionPreference: "step_by_step",
+  lockedFields: ["loreLibraryBudget"],
+  createdAt: "2026-09-13T00:00:00.000Z",
+  updatedAt: "2026-09-13T00:00:00.000Z",
+};

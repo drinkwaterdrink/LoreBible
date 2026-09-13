@@ -5,8 +5,9 @@ import{resumeForgeBuild}from"../../src/lib/projectGraph/forgeBuilds.js";
 import type{ProjectGraphCommand}from"../../src/lib/projectGraph/commands.js";
 import type{ProjectRepository}from"../projects/projectRepository.js";
 import{FORGE_BUNDLE_KEYS,type ForgeExecutionMode}from"./forgeResume.js";
+import type{BlueprintSelectionV1}from"../../src/contracts/blueprintSelection.js";
 
-export interface ForgeCreativeSource{sparkText:unknown;parse:unknown;canon:unknown;physics:unknown;chosenTake:unknown}
+export interface ForgeCreativeSource{sparkText:unknown;parse:unknown;canon:unknown;physics:unknown;chosenTake:unknown;blueprintSelection?:BlueprintSelectionV1}
 export interface PreparedForgeProject{projectId:string;buildId:string;sourceRevision:number;inputFingerprint:string;graph:ProjectGraphV1;resumeSections:Record<string,unknown>;nextBundleIndex:number;complete:boolean}
 export interface ActiveForgeAttempt extends PreparedForgeProject{bundleIndex:number;attemptId:string}
 interface Dependencies{now?:()=>string;id?:(kind:"build"|"attempt"|"command")=>string}

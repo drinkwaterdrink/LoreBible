@@ -1,6 +1,15 @@
 # Lumiverse capability evidence register
 
-**Checked:** 2026-09-07. **Purpose:** separate documented capabilities, internal design, target serialization, and runtime proof. This pass browsed official guidance; it did not acquire contemporary native export fixtures or perform a Lumiverse import.
+**Checked:** 2026-09-13. **Purpose:** separate documented capabilities, internal design, target serialization, and runtime proof. Official guidance and a user-supplied contemporary native CHARX/standalone World Book pair have been inspected; LoreBible has not yet performed or independently observed a Lumiverse import/round trip.
+
+## User-supplied native CHARX evidence — 2026-09-13
+
+- The native sample CHARX contains `card.json` and `lumiverse_modules.json`.
+- Its attached advanced World Book is stored at `lumiverse_modules.json.world_books[0]`.
+- That book is structurally identical to the supplied standalone Lumiverse World Book after ignoring the top-level `exported_at` timestamp.
+- Sanitized fixtures and a deterministic comparator preserve the observed envelope and value types without committing the user's creative content or drive paths.
+- This establishes **structural evidence** for the module location and same-book parity in the supplied sample. It does not establish live import success, round-trip preservation, runtime activation behavior, or enum meanings not exercised by that sample.
+- Production CHARX output still lacks this native module file. Full-fidelity attachment remains gated until the serializer mirrors the verified structure and package/import parity passes.
 
 ## Official evidence reviewed
 

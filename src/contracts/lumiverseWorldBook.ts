@@ -18,7 +18,7 @@ export interface NativeLumiverseWorldBookEntryV1 {
   scan_depth: number | null;
   case_sensitive: boolean;
   match_whole_words: boolean;
-  automation_id: string;
+  automation_id: string | null;
   extensions: Record<string, unknown>;
   use_regex: boolean;
   prevent_recursion: boolean;
@@ -31,11 +31,11 @@ export interface NativeLumiverseWorldBookEntryV1 {
   selective_logic: number;
   use_probability: boolean;
   vectorized: boolean;
-  exclude_greeting: boolean;
+  exclude_greeting: boolean | number;
   revision: number;
-  outlet_name: string;
-  wi_marker: boolean;
-  wi_marker_side: number;
+  outlet_name: string | null;
+  wi_marker: boolean | number | null;
+  wi_marker_side: number | null;
 }
 
 export interface NativeLumiverseWorldBookV1 {
@@ -46,6 +46,11 @@ export interface NativeLumiverseWorldBookV1 {
   metadata: Record<string, unknown>;
   entries: NativeLumiverseWorldBookEntryV1[];
   exported_at: number;
+}
+
+export interface NativeLumiverseCharxModulesV1 {
+  version: number;
+  world_books: NativeLumiverseWorldBookV1[];
 }
 
 function fail(path: string, expected: string): never {
@@ -80,6 +85,15 @@ function nullableString(value: unknown, path: string): string | null {
   return value === null ? null : stringValue(value, path);
 }
 
+function booleanOrNumber(value: unknown, path: string): boolean | number {
+  if (typeof value === "boolean") return value;
+  return numberValue(value, path);
+}
+
+function nullableBooleanOrNumber(value: unknown, path: string): boolean | number | null {
+  return value === null ? null : booleanOrNumber(value, path);
+}
+
 function stringArray(value: unknown, path: string): string[] {
   if (!Array.isArray(value)) fail(path, "an array of strings");
   return value.map((item, index) => stringValue(item, `${path}[${index}]`));
@@ -108,7 +122,7 @@ function parseEntry(value: unknown, index: number): NativeLumiverseWorldBookEntr
     scan_depth: nullableNumber(entry.scan_depth, `${path}.scan_depth`),
     case_sensitive: booleanValue(entry.case_sensitive, `${path}.case_sensitive`),
     match_whole_words: booleanValue(entry.match_whole_words, `${path}.match_whole_words`),
-    automation_id: stringValue(entry.automation_id, `${path}.automation_id`),
+    automation_id: nullableString(entry.automation_id, `${path}.automation_id`),
     extensions: record(entry.extensions, `${path}.extensions`),
     use_regex: booleanValue(entry.use_regex, `${path}.use_regex`),
     prevent_recursion: booleanValue(entry.prevent_recursion, `${path}.prevent_recursion`),
@@ -121,11 +135,11 @@ function parseEntry(value: unknown, index: number): NativeLumiverseWorldBookEntr
     selective_logic: numberValue(entry.selective_logic, `${path}.selective_logic`),
     use_probability: booleanValue(entry.use_probability, `${path}.use_probability`),
     vectorized: booleanValue(entry.vectorized, `${path}.vectorized`),
-    exclude_greeting: booleanValue(entry.exclude_greeting, `${path}.exclude_greeting`),
+    exclude_greeting: booleanOrNumber(entry.exclude_greeting, `${path}.exclude_greeting`),
     revision: numberValue(entry.revision, `${path}.revision`),
-    outlet_name: stringValue(entry.outlet_name, `${path}.outlet_name`),
-    wi_marker: booleanValue(entry.wi_marker, `${path}.wi_marker`),
-    wi_marker_side: numberValue(entry.wi_marker_side, `${path}.wi_marker_side`),
+    outlet_name: nullableString(entry.outlet_name, `${path}.outlet_name`),
+    wi_marker: nullableBooleanOrNumber(entry.wi_marker, `${path}.wi_marker`),
+    wi_marker_side: nullableNumber(entry.wi_marker_side, `${path}.wi_marker_side`),
   };
 }
 
@@ -142,5 +156,14 @@ export function parseNativeLumiverseWorldBookV1(value: unknown): NativeLumiverse
     metadata: record(book.metadata, "metadata"),
     entries: book.entries.map(parseEntry),
     exported_at: numberValue(book.exported_at, "exported_at"),
+  };
+}
+
+export function parseNativeLumiverseCharxModulesV1(value: unknown): NativeLumiverseCharxModulesV1 {
+  const modules = record(value, "lumiverseModules");
+  if (!Array.isArray(modules.world_books)) fail("world_books", "an array");
+  return {
+    version: numberValue(modules.version, "version"),
+    world_books: modules.world_books.map(parseNativeLumiverseWorldBookV1),
   };
 }
