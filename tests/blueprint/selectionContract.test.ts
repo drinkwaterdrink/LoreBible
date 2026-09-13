@@ -12,6 +12,8 @@ export const validSelection: BlueprintSelectionV1 = {
   buildIntensity: "rich",
   generationQuality: "deep_craft",
   runtimeBudget: "balanced",
+  loreLibraryBudget: { mode: "custom", targetTokens: 32000, maxTokens: 40000 },
+  runtimeTokenBudget: { mode: "custom", tokens: 12000 },
   lorebookScale: "custom",
   lorebookRange: { min: 30, ideal: 45, max: 70 },
   principalCastRange: { min: 2, ideal: 4, max: 6 },
@@ -43,6 +45,17 @@ test("rejects selections that cannot be safely applied", () => {
   expect(parseBlueprintSelectionV1({ ...validSelection, mechanicPacks: [{ ...validSelection.mechanicPacks[0], enabled: true, eligible: false }] })).toMatchObject({ ok: false });
   expect(parseBlueprintSelectionV1({ ...validSelection, categories: [{ ...validSelection.categories[0], label: "   " }] })).toMatchObject({ ok: false });
   expect(parseBlueprintSelectionV1({ ...validSelection, lockedFields: ["worldMode", "worldMode"] })).toMatchObject({ ok: false });
+});
+
+test("accepts independent 40k library and runtime budgets plus unlimited runtime", () => {
+  expect(parseBlueprintSelectionV1({ ...validSelection, loreLibraryBudget: { mode: "custom", targetTokens: 40000, maxTokens: 40000 }, runtimeTokenBudget: { mode: "custom", tokens: 40000 } }).ok).toBe(true);
+  expect(parseBlueprintSelectionV1({ ...validSelection, runtimeTokenBudget: { mode: "unlimited" } }).ok).toBe(true);
+});
+
+test("rejects oversized or internally inconsistent token budgets", () => {
+  expect(parseBlueprintSelectionV1({ ...validSelection, loreLibraryBudget: { mode: "custom", targetTokens: 40001, maxTokens: 40001 } }).ok).toBe(false);
+  expect(parseBlueprintSelectionV1({ ...validSelection, loreLibraryBudget: { mode: "custom", targetTokens: 20000, maxTokens: 10000 } }).ok).toBe(false);
+  expect(parseBlueprintSelectionV1({ ...validSelection, runtimeTokenBudget: { mode: "custom", tokens: 40001 } }).ok).toBe(false);
 });
 
 test("rejects cyclic and accessor input without throwing", () => {

@@ -5,10 +5,7 @@ function embeddedBook(portable: PortableCharacterBookResult) {
   return {
     name: portable.name,
     description: portable.description,
-    extensions: {},
-    scan_depth: 4,
-    token_budget: 2048,
-    recursive_scanning: false,
+    extensions: { lorebible: { fidelity: "portable_compatibility", runtime_budget_serialized: false } },
     entries: portable.entries.map((entry, index) => ({
       id: index + 1,
       keys: entry.keys,

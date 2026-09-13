@@ -1,8 +1,8 @@
 # LoreBible Production Studio architecture blueprint
 
-**Status:** living master architecture and implementation blueprint, not a claim that every described capability exists. **Current delivery baseline:** v0.51 on the `test` branch, 2026-09-12. **Primary target:** Lumiverse. **Companions:** [delivery roadmap](delivery-roadmap.md), [requirement traceability](requirements-traceability.md), and [capability evidence](capability-evidence.md).
+**Status:** living master architecture and implementation blueprint, not a claim that every described capability exists. **Current delivery baseline:** v0.52 on the `test` branch, 2026-09-12. **Primary target:** Lumiverse. **Companions:** [delivery roadmap](delivery-roadmap.md), [requirement traceability](requirements-traceability.md), and [capability evidence](capability-evidence.md).
 
-**Progress:** 10 of 17 ordered roadmap items are complete and 7 remain. M0, M1, and M2 Blueprint Studio are complete. M3.1 durable graph-native Forge batches are next.
+**Progress:** 10 of 17 ordered roadmap items are complete and 7 remain. M0, M1, and M2 Blueprint Studio are complete. v0.52 began M4.1 foundations with independent 40k-capable lore-library/runtime budgets and canonical categorized lore titles. M3.1 durable graph-native Forge batches are next.
 
 ## 1. Product constitution
 
@@ -336,7 +336,7 @@ The roadmap is delivered as bounded vertical slices. A milestone is complete onl
 | M8 — QA Lab | Planned | Integrate continuity, agency, autonomy, knowledge, retrieval, recursion, budget, roleplay-probe, portability, and asset findings into an explainable health workspace. |
 | M9 — Source Studio | Planned | Add provenance-aware file/URL ingestion, authority and spoiler partitions, temporal canon snapshots, extraction, reconciliation, and source-linked facts. |
 
-## 16. Immediate post-v0.51 sequence
+## 16. Immediate post-v0.52 sequence
 
 1. **M3.1 durable Forge batches.** Move the current six-bundle checkpoint into the project store with explicit pending, active, complete, and failed records. One-bundle mode waits for the user; continuous mode observes provider pacing; retry starts at the failed batch and may use a newly selected model.
 2. **M3.2 graph-native category generation.** Generate principal and roster cast, directional relationships, knowledge claims, temporal facts, independent goals, and world pressures into stable records while retaining the manuscript as a derived view.

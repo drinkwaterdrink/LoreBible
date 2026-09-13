@@ -4,6 +4,31 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.52 — 2026-09-12
+
+### Added
+
+- Blueprint selections now preserve separate total lore-library and runtime activation token budgets. Library presets reach 40,000 estimated tokens; runtime choices support 2k, 4k, 8k, 12k, 20k, 30k, 40k, Auto, and Unlimited recommendations.
+- The canonical Lore Manifest now owns stable category IDs, category labels, semantic names, and concise `[CATEGORY] Semantic Name` display titles.
+- Standard lore categories now include NPC, Relationship, Faction, World Rule, Location, Item, Secret, History, Pressure, Knowledge, Lore, Mechanic, Rumor, Clue, Culture, Species, Magic, Technology, Ritual, Event, and Ordinary Life, while preserving custom category IDs.
+- A current dependency-ordered Production Lore and Runtime Quality implementation plan reconciles the new north-star requirements with the shipped v0.51 architecture.
+
+### Changed
+
+- Oversized, paragraph-like, blank, or content-derived entry names receive a stable short fallback and a Major quality finding instead of becoming unreadable Lumiverse titles.
+- Native and portable serializers consume the same canonical lore title; serializers no longer decorate titles independently.
+- Portable embedded Character Books explicitly identify themselves as compatibility output and no longer serialize the obsolete hard-coded 2,048-token runtime budget.
+- Existing v0.51 Blueprint selections migrate their new token settings deterministically from the already-saved lorebook-scale and runtime presets.
+
+### Why
+
+- A large authored library and the amount retrieved into one prompt solve different problems. Separating them permits deep worlds without forcing every lore entry into context.
+- Entry titles must remain scannable and consistently categorized in Lumiverse, while runtime settings must come from canonical intent rather than exporter defaults.
+
+### Validation boundary
+
+- Budget contracts, 40k limits, legacy selection migration, canonical title formatting, serializer title reuse, portable-budget omission, full tests, TypeScript, build, and diff checks are validated for this release. Full-fidelity advanced World Book embedding inside CHARX remains unverified until a contemporary Lumiverse-native fixture proves the structure.
+
 ## v0.51 — 2026-09-12
 
 ### Added

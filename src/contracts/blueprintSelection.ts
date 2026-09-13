@@ -4,6 +4,9 @@ export const BLUEPRINT_SELECTION_SCHEMA = "lorebible.blueprint-selection/v1" as 
 export type BlueprintInterfaceMode = "smart_auto" | "guided" | "expert";
 export type LorebookScale = "compact" | "standard" | "large" | "massive" | "custom";
 export type ForgeExecutionPreference = "continuous" | "step_by_step" | "single_request";
+export type LoreLibraryBudgetMode = "auto" | "compact" | "standard" | "large" | "massive" | "custom";
+export interface LoreLibraryBudget { mode: LoreLibraryBudgetMode; targetTokens?: number; maxTokens?: number; }
+export type RuntimeTokenBudget = { mode: "auto" } | { mode: "unlimited" } | { mode: "custom"; tokens: number };
 
 export interface BlueprintCategorySelection {
   id: string; label: string; purpose: string; justification: string; status: BlueprintCategoryStatus; detail: BlueprintDetail;
@@ -18,6 +21,7 @@ export interface BlueprintSelectionV1 {
   schema: typeof BLUEPRINT_SELECTION_SCHEMA; projectId: string; sourceProjectRevision: number; sourceRecommendationFingerprint: string;
   interfaceMode: BlueprintInterfaceMode; artifactTargets: ArtifactTarget[]; worldMode: BlueprintWorldMode; buildIntensity: BuildIntensity;
   generationQuality: BlueprintGenerationQuality; runtimeBudget: RuntimeBudget; lorebookScale: LorebookScale; lorebookRange: EstimateRange;
+  loreLibraryBudget: LoreLibraryBudget; runtimeTokenBudget: RuntimeTokenBudget;
   principalCastRange: EstimateRange; rosterCastRange: EstimateRange; everydayLifeDetail: number; categories: BlueprintCategorySelection[];
   mechanicPacks: BlueprintMechanicSelection[]; forgeExecutionPreference: ForgeExecutionPreference; lockedFields: string[]; createdAt: string; updatedAt: string;
 }
@@ -25,11 +29,12 @@ export type BlueprintSelectionParseResult = { ok: true; value: BlueprintSelectio
 
 const credential = /(?:^|[_-])(api[_-]?key|password|credentials?|access[_-]?token|secret|client[_-]?secret|refresh[_-]?token|private[_-]?key|authorization|bearer|token)(?:$|[_-])/i;
 const allowed = {
-  root: ["schema","projectId","sourceProjectRevision","sourceRecommendationFingerprint","interfaceMode","artifactTargets","worldMode","buildIntensity","generationQuality","runtimeBudget","lorebookScale","lorebookRange","principalCastRange","rosterCastRange","everydayLifeDetail","categories","mechanicPacks","forgeExecutionPreference","lockedFields","createdAt","updatedAt"],
+  root: ["schema","projectId","sourceProjectRevision","sourceRecommendationFingerprint","interfaceMode","artifactTargets","worldMode","buildIntensity","generationQuality","runtimeBudget","lorebookScale","lorebookRange","loreLibraryBudget","runtimeTokenBudget","principalCastRange","rosterCastRange","everydayLifeDetail","categories","mechanicPacks","forgeExecutionPreference","lockedFields","createdAt","updatedAt"],
   category: ["id","label","purpose","justification","status","detail","targetRange","likelyRuntimeRole","candidateArchitectures","userLocked","userExplanation","custom"],
   mechanic: ["id","label","enabled","eligible","reason","architectureEffects","runtimeRequirements","compilerRules","testFixtures","gracefulFallback","userLocked"],
   range: ["min","ideal","max"],
 } as const;
+const MAX_LORE_TOKENS = 40_000;
 
 function snapshot(value: unknown, issues: Array<{path:string;message:string}>, path = "", seen = new WeakSet<object>()): unknown {
   if (value === null || typeof value !== "object") return value;
@@ -74,6 +79,13 @@ function unique(items:unknown[],path:string,issues:Array<{path:string;message:st
 export function parseBlueprintSelectionV1(input:unknown):BlueprintSelectionParseResult{
   try{
     const issues:Array<{path:string;message:string}>=[]; const value=snapshot(input,issues);
+    if(record(value)){
+      const scale=typeof value.lorebookScale==="string"?value.lorebookScale:"standard";
+      const libraryPresets:Record<string,number>={compact:10_000,standard:20_000,large:30_000,massive:40_000,custom:20_000};
+      const runtimePresets:Record<string,number>={efficient:2_000,balanced:8_000,expansive:12_000};
+      if(value.loreLibraryBudget===undefined){const tokens=libraryPresets[scale]??20_000;value.loreLibraryBudget={mode:scale==="custom"?"custom":scale,targetTokens:tokens,maxTokens:tokens};}
+      if(value.runtimeTokenBudget===undefined)value.runtimeTokenBudget={mode:"custom",tokens:runtimePresets[String(value.runtimeBudget)]??8_000};
+    }
     if(!closed(value,allowed.root,"",issues))return{ok:false,issues};
     if(value.schema!==BLUEPRINT_SELECTION_SCHEMA)issues.push({path:"schema",message:"Unsupported schema."});
     for(const key of ["projectId","sourceRecommendationFingerprint","createdAt","updatedAt"] as const)if(typeof value[key]!=="string"||!value[key])issues.push({path:key,message:"Expected a non-empty string."});
@@ -83,6 +95,8 @@ export function parseBlueprintSelectionV1(input:unknown):BlueprintSelectionParse
     oneOf(value.worldMode,["arc","sandbox","hybrid"],"worldMode",issues); oneOf(value.buildIntensity,["lean","rich","deluxe","obsessive"],"buildIntensity",issues);
     oneOf(value.generationQuality,["fast","balanced","deep_craft","production"],"generationQuality",issues); oneOf(value.runtimeBudget,["efficient","balanced","expansive"],"runtimeBudget",issues);
     oneOf(value.lorebookScale,["compact","standard","large","massive","custom"],"lorebookScale",issues); range(value.lorebookRange,"lorebookRange",issues); range(value.principalCastRange,"principalCastRange",issues); range(value.rosterCastRange,"rosterCastRange",issues);
+    if(closed(value.loreLibraryBudget,["mode","targetTokens","maxTokens"],"loreLibraryBudget",issues)){oneOf(value.loreLibraryBudget.mode,["auto","compact","standard","large","massive","custom"],"loreLibraryBudget.mode",issues);const target=value.loreLibraryBudget.targetTokens,max=value.loreLibraryBudget.maxTokens;for(const [key,item] of [["targetTokens",target],["maxTokens",max]] as const)if(item!==undefined&&(!Number.isInteger(item)||Number(item)<1||Number(item)>MAX_LORE_TOKENS))issues.push({path:`loreLibraryBudget.${key}`,message:"Expected 1 to 40,000 tokens."});if(typeof target==="number"&&typeof max==="number"&&target>max)issues.push({path:"loreLibraryBudget",message:"Target tokens cannot exceed maximum tokens."});if(value.loreLibraryBudget.mode==="custom"&&(typeof target!=="number"||typeof max!=="number"))issues.push({path:"loreLibraryBudget",message:"Custom library budgets require targetTokens and maxTokens."});}
+    if(closed(value.runtimeTokenBudget,["mode","tokens"],"runtimeTokenBudget",issues)){oneOf(value.runtimeTokenBudget.mode,["auto","unlimited","custom"],"runtimeTokenBudget.mode",issues);if(value.runtimeTokenBudget.mode==="custom"&&(!Number.isInteger(value.runtimeTokenBudget.tokens)||Number(value.runtimeTokenBudget.tokens)<1||Number(value.runtimeTokenBudget.tokens)>MAX_LORE_TOKENS))issues.push({path:"runtimeTokenBudget.tokens",message:"Expected 1 to 40,000 tokens."});if(value.runtimeTokenBudget.mode!=="custom"&&value.runtimeTokenBudget.tokens!==undefined)issues.push({path:"runtimeTokenBudget.tokens",message:"Only custom runtime budgets accept tokens."});}
     if(typeof value.everydayLifeDetail!=="number"||value.everydayLifeDetail<1||value.everydayLifeDetail>5)issues.push({path:"everydayLifeDetail",message:"Expected a value from 1 to 5."});
     if(!Array.isArray(value.categories))issues.push({path:"categories",message:"Expected categories."});else{unique(value.categories,"categories",issues);value.categories.forEach((item,index)=>{if(!closed(item,allowed.category,`categories[${index}]`,issues))return;for(const key of ["id","label","purpose","justification","userExplanation"] as const)if(typeof item[key]!=="string")issues.push({path:`categories[${index}].${key}`,message:"Expected a string."});if(typeof item.label==="string"&&!item.label.trim())issues.push({path:`categories[${index}].label`,message:"Expected a non-empty label."});oneOf(item.status,["recommended","optional","omitted","required"],`categories[${index}].status`,issues);oneOf(item.detail,["light","standard","rich","exhaustive"],`categories[${index}].detail`,issues);oneOf(item.likelyRuntimeRole,["evergreen","reference","dynamic","secret","ambient","state","mixed"],`categories[${index}].likelyRuntimeRole`,issues);range(item.targetRange,`categories[${index}].targetRange`,issues);strings(item.candidateArchitectures,`categories[${index}].candidateArchitectures`,issues);if(typeof item.userLocked!=="boolean"||typeof item.custom!=="boolean")issues.push({path:`categories[${index}]`,message:"Expected boolean flags."});});}
     if(!Array.isArray(value.mechanicPacks))issues.push({path:"mechanicPacks",message:"Expected mechanic packs."});else{unique(value.mechanicPacks,"mechanicPacks",issues);value.mechanicPacks.forEach((item,index)=>{if(!closed(item,allowed.mechanic,`mechanicPacks[${index}]`,issues))return;for(const key of ["id","label","reason","gracefulFallback"] as const)if(typeof item[key]!=="string")issues.push({path:`mechanicPacks[${index}].${key}`,message:"Expected a string."});for(const key of ["architectureEffects","runtimeRequirements","compilerRules","testFixtures"] as const)strings(item[key],`mechanicPacks[${index}].${key}`,issues);if(typeof item.enabled!=="boolean"||typeof item.eligible!=="boolean"||typeof item.userLocked!=="boolean")issues.push({path:`mechanicPacks[${index}]`,message:"Expected boolean flags."});if(item.enabled===true&&item.eligible===false)issues.push({path:`mechanicPacks[${index}].enabled`,message:"An ineligible mechanic cannot be enabled."});});}

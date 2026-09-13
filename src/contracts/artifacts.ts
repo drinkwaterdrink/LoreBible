@@ -48,7 +48,7 @@ export type LoreCategory =
   | "item"
   | "secret"
   | "history"
-  | "pressure";
+  | "pressure" | "lore" | "mechanic" | "rumor" | "clue" | "culture" | "species" | "magic" | "technology" | "ritual" | "event" | "ordinary_life";
 
 export type LoreTemporalClass = "evergreen" | "initial" | "current" | "historical";
 export type LoreVisibility = "public" | "limited" | "private" | "secret";
@@ -101,6 +101,9 @@ export interface LoreEntryIR {
   sourceId: string;
   sourceFactIds: string[];
   title: string;
+  semanticName: string;
+  categoryId: string;
+  categoryLabel: string;
   category: LoreCategory;
   canonicalOwner: "worldBook";
   content: string;

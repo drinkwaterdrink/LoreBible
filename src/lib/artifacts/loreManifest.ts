@@ -7,6 +7,7 @@ import type {
   LoreVisibility,
 } from "../../contracts/artifacts";
 import type { Entry, LoreBibleDocument } from "../../types";
+import { formatLoreEntryTitle } from "./loreTitles";
 
 interface CategoryDefinition {
   sectionKey: string;
@@ -158,6 +159,10 @@ const definitions: CategoryDefinition[] = [
   },
 ];
 
+const CATEGORY_LABELS: Record<LoreCategory,string> = {
+  character:"NPC",relationship:"RELATIONSHIP",faction:"FACTION",world_rule:"WORLD RULE",location:"LOCATION",item:"ITEM",knowledge:"KNOWLEDGE",secret:"SECRET",history:"HISTORY",pressure:"PRESSURE",lore:"LORE",mechanic:"MECHANIC",rumor:"RUMOR",clue:"CLUE",culture:"CULTURE",species:"SPECIES",magic:"MAGIC",technology:"TECH",ritual:"RITUAL",event:"EVENT",ordinary_life:"ORDINARY LIFE",
+};
+
 function activationFor(entry: Entry, keys: string[], preventRecursion: boolean): LoreActivationIntent {
   return {
     state: entry.disabledUntilEarned ? "disabled" : "conditional",
@@ -196,7 +201,9 @@ export function compileLoreManifest(document: LoreBibleDocument): LoreManifest {
       const content = definition.content(source);
       if (!content) return;
       const keys = cleanKeys(source.keys);
-      const title = definition.title(source, index).trim();
+      const formattedTitle = formatLoreEntryTitle({ categoryId: definition.category, categoryLabel: CATEGORY_LABELS[definition.category], candidateName: definition.title(source, index), content, ordinal: index + 1 });
+      const title = formattedTitle.title;
+      if(formattedTitle.finding)findings.push({...formattedTitle.finding,sourceId:source.id});
       if (keys.length === 0) {
         findings.push({
           code: "lore.missing_keys",
@@ -212,6 +219,9 @@ export function compileLoreManifest(document: LoreBibleDocument): LoreManifest {
         sourceId: source.id,
         sourceFactIds: [source.id],
         title,
+        semanticName: formattedTitle.semanticName,
+        categoryId: definition.category,
+        categoryLabel: CATEGORY_LABELS[definition.category],
         category: definition.category,
         canonicalOwner: "worldBook",
         content,

@@ -428,9 +428,7 @@ function legacyExportToSillyTavern(doc: LoreBibleDocument): string {
       character_book: {
         name: `${doc.core.title} Lorebook`,
         description: `World info generated for ${doc.core.title}`,
-        scan_depth: 4,
-        token_budget: 2048,
-        recursive_scanning: true,
+        extensions: { lorebible: { fidelity: "legacy_compatibility", runtime_budget_serialized: false } },
         entries: lorebookEntries,
       },
     },

@@ -37,7 +37,7 @@ test("Character Card V3 includes required extension containers", () => {
   const card = generateCharacterCardV3(doc);
   expect(card.data.extensions).toEqual({});
   expect(card.data.group_only_greetings).toEqual([]);
-  expect(card.data.character_book.extensions).toEqual({});
+  expect(card.data.character_book.extensions).toEqual({lorebible:{fidelity:"portable_compatibility",runtime_budget_serialized:false}});
   expect(card.data.character_book.entries.every((entry: { extensions?: unknown }) => entry.extensions && typeof entry.extensions === "object")).toBe(true);
 });
 

@@ -1,8 +1,8 @@
 # LoreBible Production Studio: north-star roadmap
 
-**Current delivery baseline:** 2026-09-12 · application v0.51 · `test` branch.
+**Current delivery baseline:** 2026-09-12 · application v0.52 · `test` branch.
 
-**Status:** 10 of 17 ordered roadmap items are complete and 7 remain. M0, M1, and M2 Blueprint Studio are complete. v0.51 shipped editable, persisted Smart/Guided/Expert Blueprint decisions and genuine single-request Forge generation. M3.1 durable graph-native Forge batches are next.
+**Status:** 10 of 17 ordered roadmap items are complete and 7 remain. M0, M1, and M2 Blueprint Studio are complete. v0.52 began the production-lore quality program with independent 40k-capable library/runtime budgets and canonical categorized lore titles. M3.1 durable graph-native Forge batches remain next.
 
 LoreBible will become a creative production studio whose rich source world and carefully compiled runtime artifacts are deliberately different things. Creative quality takes precedence over speed and minimizing calls, while the user retains control over cost, accepted work, and scope.
 

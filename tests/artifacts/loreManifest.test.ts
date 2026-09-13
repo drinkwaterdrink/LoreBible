@@ -29,6 +29,8 @@ test("compiles stable focused lore without temporary state", () => {
   expect(first.entries.some((entry) => entry.content.includes("CURRENT_SENTINEL"))).toBe(false);
   expect(first.entries.find((entry) => entry.sourceId === "secret-1")?.activation.state).toBe("disabled");
   expect(first.entries.find((entry) => entry.sourceId === "location-1")?.activation.primaryKeys).toEqual(["North Hall"]);
+  expect(first.entries.find((entry) => entry.sourceId === "location-1")).toMatchObject({ categoryId: "location", categoryLabel: "LOCATION", semanticName: "North Hall", title: "[LOCATION] North Hall" });
+  expect(first.entries.find((entry) => entry.sourceId === "rule-1")?.title).toBe("[WORLD RULE] Known Rule");
 });
 
 test("reports entries that have content but no viable activation key", () => {

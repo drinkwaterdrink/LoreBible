@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 10 of 17 ordered roadmap items complete; 7 remain. M2 Blueprint Studio is complete: M2.1 shipped premise-adaptive recommendations and v0.51 added persisted Smart/Guided/Expert controls, custom categories, locks, mechanics, sizing, and Forge preferences. Reliability releases through v0.50 closed generation and mobile prerequisites. M3.1 durable graph-native Forge batches are next. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 10 of 17 ordered roadmap items complete; 7 remain. M2 Blueprint Studio is complete. v0.52 added the first cross-milestone production-quality foundation: independent 40k-capable lore-library/runtime budgets and canonical categorized lore titles. M3.1 durable graph-native Forge batches are next; M4.1 foundation work is partially complete. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 

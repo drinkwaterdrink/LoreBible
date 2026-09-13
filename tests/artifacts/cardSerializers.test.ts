@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import JSZip from "jszip";
 import { generateCharacterCardExport, generateCharacterCardV3, generateCharXBundle } from "../../src/lib/exportGenerators";
+import { compileCharacterArtifact } from "../../src/lib/artifacts/characterArtifact";
+import { compileLoreManifest } from "../../src/lib/artifacts/loreManifest";
+import { serializePortableCharacterBook } from "../../src/lib/artifacts/loreSerializers";
+import { serializeCharacterCardV3 } from "../../src/lib/artifacts/cardSerializers";
 import type { LoreBibleDocument } from "../../src/types";
 
 const documentFixture = {
@@ -33,4 +37,12 @@ test("V2 V3 and CHARX share canonical card fields and lore", async () => {
   expect(manifest.evidence_status).toBe("static_validated");
   expect(manifest.runtime_verified).toBe(false);
   expect(manifest.portable_omissions.length).toBeGreaterThan(0);
+});
+
+test("portable embedded books do not pretend to control Lumiverse's global runtime budget", () => {
+  const artifact=compileCharacterArtifact(documentFixture,compileLoreManifest(documentFixture));
+  const portable=serializePortableCharacterBook(compileLoreManifest(documentFixture));
+  const embedded=(serializeCharacterCardV3(artifact,portable).data as any).character_book;
+  expect(embedded).not.toHaveProperty("token_budget");
+  expect(embedded.extensions.lorebible).toEqual({fidelity:"portable_compatibility",runtime_budget_serialized:false});
 });
