@@ -7,11 +7,11 @@ import{BlueprintPrimaryControls,BLUEPRINT_MODES}from"./blueprint/BlueprintPrimar
 import{BlueprintCategoryEditor}from"./blueprint/BlueprintCategoryEditor";
 import{BlueprintMechanicEditor}from"./blueprint/BlueprintMechanicEditor";
 
-interface Props{plan:BlueprintPlanV1;initialSelection:BlueprintSelectionV1;onSave:(selection:BlueprintSelectionV1)=>void;onCancel:()=>void}
+interface Props{plan:BlueprintPlanV1;initialSelection:BlueprintSelectionV1;onSave:(selection:BlueprintSelectionV1)=>void;onCancel:()=>void;startGuided?:boolean}
 const words=(value:string)=>value.replaceAll("_"," ").replace(/\b\w/g,letter=>letter.toUpperCase());
 const ARTIFACT_TARGETS=["individual_character","scenario_card","narrator_world","ensemble","full_world","full_world_package","world_book_primary"] as const;
-export const BlueprintStudio:React.FC<Props>=({plan,initialSelection,onSave,onCancel})=>{
-  const[draft,setDraft]=useState(()=>structuredClone(initialSelection));const[issues,setIssues]=useState<string[]>([]);const dialogRef=useRef<HTMLElement>(null);
+export const BlueprintStudio:React.FC<Props>=({plan,initialSelection,onSave,onCancel,startGuided=false})=>{
+  const[draft,setDraft]=useState(()=>{const next=structuredClone(initialSelection);if(startGuided&&next.interfaceMode==="smart_auto")next.interfaceMode="guided";return next;});const[issues,setIssues]=useState<string[]>([]);const dialogRef=useRef<HTMLElement>(null);
   useEffect(()=>{const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;dialogRef.current?.focus();const key=(event:KeyboardEvent)=>{if(event.key==="Escape")onCancel();};document.addEventListener("keydown",key);return()=>{document.removeEventListener("keydown",key);previous?.focus();};},[onCancel]);
   const field=<K extends keyof BlueprintSelectionV1>(key:K,value:BlueprintSelectionV1[K])=>setDraft(current=>{
     if(key==="lorebookScale"){const next=setLorebookScale(current,value as BlueprintSelectionV1["lorebookScale"]);next.updatedAt=new Date().toISOString();if(!next.lockedFields.includes("lorebookScale"))next.lockedFields.push("lorebookScale");return next;}

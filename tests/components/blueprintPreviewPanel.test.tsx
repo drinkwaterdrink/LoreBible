@@ -40,3 +40,11 @@ test("guided mode exposes selectable artifact outputs while preventing an empty 
   expect(html).toContain('name="artifact-target"');
   expect(html).toContain("Keep at least one output selected");
 });
+
+test("workflow launch opens editable Guided controls instead of a disabled Smart Auto form",()=>{
+  const plan=createBlueprintPlan(cozyBakery(),{createdAt:"2026-09-12T12:00:00.000Z"});
+  const html=renderToString(<BlueprintStudio plan={plan} initialSelection={createBlueprintSelection(plan)} onSave={()=>{}} onCancel={()=>{}} startGuided/>);
+  expect(html).toContain("Guided</p>");
+  expect(html).toContain("Lorebook size");
+  expect(html).not.toContain('aria-label="Lorebook size" disabled');
+});

@@ -61,7 +61,7 @@ import type { PremiseSuggestionSet } from "./contracts/premiseSuggestions";
 import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext";
 import { abortBlueprintRequest, findBlueprintSourceProject, getBlueprintFailure, shouldClearBlueprintPlan } from "./lib/blueprint/previewLifecycle";
 import { commitBlueprintStudioDraft, createBlueprintStudioDraft } from "./lib/blueprint/studioLifecycle";
-import { withEverydayLifeDetail } from "./lib/blueprint/selection";
+import { updateBlueprintField, withEverydayLifeDetail } from "./lib/blueprint/selection";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -1034,6 +1034,49 @@ export default function App() {
     }
   };
 
+  const handleOpenWorkflowBlueprint = async () => {
+    if (blueprintBusy) return;
+    const nextDocument = document
+      ? { ...document, title: workingTitle, updatedAt: new Date().toISOString() } as LoreBibleDocument
+      : createDraftScenarioDocument({ sparkText, parse, canon, physics, chosenTake, takes, title: workingTitle });
+    const sourceProject = buildSavedProject(nextDocument, 3, Math.max(maxUnlockedStage, 3) as 1 | 2 | 3 | 4 | 5);
+    const nextStore = saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, sourceProject);
+    if (!commitProjectStore(nextStore.projects)) return;
+    setDocument(sourceProject.document);
+
+    abortBlueprintRequest(blueprintControllerRef.current);
+    const controller = new AbortController();
+    blueprintControllerRef.current = controller;
+    setBlueprintBusy(true);
+    setBlueprintError(null);
+    setBlueprintReloadRequired(false);
+    try {
+      const prepared = await prepareProjectGraph(sourceProject);
+      if (controller.signal.aborted) return;
+      acceptActiveGraph(prepared.graph);
+      await refreshPreparedGraphs();
+      const revision = prepared.graph.project.revision ?? 1;
+      const context = createBlueprintPlanningContext(sourceProject, { projectId: prepared.graph.project.id, projectRevision: revision });
+      const plan = await previewBlueprint(prepared.graph.project.id, { expectedRevision: revision, context }, controller.signal);
+      if (controller.signal.aborted) return;
+      setBlueprintPlan(plan);
+      setIsBlueprintOpen(true);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const failure = getBlueprintFailure(error, Boolean(blueprintPlan));
+      setBlueprintError(failure.message);
+      setBlueprintReloadRequired(failure.reloadRequired);
+    } finally {
+      if (blueprintControllerRef.current === controller) blueprintControllerRef.current = null;
+      setBlueprintBusy(false);
+    }
+  };
+
+  const handleChangeForgeExecutionMode = (mode: ForgeExecutionPreference) => {
+    setForgeExecutionMode(mode);
+    setBlueprintSelection((current) => current ? updateBlueprintField(current, "forgeExecutionPreference", mode) : current);
+  };
+
   const handleOpenGraph = async (projectId: string) => {
     try {
       acceptActiveGraph(await loadProjectGraph(projectId));
@@ -1342,7 +1385,11 @@ export default function App() {
               isCanonActive={canon.enabled}
               chosenTitle={chosenTake?.title || workingTitle}
               forgeExecutionMode={forgeExecutionMode}
-              onChangeForgeExecutionMode={setForgeExecutionMode}
+              onChangeForgeExecutionMode={handleChangeForgeExecutionMode}
+              blueprintSelection={blueprintSelection}
+              blueprintBusy={blueprintBusy}
+              blueprintError={blueprintError}
+              onOpenBlueprint={() => void handleOpenWorkflowBlueprint()}
             />
           )}
 
@@ -1528,7 +1575,7 @@ export default function App() {
         />
       )}
 
-      {isBlueprintOpen && blueprintPlan && <BlueprintStudio plan={blueprintPlan} initialSelection={createBlueprintStudioDraft(blueprintPlan, blueprintSelection)} onSave={handleSaveBlueprint} onCancel={closeBlueprint} />}
+      {isBlueprintOpen && blueprintPlan && <BlueprintStudio plan={blueprintPlan} initialSelection={createBlueprintStudioDraft(blueprintPlan, blueprintSelection)} onSave={handleSaveBlueprint} onCancel={closeBlueprint} startGuided={currentStage === 3} />}
 
       <SettingsModal
         isOpen={isSettingsOpen}

@@ -4,6 +4,23 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.58 — 2026-09-13
+
+### Fixed
+
+- Stage 3 now exposes a first-class Production Blueprint card before Forge, including the selected total lorebook-library target, estimated entry range, and separate runtime activation budget.
+- “Plan Lorebook Size” prepares the current project and opens Blueprint Studio directly in editable Guided mode; users no longer need to discover the Project Graph beta panel through the Vault.
+- Stage 3 Forge execution changes now update the accepted Blueprint selection instead of allowing the visible radio choice and durable Forge plan to disagree.
+
+### Changed
+
+- New projects clearly describe Auto, Compact, Standard, Large, Massive, and custom lorebook sizing up to 40,000 tokens from the normal workflow.
+- Blueprint setup preserves the current in-progress manuscript in the Vault before preparing its graph, and reports preparation failures inline in Stage 3.
+
+### Validation boundary
+
+- Component tests verify visible mobile-safe Stage 3 access, selected budget summaries, editable Guided launch, and existing Forge execution controls. The full Blueprint contract, persistence, 40,000-token bounds, and Forge brief remain covered by their existing deterministic suites. Live provider generation and Lumiverse runtime behavior are not implied by these UI checks.
+
 ## v0.57 — 2026-09-13
 
 ### Added

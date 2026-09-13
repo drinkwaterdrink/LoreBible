@@ -1,6 +1,6 @@
 # Delivery roadmap
 
-**Status:** 11 of 17 ordered roadmap items complete; 6 remain. M2 Blueprint Studio and M3.1 durable Forge integration are complete. v0.55–v0.57 advance M3.2 from lossless category records to Blueprint-driven Forge and typed specialist projections for cast, relationships, knowledge, and temporal material. Canon acceptance, stable cross-link resolution, scoped regeneration, and production native-module serialization remain in progress. M4.1 foundation work is partially complete. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
+**Status:** 11 of 17 ordered roadmap items complete; 6 remain. M2 Blueprint Studio and M3.1 durable Forge integration are complete. v0.58 makes the accepted Blueprint and its independent lore/runtime budgets reachable from the normal Stage 3 workflow. v0.55–v0.57 advance M3.2 from lossless category records to Blueprint-driven Forge and typed specialist projections for cast, relationships, knowledge, and temporal material. Canon acceptance, stable cross-link resolution, scoped regeneration, and production native-module serialization remain in progress. M4.1 foundation work is partially complete. Read the [architecture](production-studio-blueprint.md) before implementing a milestone. Cut a detailed implementation plan per bounded subsystem; do not execute this whole horizon as a single refactor.
 
 ## 1. Reconcile the original roadmap
 
@@ -74,7 +74,7 @@ Copy/import SavedProjectV2 without discarding unknown fields. Keep original raw 
 
 **Depends on:** M1 contracts/store; M0 Divergence reliability. **Outcome:** a user can inspect and override a premise-specific build inventory before spending on Forge.
 
-**Progress:** Complete. M2.1 shipped in v0.41 with a proposal-only Smart Auto preview. Later releases added editable, locked, persisted Smart/Guided/Expert choices, independent library/runtime budgets, 40k-capable sizing, and mobile-safe controls. v0.56 carries the accepted selection into live Forge prompts and durable input fingerprints, so Blueprint now changes production behavior rather than remaining a preview.
+**Progress:** Complete. M2.1 shipped in v0.41 with a proposal-only Smart Auto preview. Later releases added editable, locked, persisted Smart/Guided/Expert choices, independent library/runtime budgets, 40k-capable sizing, and mobile-safe controls. v0.56 carries the accepted selection into live Forge prompts and durable input fingerprints, so Blueprint changes production behavior rather than remaining a preview. v0.58 makes those controls visible from Stage 3 and opens workflow-launched editing in Guided mode.
 
 Introduce artifact composition, world mode, independent intensity/quality/runtime controls, dynamic Lore Matrix, category explanations, principal/roster targets, pack eligibility, and Smart/Guided/Expert surfaces. Migrate Physics into constraints while retaining its old saved values. Recommendations are proposed, not silently canon.
 

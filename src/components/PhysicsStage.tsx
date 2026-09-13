@@ -2,7 +2,7 @@ import React from "react";
 import { PhysicsConfig } from "../types";
 import { LINGUISTIC_BASES } from "../lib/wordBanks";
 import { Sliders, ArrowRight, BookOpen, Skull, Flame } from "lucide-react";
-import type { ForgeExecutionPreference } from "../contracts/blueprintSelection";
+import type { BlueprintSelectionV1, ForgeExecutionPreference } from "../contracts/blueprintSelection";
 
 export const STANDARD_GENRES = [
   "Drama & Psychological Realism",
@@ -34,6 +34,10 @@ interface PhysicsStageProps {
   chosenTitle: string;
   forgeExecutionMode?: ForgeExecutionPreference;
   onChangeForgeExecutionMode?: (mode: ForgeExecutionPreference) => void;
+  blueprintSelection?: BlueprintSelectionV1 | null;
+  blueprintBusy?: boolean;
+  blueprintError?: string | null;
+  onOpenBlueprint?: () => void;
 }
 
 export const PhysicsStage: React.FC<PhysicsStageProps> = ({
@@ -44,6 +48,10 @@ export const PhysicsStage: React.FC<PhysicsStageProps> = ({
   chosenTitle,
   forgeExecutionMode = "continuous",
   onChangeForgeExecutionMode,
+  blueprintSelection = null,
+  blueprintBusy = false,
+  blueprintError = null,
+  onOpenBlueprint,
 }) => {
   const update = <K extends keyof PhysicsConfig>(field: K, val: PhysicsConfig[K]) => {
     onChangePhysics({
@@ -67,6 +75,46 @@ export const PhysicsStage: React.FC<PhysicsStageProps> = ({
           <span className="italic text-[var(--ink)]">{chosenTitle}</span>, or proceed immediately.
         </p>
       </div>
+
+      <section aria-label="Production Blueprint" className="manuscript-sheet p-4 sm:p-6 space-y-4 border-l-2 border-l-[var(--rubric)]">
+        <div className="scribe-header">
+          <span>Production Blueprint</span>
+          <span className="text-[10px] font-mono-ui">Lore coverage & runtime</span>
+        </div>
+        <p className="text-xs text-[var(--graphite)] font-manuscript leading-relaxed">
+          Set the size of the complete authored lorebook separately from how much lore may activate in one prompt. These choices shape Forge coverage rather than padding entries.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="border border-[var(--ink-soft)] bg-[var(--vellum-raised)] p-3 min-w-0">
+            <span className="block text-[10px] font-apparatus uppercase tracking-wider text-[var(--graphite)]">Lorebook library size</span>
+            <strong className="block mt-1 text-sm font-apparatus text-[var(--ink)]">
+              {blueprintSelection?.loreLibraryBudget.targetTokens
+                ? `${blueprintSelection.loreLibraryBudget.targetTokens.toLocaleString()} tokens`
+                : "Automatic recommendation"}
+            </strong>
+            <span className="block mt-1 text-[11px] font-manuscript text-[var(--graphite)]">
+              {blueprintSelection
+                ? `Target range: ${blueprintSelection.lorebookRange.min}–${blueprintSelection.lorebookRange.max} focused entries.`
+                : "Choose Auto, Compact, Standard, Large, Massive, or a custom target up to 40,000 tokens."}
+            </span>
+          </div>
+          <div className="border border-[var(--ink-soft)] bg-[var(--vellum-raised)] p-3 min-w-0">
+            <span className="block text-[10px] font-apparatus uppercase tracking-wider text-[var(--graphite)]">Runtime activation budget</span>
+            <strong className="block mt-1 text-sm font-apparatus text-[var(--ink)]">
+              {blueprintSelection?.runtimeTokenBudget.mode === "custom"
+                ? `${blueprintSelection.runtimeTokenBudget.tokens.toLocaleString()} tokens`
+                : blueprintSelection?.runtimeTokenBudget.mode === "unlimited"
+                  ? "Unlimited"
+                  : "Automatic recommendation"}
+            </strong>
+            <span className="block mt-1 text-[11px] font-manuscript text-[var(--graphite)]">This is the recommended per-prompt allowance, not the total library size.</span>
+          </div>
+        </div>
+        {blueprintError && <p role="alert" className="border border-[var(--rubric)] p-3 text-xs text-[var(--rubric)]">{blueprintError}</p>}
+        <button type="button" onClick={onOpenBlueprint} disabled={blueprintBusy || !onOpenBlueprint} className="btn-secondary min-h-11 w-full sm:w-auto disabled:opacity-50">
+          {blueprintBusy ? "Preparing Blueprint…" : blueprintSelection ? "Customize Blueprint" : "Plan Lorebook Size"}
+        </button>
+      </section>
 
       {/* CORE WRITING SLIDERS */}
       <div className="manuscript-sheet p-6 space-y-7">
