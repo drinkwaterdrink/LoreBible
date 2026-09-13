@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createBlueprintPlan } from "../../src/lib/blueprint/planner";
-import { createBlueprintSelection, reconcileBlueprintSelection, setLorebookScale } from "../../src/lib/blueprint/selection";
+import { addBlueprintCategory, createBlueprintSelection, removeBlueprintCategory, reconcileBlueprintSelection, setLorebookScale, updateBlueprintCategory, updateBlueprintField, updateBlueprintMechanic } from "../../src/lib/blueprint/selection";
 import { familyVisit, warTornKingdom } from "../fixtures/blueprintPremises";
 
 const options = { createdAt: "2026-09-12T12:00:00.000Z" };
@@ -31,4 +31,43 @@ test("scale presets and custom ranges are independent of generation quality", ()
   const custom = setLorebookScale(massive, "custom", { min: 5, ideal: 11, max: 18 });
   expect(custom.lorebookRange).toEqual({ min: 5, ideal: 11, max: 18 });
   expect(custom.generationQuality).toBe(selection.generationQuality);
+});
+
+test("field and category mutations are immutable, timestamped, and locked", () => {
+  const selection = createBlueprintSelection(createBlueprintPlan(familyVisit(), options));
+  const originalMode = selection.worldMode;
+  const replacementMode = originalMode === "arc" ? "sandbox" : "arc";
+  const changed = updateBlueprintField(selection, "worldMode", replacementMode, "2026-09-12T13:00:00.000Z");
+  expect(changed).toMatchObject({ worldMode: replacementMode, updatedAt: "2026-09-12T13:00:00.000Z", lockedFields: ["worldMode"] });
+  expect(selection.worldMode).toBe(originalMode);
+  const category = selection.categories.find(item => item.status !== "required")!;
+  const edited = updateBlueprintCategory(selection, category.id, { status: "omitted", detail: "light" }, "2026-09-12T13:01:00.000Z");
+  expect(edited.categories.find(item => item.id === category.id)).toMatchObject({ status: "omitted", detail: "light", userLocked: true });
+  expect(selection.categories.find(item => item.id === category.id)?.userLocked).toBe(false);
+});
+
+test("required categories and ineligible mechanics reject invalid transitions", () => {
+  const selection = createBlueprintSelection(createBlueprintPlan(warTornKingdom(), options));
+  const required = selection.categories.find(item => item.status === "required");
+  if (required) expect(() => updateBlueprintCategory(selection, required.id, { status: "omitted" })).toThrow("required");
+  const ineligible = selection.mechanicPacks.find(item => !item.eligible)!;
+  expect(() => updateBlueprintMechanic(selection, ineligible.id, true)).toThrow("ineligible");
+});
+
+test("custom categories receive safe unique IDs and only custom categories can be removed", () => {
+  const selection = createBlueprintSelection(createBlueprintPlan(familyVisit(), options));
+  const first = addBlueprintCategory(selection, "Daily Shops", "Commerce and errands", "2026-09-12T13:00:00.000Z");
+  const second = addBlueprintCategory(first, "Daily Shops", "A second distinct layer", "2026-09-12T13:01:00.000Z");
+  expect(second.categories.slice(-2).map(item => item.id)).toEqual(["custom:daily-shops", "custom:daily-shops-2"]);
+  expect(second.categories.at(-1)).toMatchObject({ custom: true, userLocked: true, status: "optional", detail: "standard", targetRange: { min: 1, ideal: 3, max: 6 } });
+  expect(removeBlueprintCategory(second, "custom:daily-shops").categories.some(item => item.id === "custom:daily-shops")).toBe(false);
+  expect(() => removeBlueprintCategory(selection, selection.categories[0].id)).toThrow("Only custom");
+});
+
+test("mechanic overrides are immutable and preserve provider-independent metadata", () => {
+  const selection = createBlueprintSelection(createBlueprintPlan(familyVisit(), options));
+  const mechanic = selection.mechanicPacks.find(item => item.eligible)!;
+  const changed = updateBlueprintMechanic(selection, mechanic.id, !mechanic.enabled, "2026-09-12T13:00:00.000Z");
+  expect(changed.mechanicPacks.find(item => item.id === mechanic.id)).toMatchObject({ enabled: !mechanic.enabled, userLocked: true });
+  expect(selection.mechanicPacks.find(item => item.id === mechanic.id)?.userLocked).toBe(false);
 });

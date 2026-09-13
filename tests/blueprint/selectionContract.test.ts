@@ -38,6 +38,13 @@ test("rejects invalid ranges, duplicate IDs, unknown fields, and credential-shap
   expect(parseBlueprintSelectionV1({ ...validSelection, api_key: "forbidden" }).ok).toBe(false);
 });
 
+test("rejects selections that cannot be safely applied", () => {
+  expect(parseBlueprintSelectionV1({ ...validSelection, artifactTargets: [] })).toMatchObject({ ok: false });
+  expect(parseBlueprintSelectionV1({ ...validSelection, mechanicPacks: [{ ...validSelection.mechanicPacks[0], enabled: true, eligible: false }] })).toMatchObject({ ok: false });
+  expect(parseBlueprintSelectionV1({ ...validSelection, categories: [{ ...validSelection.categories[0], label: "   " }] })).toMatchObject({ ok: false });
+  expect(parseBlueprintSelectionV1({ ...validSelection, lockedFields: ["worldMode", "worldMode"] })).toMatchObject({ ok: false });
+});
+
 test("rejects cyclic and accessor input without throwing", () => {
   const cyclic: any = { ...validSelection }; cyclic.loop = cyclic;
   expect(() => parseBlueprintSelectionV1(cyclic)).not.toThrow();
