@@ -36,7 +36,7 @@ test("fingerprints creative inputs but permits model changes",async()=>{
 test("accepts one provider response as six atomic bundle checkpoints",async()=>{
   const dir=await mkdtemp(join(tmpdir(),"lb-forge-coordinator-"));const repo=createProjectRepository(dir);await repo.create(graph());let sequence=0;const coordinator=createForgeProjectCoordinator(repo,{now:()=>"x",id:(kind)=>`${kind}/${++sequence}`});
   const prepared=await coordinator.prepare("p",source,"single_request");const provenance={provider:"gemini",modelId:"gemini-2.5-flash",route:"openai_compatible"};const active=await coordinator.begin(prepared,{bundleIndex:0,...provenance});
-  const sections={core:{},user:{},worldPhysics:{},status:{},locations:[],factions:[],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],conflict:{},pressureProtocol:{},history:[],aesthetic:{},naming:{},pressures:[],proceduralRolls:[],opening:{},expansionNotes:{},antiGravity:{},buildNotes:{}};
+  const sections={core:{},user:{},worldPhysics:{},status:{},locations:[],factions:[],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],conflict:{},pressureProtocol:{},history:[],aesthetic:{},naming:{},pressures:[],additionalLore:[],proceduralRolls:[],opening:{},expansionNotes:{},antiGravity:{},buildNotes:{}};
   const completed=await coordinator.completeRange(active,sections,6,provenance);
   expect(completed.complete).toBe(true);expect((completed.graph.builds[0] as ForgeBuildRecordV1).batches.every(batch=>batch.status==="complete")).toBe(true);expect(completed.resumeSections).toEqual(sections);
 });

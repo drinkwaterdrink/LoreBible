@@ -10,7 +10,8 @@ test("formats standard and custom categories once", () => {
 test("uses a stable short fallback instead of content-derived or paragraph titles", () => {
   const content = "This is a very long lore paragraph that should never become the private title shown in Lumiverse because it is runtime content.";
   const result = formatLoreEntryTitle({ categoryId: "secret", categoryLabel: "Secret", candidateName: content, content, ordinal: 3 });
-  expect(result).toMatchObject({ title: "[SECRET] Secret 3", semanticName: "Secret 3", finding: { severity: "major", code: "lore.title_fallback" } });
+  expect(result).toMatchObject({ finding: { severity: "major", code: "lore.title_fallback" } });
+  expect(result.title).not.toMatch(/Secret \d+$/);
   expect(result.title.length).toBeLessThan(80);
 });
 

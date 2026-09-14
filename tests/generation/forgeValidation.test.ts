@@ -43,3 +43,7 @@ test("new Forge NPC entries require explicit cast tier and independent activity"
 test("Forge rejects an unsupported NPC cast tier",()=>{
   expect(()=>sanitizeForgeSectionEntries("npcs",[{fields:{...completeNpcFields,castTier:"hero"},keys:["Mara"]}])).toThrow("npcs entry 1 has unsupported castTier");
 });
+
+test("Forge rejects numbered placeholder semantic names",()=>{
+  expect(()=>sanitizeForgeSectionEntries("history",[{id:"h",fields:{name:"History 1",event:"A treaty was signed.",era:"1877",consequence:"Borders closed."},keys:["treaty"],permanence:"C",locked:false}])).toThrow("semantic name");
+});

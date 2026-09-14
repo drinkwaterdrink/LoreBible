@@ -41,6 +41,7 @@ import { APP_VERSION } from "./src/version.js";
 import { RUNTIME_CAPABILITIES } from "./src/lib/runtimeDiagnostics.js";
 import { parseBlueprintSelectionV1, type BlueprintSelectionV1 } from "./src/contracts/blueprintSelection.js";
 import { createForgeBlueprintBrief, formatForgeBlueprintBrief } from "./server/generation/forgeBlueprintBrief.js";
+import { auditForgeBundleCoverage, createForgeCoveragePlan, findForgeCoverageRestartBundle, formatForgeBundleCoverage } from "./server/generation/forgeCoveragePlan.js";
 
 dotenv.config();
 
@@ -1415,7 +1416,11 @@ app.post("/api/forge", async (req, res) => {
     catch(error){sendEvent("error",{code:"FORGE_PROJECT_UNAVAILABLE",message:error instanceof Error?error.message:"Durable Forge project could not be prepared."});return;}
   }
   let resumePlan;
-  try { resumePlan=createForgeResumePlan(durableForge?.resumeSections??resumeSections,executionMode as ForgeExecutionMode); }
+  const coveragePlan=acceptedBlueprintSelection?createForgeCoveragePlan(acceptedBlueprintSelection):null;
+  const requireAdditionalLore=Boolean(coveragePlan?.categories.some(category=>category.destination==="additionalLore"&&!category.forbidden));
+  const resumeSource=durableForge?.resumeSections??resumeSections;
+  const restartFromBundleIndex=coveragePlan?findForgeCoverageRestartBundle(coveragePlan,resumeSource as Record<string,unknown>):null;
+  try { resumePlan=createForgeResumePlan(resumeSource,executionMode as ForgeExecutionMode,{requireAdditionalLore,restartFromBundleIndex}); }
   catch(error){sendEvent("error",{code:"INVALID_REQUEST",message:error instanceof Error?error.message:"Invalid Forge checkpoint."});return;}
   const doc: Record<string, any> = {
     id: "doc-" + Date.now(),
@@ -1438,11 +1443,12 @@ app.post("/api/forge", async (req, res) => {
       fields: {
         type: Type.OBJECT,
         properties: {
+          name: { type: Type.STRING },
           rule: { type: Type.STRING },
           profits: { type: Type.STRING },
           pays: { type: Type.STRING },
         },
-        required: ["rule", "profits", "pays"],
+        required: ["name", "rule", "profits", "pays"],
       },
       keys: { type: Type.ARRAY, items: { type: Type.STRING } },
       permanence: { type: Type.STRING },
@@ -1592,13 +1598,14 @@ app.post("/api/forge", async (req, res) => {
       fields: {
         type: Type.OBJECT,
         properties: {
+          name: { type: Type.STRING },
           truth: { type: Type.STRING },
           whoKeepsIt: { type: Type.STRING },
           howKept: { type: Type.STRING },
           discoveryTrigger: { type: Type.STRING },
           whatItChanges: { type: Type.STRING },
         },
-        required: ["truth", "whoKeepsIt", "howKept", "discoveryTrigger", "whatItChanges"],
+        required: ["name", "truth", "whoKeepsIt", "howKept", "discoveryTrigger", "whatItChanges"],
       },
       keys: { type: Type.ARRAY, items: { type: Type.STRING } },
       permanence: { type: Type.STRING },
@@ -1615,11 +1622,12 @@ app.post("/api/forge", async (req, res) => {
       fields: {
         type: Type.OBJECT,
         properties: {
+          name: { type: Type.STRING },
           event: { type: Type.STRING },
           era: { type: Type.STRING },
           consequence: { type: Type.STRING },
         },
-        required: ["event", "era", "consequence"],
+        required: ["name", "event", "era", "consequence"],
       },
       keys: { type: Type.ARRAY, items: { type: Type.STRING } },
       permanence: { type: Type.STRING },
@@ -1645,6 +1653,16 @@ app.post("/api/forge", async (req, res) => {
       keys: { type: Type.ARRAY, items: { type: Type.STRING } },
       permanence: { type: Type.STRING },
       locked: { type: Type.BOOLEAN },
+    },
+    required: ["id", "fields", "keys", "permanence", "locked"],
+  };
+
+  const additionalLoreEntrySchema = {
+    type: Type.OBJECT,
+    properties: {
+      id: { type: Type.STRING },
+      fields: { type: Type.OBJECT, properties: { categoryId: { type: Type.STRING }, categoryLabel: { type: Type.STRING }, name: { type: Type.STRING }, content: { type: Type.STRING } }, required: ["categoryId", "categoryLabel", "name", "content"] },
+      keys: { type: Type.ARRAY, items: { type: Type.STRING } }, permanence: { type: Type.STRING }, locked: { type: Type.BOOLEAN },
     },
     required: ["id", "fields", "keys", "permanence", "locked"],
   };
@@ -1774,7 +1792,7 @@ app.post("/api/forge", async (req, res) => {
     },
     {
       name: "Bundle 5: History, Aesthetic, Naming, and Pressures",
-      keys: ["history", "aesthetic", "naming", "pressures"],
+      keys: ["history", "aesthetic", "naming", "pressures", "additionalLore"],
       includeExample: false,
       schema: {
         type: Type.OBJECT,
@@ -1806,10 +1824,11 @@ app.post("/api/forge", async (req, res) => {
             required: ["linguisticBase", "commonNames", "eliteNames", "placeNamePattern", "permanence"],
           },
           pressures: { type: Type.ARRAY, items: pressureEntrySchema },
+          additionalLore: { type: Type.ARRAY, items: additionalLoreEntrySchema },
         },
-        required: ["history", "aesthetic", "naming", "pressures"],
+        required: ["history", "aesthetic", "naming", "pressures", "additionalLore"],
       },
-      promptModifier: "Generate BUNDLE 5: [history, aesthetic, naming, pressures]. Provide sensory textures, naming phonology fitting the world, and background pressures moving independently.",
+      promptModifier: "Generate BUNDLE 5: [history, aesthetic, naming, pressures, additionalLore]. Provide sensory textures, naming phonology fitting the world, and background pressures moving independently. Put every accepted Blueprint category without a named legacy section into additionalLore, preserving its categoryId and visible categoryLabel. Every rule, secret, history item, pressure, and additional lore entry needs a concise semantic name describing its subject.",
     },
     {
       name: "Bundle 6: Procedural Rolls, Opening Scene, Expansion Notes, Anti-Gravity, and Build Notes",
@@ -1934,10 +1953,11 @@ app.post("/api/forge", async (req, res) => {
         ? `${GENERATOR_RULES}\n\n${FORMAT_EXAMPLE}`
         : GENERATOR_RULES;
 
+      const coveragePrompt=forgeBlueprintBrief&&coveragePlan?formatForgeBundleCoverage(coveragePlan,bundle.keys):"";
       const userPrompt = `FORGE STEP (${bundle.name}):
 ${context}
 
-${bundle.promptModifier}
+${bundle.promptModifier}${coveragePrompt}
 
 Adhere strictly to all system constraints: no trope labels, no negations in seed content, loaded one-liners only, zero contamination.
 Emit strictly valid JSON matching the schema for this bundle.`;
@@ -2011,6 +2031,10 @@ Emit strictly valid JSON matching the schema for this bundle.`;
           doc[key] = sanitizedVal;
           acceptedSections[key]=sanitizedVal;
           sendEvent("section", { key, data: sanitizedVal });
+        }
+        if(coveragePlan){
+          const coverageFindings=auditForgeBundleCoverage(coveragePlan,doc,bundle.keys);
+          if(coverageFindings.length)throw new ModelGatewayError(`Blueprint coverage was not satisfied: ${coverageFindings.join("; ")}. Retry this bundle with the same accepted Blueprint.`,"INVALID_STRUCTURED_OUTPUT",502);
         }
         if(durableAttempt&&executionMode==="single_request"){
           durableForge=await forgeProjectCoordinator.completeRange(durableAttempt,acceptedSections,resumePlan.endBundleIndexExclusive,durableProvenance!);

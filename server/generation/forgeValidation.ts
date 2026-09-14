@@ -1,16 +1,17 @@
 import { ModelGatewayError } from "../model/gateway.js";
 
 export const FORGE_REQUIRED_FIELDS: Record<string, readonly string[]> = {
-  rules: ["rule", "profits", "pays"],
+  rules: ["name", "rule", "profits", "pays"],
   locations: ["name", "function", "mood", "whatsWrong"],
   factions: ["name", "publicFace", "trueAgenda", "independentWant", "stanceTowardUser"],
   npcs: ["name", "role", "wants", "body", "voice", "notDefault", "holds", "connection", "castTier", "independentActivity"],
   relationshipWeb: ["source", "target", "bond", "pressure", "relation"],
   knowledgeMap: ["truth", "knows", "suspects", "surfacesWhen"],
   items: ["name", "whatItDoes", "costOrLimit", "unfiredGun"],
-  secrets: ["truth", "whoKeepsIt", "howKept", "discoveryTrigger", "whatItChanges"],
-  history: ["event", "era", "consequence"],
+  secrets: ["name", "truth", "whoKeepsIt", "howKept", "discoveryTrigger", "whatItChanges"],
+  history: ["name", "event", "era", "consequence"],
   pressures: ["name", "force", "scope", "clock"],
+  additionalLore: ["categoryId", "categoryLabel", "name", "content"],
 };
 
 /** Validate provider entries without inventing missing creative content. */
@@ -29,6 +30,9 @@ export function sanitizeForgeSectionEntries(sectionKey: string, entries: unknown
       throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} is missing required content: ${reasons.join(", ")}.`, "INVALID_STRUCTURED_OUTPUT", 502);
     }
     if(sectionKey==="npcs"&&!(["principal","roster"] as unknown[]).includes(fields.castTier))throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} has unsupported castTier.`,"INVALID_STRUCTURED_OUTPUT",502);
+    const semanticName=typeof fields.name==="string"?fields.name.trim():"";const genericLabel=sectionKey==="additionalLore"&&typeof fields.categoryLabel==="string"?fields.categoryLabel:sectionKey.replace(/s$/i,"");
+    const genericName=new RegExp(`^(?:(?:world\\s+)?rule|history|secret|entry|${genericLabel.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")})\\s+\\d+$`,"i");
+    if(semanticName&&genericName.test(semanticName))throw new ModelGatewayError(`${sectionKey} entry ${idx + 1} needs a descriptive semantic name.`,"INVALID_STRUCTURED_OUTPUT",502);
     return { ...record, id: record.id || `${sectionKey}-${idx + 1}`, locked: Boolean(record.locked) };
   });
 }

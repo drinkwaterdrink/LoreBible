@@ -28,6 +28,13 @@ test("derives the exact manuscript sections including empty collections",()=>{
   expect(deriveForgeSectionsFromCategoryRecords(projectForgeSections("build/one",1,sections))).toEqual(sections);
 });
 
+test("preserves supplemental Blueprint lore as a collection with its category identity",()=>{
+  const sections={additionalLore:[{id:"economy-1",fields:{categoryId:"economy",categoryLabel:"ECONOMY",name:"Veil Exchange",content:"Tithes fund wards."},keys:["veil tithe"],permanence:"C",locked:false}]};
+  const records=projectForgeSections("build/coverage",4,sections);
+  expect(records[0]).toMatchObject({sectionKey:"additionalLore",categoryId:"economy",semanticName:"Veil Exchange"});
+  expect(deriveForgeSectionsFromCategoryRecords(records)).toEqual(sections);
+});
+
 test("maps every current Forge section without using prose as category identity",()=>{
   const sections={core:{title:"World"},user:{rolePosition:"Visitor"},worldPhysics:{rules:[]},status:{content:"Now"},items:[],secrets:[],conflict:{central:"Choice"},pressureProtocol:"Escalate",history:[],aesthetic:{colors:[]},naming:{commonNames:[]},pressures:[],proceduralRolls:[],opening:{firstMessage:"Hello"},expansionNotes:{},antiGravity:{},buildNotes:{}};
   const records=projectForgeSections("build/two",0,sections);

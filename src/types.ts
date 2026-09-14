@@ -360,6 +360,8 @@ export interface LoreBibleDocument {
   aesthetic: AestheticSection;
   naming: NamingSection;
   pressures: Entry[];
+  /** Blueprint categories without a legacy manuscript section. */
+  additionalLore?: Entry[];
   /** Imported legacy sections; new documents may omit them. */
   rulesOfEngagement?: Entry[];
   sensoryPalette?: Entry[];

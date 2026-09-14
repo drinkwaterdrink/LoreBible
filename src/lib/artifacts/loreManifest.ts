@@ -33,6 +33,11 @@ function cleanKeys(keys: string[] | undefined): string[] {
   return [...new Set((keys ?? []).map((key) => key.trim()).filter(Boolean))];
 }
 
+function genericTitle(value:string):boolean{return /^(?:(?:world\s+)?rule|history|secret|entry)\s+\d+$/i.test(value.trim());}
+function titleFromKeys(entry:Entry):string|undefined{const keys=cleanKeys(entry.keys).filter(key=>key.length>2&&!/^\d+$/.test(key)&&!genericTitle(key));return keys.length?keys.slice(0,2).join(" · "):undefined;}
+function titleFromContent(value:string|undefined):string|undefined{if(!value)return undefined;const clean=value.replace(/\{\{[^}]+\}\}/g,"").replace(/^[\s"']*(?:the\s+)?/i,"").trim();const phrase=clean.split(/\b(?:is|are|was|were|has|have|establish(?:es|ed)?|requires?|causes?|allows?|forces?|holds?|keeps?|siphons?|performs?|ratifies?)\b/i)[0].replace(/[^\p{L}\p{N}'’-]+$/gu,"").trim();return phrase?phrase.split(/\s+/).slice(0,7).join(" "):undefined;}
+function preferredTitle(entry:Entry,prose:string|undefined,fallback:string):string{const named=entry.fields.name?.trim();return named&&!genericTitle(named)?named:titleFromKeys(entry)||titleFromContent(prose)||fallback;}
+
 function hash32(value: string, seed: number): number {
   let hash = seed >>> 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -94,7 +99,7 @@ const definitions: CategoryDefinition[] = [
     entries: (document) => document.worldPhysics?.rules ?? [],
     order: 200,
     priority: 190,
-    title: (entry, index) => entry.fields.name || entry.fields.rule || `World Rule ${index + 1}`,
+    title: (entry, index) => preferredTitle(entry,entry.fields.rule,`World Rule ${index + 1}`),
     content: (entry) => cleanParts([["WORLD LAW", entry.fields.rule || entry.fields.name], ["PROFITS", entry.fields.profits], ["PAYS", entry.fields.pays]]),
     preventRecursion: true,
   },
@@ -132,7 +137,7 @@ const definitions: CategoryDefinition[] = [
     entries: (document) => document.secrets ?? [],
     order: 300,
     priority: 145,
-    title: (entry, index) => entry.fields.name || entry.fields.truth || `Secret ${index + 1}`,
+    title: (entry, index) => preferredTitle(entry,entry.fields.truth,`Secret ${index + 1}`),
     content: (entry) => cleanParts([["SECRET", entry.fields.truth || entry.fields.name], ["WHO KEEPS IT", entry.fields.whoKeepsIt], ["HOW KEPT", entry.fields.howKept], ["DISCOVERY TRIGGER", entry.fields.discoveryTrigger], ["WHAT IT CHANGES", entry.fields.whatItChanges]]),
     visibility: "secret",
     preventRecursion: true,
@@ -143,7 +148,7 @@ const definitions: CategoryDefinition[] = [
     entries: (document) => document.history ?? [],
     order: 350,
     priority: 120,
-    title: (entry, index) => entry.fields.name || entry.fields.event || `History ${index + 1}`,
+    title: (entry, index) => preferredTitle(entry,entry.fields.event,`History ${index + 1}`),
     content: (entry) => cleanParts([["HISTORY", entry.fields.event || entry.fields.name], ["WHEN", entry.fields.when], ["CONSEQUENCE", entry.fields.consequence], ["REMEMBERED AS", entry.fields.rememberedAs]]),
     historical: true,
   },
@@ -238,6 +243,18 @@ export function compileLoreManifest(document: LoreBibleDocument): LoreManifest {
         findings: [],
       });
     });
+  }
+
+  for (const [index, source] of (document.additionalLore ?? []).entries()) {
+    const categoryId=(source.fields.categoryId||"lore").trim().toLowerCase().replace(/[^a-z0-9_:-]+/g,"_");
+    const categoryLabel=(source.fields.categoryLabel||categoryId.replace(/[_:-]+/g," ")).trim().toUpperCase();
+    const content=(source.fields.content||"").trim();
+    if(!content)continue;
+    const named=formatLoreEntryTitle({categoryId,categoryLabel,candidateName:source.fields.name,content,ordinal:index+1});
+    if(named.finding)findings.push({...named.finding,sourceId:source.id});
+    const keys=cleanKeys(source.keys);
+    if(!keys.length)findings.push({code:"lore.missing_keys",severity:"major",message:`${named.title} has content but no viable activation key.`,sourceId:source.id});
+    entries.push({id:`lore:${categoryId}:${source.id}`,nativeUid:stableUid(`${document.id}:${categoryId}:${source.id}`),sourceId:source.id,sourceFactIds:[source.id],title:named.title,semanticName:named.semanticName,categoryId,categoryLabel,category:"lore",canonicalOwner:"worldBook",content,temporalClass:"evergreen",visibility:"public",activation:activationFor(source,keys,false),injection:{position:0,depth:4,role:null,order:450+index,priority:130},contentRationale:"Focused projection of an accepted Blueprint category.",activationRationale:"Conditional retrieval uses authored category-specific keys.",expectedActivationTests:keys.slice(0,1).map(key=>({kind:"positive" as const,text:key,shouldActivate:true})),estimatedTokens:Math.ceil(content.length/4),findings:[]});
   }
 
   const duplicateUids = entries.filter((entry, index) => entries.findIndex((candidate) => candidate.nativeUid === entry.nativeUid) !== index);

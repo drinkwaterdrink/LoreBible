@@ -4,6 +4,21 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.61 — 2026-09-13
+
+### Fixed
+
+- Accepted Blueprint categories now become explicit per-bundle generation targets instead of advisory prose that fixed six-bundle output could ignore.
+- Categories without a legacy manuscript section—including Economy, Education, Culture, Investigation, Clues, and user-created categories—now have a canonical supplemental-lore destination and retain their visible category identity through Project Graph checkpoints and native World Book export.
+- Forge now requires concise semantic names for world rules, secrets, history, and supplemental lore; compatible older entries derive concise titles from authored keys/content instead of degrading to labels such as “History 1” or “Secret 2.”
+- Every bundle validates its own planned categories before durable acceptance, while the lore-writing bundle enforces the overall minimum; single-request and one-bundle-at-a-time modes use the same gate.
+- A cross-category lore allocation fills any gap between category minima and the accepted total-library minimum with focused entries rather than longer paragraphs.
+- v0.60 checkpoints remain loadable, while a versioned Forge fingerprint prevents pre-fix durable builds from being mistaken for fully validated v0.61 builds.
+
+### Validation boundary
+
+- The supplied 24-entry export was inspected read-only and confirmed the regression: a 60–120-entry plan produced 24 entries across nine fixed categories, including generic rule, secret, and history titles. Deterministic tests now cover category routing, supplemental-category serialization, semantic titles, minimum coverage failures, and legacy checkpoint compatibility. Live provider adherence and Lumiverse import remain to be tested with a newly forged project.
+
 ## v0.60 — 2026-09-13
 
 ### Fixed

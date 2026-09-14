@@ -40,3 +40,22 @@ test("reports entries that have content but no viable activation key", () => {
   const manifest = compileLoreManifest(input);
   expect(manifest.findings.some((finding) => finding.code === "lore.missing_keys" && finding.sourceId === "location-1")).toBe(true);
 });
+
+test("preserves supplemental Blueprint categories and explicit semantic titles", () => {
+  const input = structuredClone(documentFixture);
+  input.additionalLore = [{ id: "economy-1", fields: { categoryId: "economy", categoryLabel: "ECONOMY", name: "The Veil-Tithe Exchange", content: "Licensed veil-tithes fund the ward grid." }, keys: ["veil-tithe"], permanence: "C", locked: false }];
+  input.history = [{ id: "history-1", fields: { name: "The Concordat of Prague", event: "The 1877 Concordat of Prague established scholastic extraterritoriality.", era: "1877", consequence: "National ministries lost jurisdiction." }, keys: ["Concordat of Prague"], permanence: "C", locked: false }];
+  const manifest = compileLoreManifest(input);
+  expect(manifest.entries.find(entry => entry.sourceId === "economy-1")).toMatchObject({ categoryId: "economy", categoryLabel: "ECONOMY", title: "[ECONOMY] The Veil-Tithe Exchange" });
+  expect(manifest.entries.find(entry => entry.sourceId === "history-1")?.title).toBe("[HISTORY] The Concordat of Prague");
+});
+
+test("legacy entries derive descriptive titles from authored keys instead of numbered placeholders",()=>{
+  const input=structuredClone(documentFixture);input.history=[{id:"h",fields:{event:"The 1877 Concordat of Prague established scholastic extraterritoriality.",era:"1877",consequence:"Ministries lost jurisdiction."},keys:["Concordat","Prague","Rectorate"],permanence:"C",locked:false}];
+  expect(compileLoreManifest(input).entries.find(entry=>entry.sourceId==="h")?.title).toBe("[HISTORY] Concordat · Prague");
+});
+
+test("generic legacy keys fall back to a concise phrase from authored content",()=>{
+  const input=structuredClone(documentFixture);input.history=[{id:"h",fields:{event:"The Ash Concordat established the northern border after the flood.",era:"After the flood",consequence:"Travel requires seals."},keys:["History 1"],permanence:"C",locked:false}];
+  expect(compileLoreManifest(input).entries.find(entry=>entry.sourceId==="h")?.title).toBe("[HISTORY] Ash Concordat");
+});

@@ -4,7 +4,7 @@ export const FORGE_BUNDLE_KEYS=[
   ["locations","factions"],
   ["npcs","relationshipWeb","knowledgeMap"],
   ["items","secrets","conflict","pressureProtocol"],
-  ["history","aesthetic","naming","pressures"],
+  ["history","aesthetic","naming","pressures","additionalLore"],
   ["proceduralRolls","opening","expansionNotes","antiGravity","buildNotes"],
 ] as const;
 const KNOWN=new Set<string>(FORGE_BUNDLE_KEYS.flat());
@@ -19,9 +19,15 @@ export function selectForgeBundleSections(result:unknown,expectedKeys:readonly s
   return{sections,ignoredKeys};
 }
 
-export function createForgeResumePlan(input:unknown,mode:ForgeExecutionMode):ForgeResumePlan{
+export function createForgeResumePlan(input:unknown,mode:ForgeExecutionMode,options:{requireAdditionalLore?:boolean;restartFromBundleIndex?:number|null}={}):ForgeResumePlan{
   if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("Forge checkpoint must be an object.");
-  const sections=input as Record<string,unknown>;
+  const sections=structuredClone(input as Record<string,unknown>);
+  // v0.60 checkpoints completed bundle five before supplemental Blueprint lore existed.
+  if(["history","aesthetic","naming","pressures"].every(key=>Object.hasOwn(sections,key))&&!Object.hasOwn(sections,"additionalLore")){
+    if(options.requireAdditionalLore)for(const key of ["history","aesthetic","naming","pressures"])delete sections[key];
+    else sections.additionalLore=[];
+  }
+  if(Number.isSafeInteger(options.restartFromBundleIndex)&&Number(options.restartFromBundleIndex)>=0)for(let index=Number(options.restartFromBundleIndex);index<FORGE_BUNDLE_KEYS.length;index++)for(const key of FORGE_BUNDLE_KEYS[index])delete sections[key];
   for(const key of Object.keys(sections))if(!KNOWN.has(key))throw new Error(`Forge checkpoint contains unknown section ${key}.`);
   let completed=0; let foundGap=false;
   for(let index=0;index<FORGE_BUNDLE_KEYS.length;index++){

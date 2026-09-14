@@ -20,6 +20,18 @@ test("resume starts after the last complete contiguous bundle",()=>{
   expect(createForgeResumePlan(sections,"continuous")).toMatchObject({startBundleIndex:2,endBundleIndexExclusive:6,completedBundleCount:2});
 });
 
+test("a v0.60 bundle-five checkpoint reruns bundle five when supplemental lore is required",()=>{
+  const old={core:{},user:{},worldPhysics:{},status:{},locations:[],factions:[],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],conflict:{},pressureProtocol:"",history:[],aesthetic:{},naming:{},pressures:[]};
+  const plan=createForgeResumePlan(old,"continuous",{requireAdditionalLore:true});
+  expect(plan.startBundleIndex).toBe(4);expect(plan.resumeSections).not.toHaveProperty("history");
+});
+
+test("checkpoint restart truncates that bundle and every later bundle without a gap",()=>{
+  const complete={core:{},user:{},worldPhysics:{},status:{},locations:[],factions:[],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],conflict:{},pressureProtocol:"",history:[],aesthetic:{},naming:{},pressures:[],proceduralRolls:[],opening:{},expansionNotes:{},antiGravity:{},buildNotes:{}};
+  const plan=createForgeResumePlan(complete,"continuous",{restartFromBundleIndex:4});
+  expect(plan.startBundleIndex).toBe(4);expect(plan.resumeSections).not.toHaveProperty("opening");
+});
+
 test("step by step runs exactly one incomplete bundle",()=>{
   const sections=Object.fromEntries(FORGE_BUNDLE_KEYS[0].map(key=>[key,{saved:true}]));
   expect(createForgeResumePlan(sections,"step_by_step")).toMatchObject({startBundleIndex:1,endBundleIndexExclusive:2,completedBundleCount:1});
