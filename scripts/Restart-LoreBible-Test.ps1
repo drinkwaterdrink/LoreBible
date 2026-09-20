@@ -8,7 +8,13 @@ function Get-VerifiedLoreBibleListenerPid {
 
   try {
     $health = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/health" -TimeoutSec 1
-    if ($health.status -ne "ok" -or $health.capabilities.selectedModelGenerationTest -ne $true) { return $null }
+    # Candidate ports are reserved for LoreBible test launchers. Older
+    # servers may omit newer capability fields, so status=ok is the stable
+    # identity signal that lets this reset remove the stale listener too.
+    $serverVersion = [string]$health.version
+    $serverCapabilities = $health.capabilities
+    if ($health.status -ne "ok") { return $null }
+    Write-Verbose "Resetting LoreBible v$serverVersion on isolated test port $Port (capabilities: $([bool]$serverCapabilities))."
     $listener = netstat.exe -ano 2>$null | Select-String -Pattern ":$Port\s+.*LISTENING" | Select-Object -First 1
     if ($null -eq $listener) { return $null }
     $parts = ([string]$listener).Trim() -split "\s+"

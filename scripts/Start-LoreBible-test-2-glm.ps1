@@ -8,4 +8,7 @@ $remoteHead = git rev-parse origin/test-2-glm
 if ($localHead -ne $remoteHead) {
   throw "test-2-glm is not synchronized with origin/test-2-glm. Resolve this before launching."
 }
-& (Join-Path $PSScriptRoot "Start-LoreBible.ps1")
+# The branch-specific shortcut must use the isolated test launcher and its
+# reset path. The fixed-port production launcher can leave a stale process
+# behind and open the browser against an older server instance.
+& (Join-Path $PSScriptRoot "Restart-LoreBible-Test.ps1")

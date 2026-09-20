@@ -4,6 +4,16 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.64 — 2026-09-20
+
+### Fixed
+
+- The `test-2-glm` desktop shortcut now enters the isolated test reset path before launching. It stops stale healthy LoreBible listeners on ports 3001–3010, including older servers that do not expose newer capability fields, then starts the current test branch and opens the matching port.
+
+### Validation boundary
+
+- Launcher regression tests cover the branch shortcut reset path and legacy health responses. No claim is made about any other local service outside the reserved LoreBible test-port range.
+
 ## v0.63 — 2026-09-20
 
 ### Added

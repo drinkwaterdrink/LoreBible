@@ -8,6 +8,6 @@ $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe")
 $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`""
 $shortcut.WorkingDirectory = $appRoot
-$shortcut.Description = "Launch Lore Bible from the test-2-glm branch"
+$shortcut.Description = "Reset and launch Lore Bible from the test-2-glm branch"
 $shortcut.Save()
 Write-Output $shortcutPath
