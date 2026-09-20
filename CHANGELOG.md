@@ -4,6 +4,17 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.62 — 2026-09-20
+
+### Added
+
+- Forge relationship and knowledge proposals now have a deterministic, revision-scoped link report. Exact stable IDs and unique names or aliases resolve to existing graph entities or generated entity proposals; missing and ambiguous references remain visible instead of being silently chosen.
+- Project Graph inspection shows resolved and unresolved Forge link counts, clearly labeled as proposals. Older builds without category records show an unavailable state.
+
+### Validation boundary
+
+- Link resolution does not promote generated facts, relationships, or knowledge to canon and does not change Forge checkpoints or manuscript text. Automated tests cover collisions, aliases, stable IDs, missing targets, self-links, optional knowledge audiences, legacy builds, and deterministic ordering. Lumiverse runtime behavior was not tested by this change.
+
 ## v0.61 — 2026-09-13
 
 ### Fixed
