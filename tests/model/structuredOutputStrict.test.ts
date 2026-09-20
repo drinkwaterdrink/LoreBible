@@ -9,6 +9,10 @@ test("strict Forge parser rejects two complete JSON documents", () => {
   expect(() => parseStructuredOutput('Example: []\nAnswer: {"history":[]}', { policy: "single_document" })).toThrow();
 });
 
+test("strict Forge parser rejects trailing prose after one JSON document", () => {
+  expect(() => parseStructuredOutput('Response:\n{"history":[]}\nI also explained my choice.', { policy: "single_document" })).toThrow();
+});
+
 test("strict Forge parser rejects a truncated document instead of recovering a nested fragment", () => {
   expect(() => parseStructuredOutput('{"a":{"b":1}', { policy: "single_document" })).toThrow();
 });

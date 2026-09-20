@@ -53,17 +53,18 @@ export function parseStructuredOutput(raw: string, options: { policy?: "single_d
   }
 
   if (options.policy === "single_document") {
-    const candidates: Array<{ text: string; parsed: unknown }> = [];
+    const candidates: Array<{ text: string; parsed: unknown; end: number }> = [];
     for (let index = 0; index < trimmed.length; index += 1) {
       if (trimmed[index] !== "{" && trimmed[index] !== "[") continue;
       const candidate = balancedJsonSlice(trimmed, index);
       if (!candidate) throw new SyntaxError("The provider returned an incomplete JSON document.");
       const parsed = parseCandidate(candidate);
       if (!parsed.ok) throw new SyntaxError("The provider returned invalid JSON.");
-      candidates.push({ text: candidate, parsed: parsed.value });
+      candidates.push({ text: candidate, parsed: parsed.value, end: index + candidate.length });
       index += candidate.length - 1;
     }
     if (candidates.length !== 1) throw new SyntaxError("The provider did not return exactly one JSON document.");
+    if (trimmed.slice(candidates[0].end).trim()) throw new SyntaxError("The provider returned text after its JSON document.");
     return { parsed: candidates[0].parsed, text: candidates[0].text, repaired: true };
   }
 

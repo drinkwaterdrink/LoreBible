@@ -36,3 +36,14 @@ test("rejects a stale Forge transition after unrelated graph edits",async()=>{
   await repo.apply("forge-stale",{commandId:"rename",expectedRevision:2,issuedAt:"x",command:{type:"entity.rename",entityId:"e1",name:"Mara Vale"}});
   await expect(repo.apply("forge-stale",{commandId:"start",expectedRevision:3,issuedAt:"x",command:{type:"forge.batch.begin",buildId:"build/1",bundleIndex:0,attemptId:"attempt/1",provider:"gemini",modelId:"flash",route:"gemini_native",inputFingerprint:"sha256:abc",sourceRevision:1}})).rejects.toMatchObject({code:"invalid_command"});
 });
+
+test("repository replays an accepted Forge range without a second write or revision",async()=>{
+  const dir=await root();const repo=createProjectRepository(dir);await repo.create(graph("forge-range-replay"));
+  await repo.apply("forge-range-replay",{commandId:"init",expectedRevision:1,issuedAt:"x",command:{type:"forge.initialize",buildId:"build/1",inputFingerprint:"sha256:replay",executionMode:"single_request"}});
+  const envelope={commandId:"range/one",expectedRevision:2,issuedAt:"x",command:{type:"forge.range.complete" as const,buildId:"build/1",startBundleIndex:0,endBundleIndexExclusive:2,attemptIds:["attempt/0","attempt/1"],sections:{core:{},user:{},worldPhysics:{},status:{},locations:[],factions:[]},provider:"gemini",modelId:"flash",route:"openai_compatible",inputFingerprint:"sha256:replay",sourceRevision:1}};
+  const first=await repo.apply("forge-range-replay",envelope);
+  const replay=await repo.apply("forge-range-replay",envelope);
+  expect(replay.graph).toEqual(first.graph);
+  expect(replay.receipt.toRevision).toBe(3);
+  expect((await createProjectRepository(dir).load("forge-range-replay"))?.project.revision).toBe(3);
+});

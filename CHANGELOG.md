@@ -14,6 +14,8 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 - Rejected Forge output no longer mutates the active manuscript, durable checkpoint, or accepted SSE stream before validation and commit succeed.
 - Forge prompts no longer include the legacy generator rules, format demonstration, or conflicting no-negation/loaded-one-liner suffix; other generation routes retain their existing prompt behavior.
+- Forge corrections now cover malformed provider JSON as well as schema/coverage failures; output-limit, timeout and internal failures do not consume another creative attempt. Bundle 6 and combined requests receive only their owned specialist missions, and Blueprint category IDs, cast tiers and counts are checked explicitly.
+- Completed Forge checkpoints are preserved when an older build conflicts with current Blueprint coverage; the app reports a migration/scope conflict instead of silently restarting accepted bundles. Empty truncated responses, untrusted provider error text, and combined-command replays receive explicit safe handling.
 
 ### Validation boundary
 

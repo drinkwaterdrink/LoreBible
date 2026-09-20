@@ -47,3 +47,12 @@ test("Forge rejects an unsupported NPC cast tier",()=>{
 test("Forge rejects numbered placeholder semantic names",()=>{
   expect(()=>sanitizeForgeSectionEntries("history",[{id:"h",fields:{name:"History 1",event:"A treaty was signed.",era:"1877",consequence:"Borders closed."},keys:["treaty"],permanence:"C",locked:false}])).toThrow("semantic name");
 });
+
+test("Forge rejects empty activation keys with a safe correction path", () => {
+  try {
+    sanitizeForgeSectionEntries("history", [{ id: "h", fields: { name: "The Old Treaty", event: "A treaty was signed.", era: "1877", consequence: "Borders closed." }, keys: ["  "], permanence: "C", locked: false }]);
+    throw new Error("expected invalid keys");
+  } catch (error) {
+    expect(error).toMatchObject({ issues: [{ path: "/history/0/keys", code: "schema" }] });
+  }
+});

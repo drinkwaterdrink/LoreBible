@@ -43,14 +43,20 @@ function contentToText(content: unknown): string {
   return content == null ? "" : JSON.stringify(content);
 }
 
-function mapHttpError(status: number, provider: ProviderId, message: string): ModelGatewayError {
+export class StructuredOutputTruncatedError extends ModelGatewayError {
+  constructor(provider?: ProviderId) {
+    super("The provider reached its output limit before completing this Forge response. Smaller specialist jobs are required.", "INVALID_STRUCTURED_OUTPUT", 502, provider);
+    this.name = "StructuredOutputTruncatedError";
+  }
+}
+
+function mapHttpError(status: number, provider: ProviderId, _message: string): ModelGatewayError {
   if (status === 401 || status === 403) return new ModelGatewayError("The provider rejected this API key.", "AUTHENTICATION_FAILED", 401, provider);
   if (status === 404) return new ModelGatewayError("The selected model or provider endpoint was not found.", "MODEL_UNAVAILABLE", 404, provider);
   if (status === 408 || status === 504) return new ModelGatewayError("The provider request timed out.", "REQUEST_TIMEOUT", 504, provider);
   if (status === 429) return new ModelGatewayError("The provider rate limit was reached.", "RATE_LIMITED", 429, provider);
   if (status >= 500) return new ModelGatewayError("The provider is temporarily unavailable.", "PROVIDER_UNAVAILABLE", 503, provider);
-  const detail = message && message !== "Provider request failed." ? ` ${message}` : "";
-  return new ModelGatewayError(`Provider rejected the request (HTTP ${status}).${detail}`, "PROVIDER_UNAVAILABLE", 502, provider);
+  return new ModelGatewayError(`Provider rejected the request (HTTP ${status}). Review the selected model and connection.`, "PROVIDER_UNAVAILABLE", 502, provider);
 }
 
 function endpointFor(baseUrl: string): string {
@@ -260,10 +266,14 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
         }
 
         const reasoning = normalizeProviderReasoning(payload);
+        const rawFinishReason = payload && typeof payload === "object" && Array.isArray((payload as { choices?: unknown[] }).choices)
+          ? (payload as { choices: Array<{ finish_reason?: unknown }> }).choices[0]?.finish_reason
+          : undefined;
+        const finishReason = typeof rawFinishReason === "string" && /^[a-z0-9_.-]{1,32}$/i.test(rawFinishReason) ? rawFinishReason : undefined;
+        if (request.structuredOutputPolicy === "single_document" && (finishReason === "length" || finishReason === "max_tokens")) {
+          throw new StructuredOutputTruncatedError(profile.provider);
+        }
         if (!text.trim()) {
-          const rawFinishReason = payload && typeof payload === "object" && Array.isArray((payload as any).choices)
-            ? (payload as any).choices[0]?.finish_reason
-            : undefined;
           const finishReason = typeof rawFinishReason === "string" && /^[a-z0-9_.-]{1,32}$/i.test(rawFinishReason)
             ? ` (finish reason: ${rawFinishReason})`
             : "";
@@ -271,13 +281,6 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
             ? `The provider returned reasoning but no final answer${finishReason}. This model may not support the selected structured-generation route.`
             : `The provider returned no usable final answer${finishReason}.`;
           throw new ModelGatewayError(message, "PROVIDER_UNAVAILABLE", 502, profile.provider);
-        }
-        const rawFinishReason = payload && typeof payload === "object" && Array.isArray((payload as { choices?: unknown[] }).choices)
-          ? (payload as { choices: Array<{ finish_reason?: unknown }> }).choices[0]?.finish_reason
-          : undefined;
-        const finishReason = typeof rawFinishReason === "string" && /^[a-z0-9_.-]{1,32}$/i.test(rawFinishReason) ? rawFinishReason : undefined;
-        if (request.structuredOutputPolicy === "single_document" && (finishReason === "length" || finishReason === "max_tokens")) {
-          throw new ModelGatewayError("The provider reached its output limit before completing this Forge response.", "INVALID_STRUCTURED_OUTPUT", 502, profile.provider);
         }
         let parsed: unknown;
         let repaired = false;

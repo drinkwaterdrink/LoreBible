@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { parseGenerationStreamEvent } from "../../src/contracts/generationProgress";
 
+test("Forge progress retains safe validation diagnostics", () => {
+  expect(parseGenerationStreamEvent({ type: "progress", task: "forge", phase: "validating", label: "Bundle 5", outputMode: "json_only", topLevelType: "array", issueCount: 2, elapsedMs: 125 })).toMatchObject({ outputMode: "json_only", topLevelType: "array", issueCount: 2, elapsedMs: 125 });
+});
+
 test("parses a structured generation progress event", () => {
   expect(parseGenerationStreamEvent({
     type: "progress",

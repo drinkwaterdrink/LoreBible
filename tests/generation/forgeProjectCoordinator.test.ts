@@ -39,4 +39,7 @@ test("accepts one provider response as six atomic bundle checkpoints",async()=>{
   const sections={core:{},user:{},worldPhysics:{},status:{},locations:[],factions:[],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],conflict:{},pressureProtocol:{},history:[],aesthetic:{},naming:{},pressures:[],additionalLore:[],proceduralRolls:[],opening:{},expansionNotes:{},antiGravity:{},buildNotes:{}};
   const completed=await coordinator.completeRange(active,sections,6,provenance);
   expect(completed.complete).toBe(true);expect((completed.graph.builds[0] as ForgeBuildRecordV1).batches.every(batch=>batch.status==="complete")).toBe(true);expect(completed.resumeSections).toEqual(sections);
+  const batches=(completed.graph.builds[0] as ForgeBuildRecordV1).batches;
+  expect(batches.every(batch=>batch.acceptedCommandId===batches[0].acceptedCommandId)).toBe(true);
+  expect(batches[1].attempts.at(-1)?.id).toBe(`${batches[0].acceptedCommandId}/bundle/1`);
 });

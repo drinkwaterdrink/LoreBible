@@ -48,3 +48,26 @@ test("combined Forge requests receive each remaining mission exactly once", () =
   expect(compiled.userPrompt).toContain("ASSIGNMENT: foundation, player framing");
   expect(compiled.userPrompt.match(/ASSIGNMENT: locations and factions/g)).toHaveLength(1);
 });
+
+test("Bundle 6 uses its opening mission rather than Bundle 1 and 2 missions", () => {
+  const compiled=compileForgePrompt({definition:FORGE_BUNDLE_DEFINITIONS[5],context:"context",coveragePlan:coverage as ForgeCoveragePlan});
+  expect(compiled.userPrompt).toContain("ASSIGNMENT: procedural material, playable opening");
+  expect(compiled.userPrompt).not.toContain("ASSIGNMENT: foundation, player framing");
+});
+
+test("legacy label-only coverage text cannot replace exact category IDs", () => {
+  const plan={...coverage,categories:[{id:"ordinary_life",label:"Ordinary Life",destination:"additionalLore",range:{min:3,ideal:4,max:6},detail:"rich",required:true,forbidden:false}]} as ForgeCoveragePlan;
+  const compiled=compileForgePrompt({definition:FORGE_BUNDLE_DEFINITIONS[4],context:"context",coverageBrief:"Ordinary Life: 3-6 entries",coveragePlan:plan});
+  expect(compiled.userPrompt).toMatch(/"id":\s*"ordinary_life"/);
+  expect(compiled.userPrompt).toMatch(/"destination":\s*"additionalLore"/);
+});
+
+test("cast coverage identifies the exact principal and roster tiers", () => {
+  const plan={...coverage,categories:[
+    {id:"principal_cast",label:"Principal Cast",destination:"npcs",range:{min:2,ideal:3,max:4},detail:"rich",required:true,forbidden:false},
+    {id:"roster_cast",label:"Roster Cast",destination:"npcs",range:{min:2,ideal:4,max:6},detail:"standard",required:false,forbidden:false},
+  ]} as ForgeCoveragePlan;
+  const compiled=compileForgePrompt({definition:FORGE_BUNDLE_DEFINITIONS[2],context:"context",coveragePlan:plan});
+  expect(compiled.userPrompt).toMatch(/"id":\s*"principal_cast"[\s\S]*?"castTier":\s*"principal"/);
+  expect(compiled.userPrompt).toMatch(/"id":\s*"roster_cast"[\s\S]*?"castTier":\s*"roster"/);
+});

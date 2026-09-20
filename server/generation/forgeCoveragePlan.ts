@@ -25,16 +25,23 @@ export function formatForgeBundleCoverage(plan:ForgeCoveragePlan,destinations:re
 
 function array(value:unknown):unknown[]{return Array.isArray(value)?value:[];}
 function normalized(value:unknown):string{return typeof value==="string"?value.trim().toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,""):"";}
-function categoryCount(category:ForgeCoverageCategory,document:Record<string,any>):number{
+export function countForgeCategory(category:ForgeCoverageCategory,document:Record<string,any>):number{
   if(category.id==="principal_cast")return array(document.npcs).filter((entry:any)=>entry?.fields?.castTier==="principal").length;
   if(category.id==="roster_cast")return array(document.npcs).filter((entry:any)=>entry?.fields?.castTier==="roster").length;
   if(category.destination==="additionalLore")return array(document.additionalLore).filter((entry:any)=>normalized(entry?.fields?.categoryId)===normalized(category.id)||normalized(entry?.fields?.categoryLabel)===normalized(category.label)).length;
+  if(category.destination==="rules")return array(document.worldPhysics?.rules).length;
   return array(document[category.destination]).length;
+}
+
+const categoryCount=countForgeCategory;
+
+export function countForgeTotalEntries(document:Record<string,any>):number{
+  return [array(document.worldPhysics?.rules),array(document.locations),array(document.factions),array(document.npcs),array(document.relationshipWeb),array(document.knowledgeMap),array(document.items),array(document.secrets),array(document.history),array(document.pressures),array(document.additionalLore)].reduce((sum,entries)=>sum+entries.length,0);
 }
 
 export function auditForgeCoverage(plan:ForgeCoveragePlan,document:Record<string,any>):string[]{
   const findings=plan.categories.flatMap(category=>{const count=categoryCount(category,document);if(category.forbidden&&count>0)return[`${category.label} was omitted but produced ${count} ${count===1?"entry":"entries"}`];if(!category.forbidden&&count<category.range.min)return[`${category.label} produced ${count} of at least ${category.range.min} planned entries`];return !category.forbidden&&count>category.range.max?[`${category.label} produced ${count} above the maximum ${category.range.max} planned entries`]:[];});
-  const total=[array(document.worldPhysics?.rules),array(document.locations),array(document.factions),array(document.npcs),array(document.relationshipWeb),array(document.knowledgeMap),array(document.items),array(document.secrets),array(document.history),array(document.pressures),array(document.additionalLore)].reduce((sum,entries)=>sum+entries.length,0);
+  const total=countForgeTotalEntries(document);
   if(total<plan.total.min)findings.push(`Lorebook produced ${total} of at least ${plan.total.min} planned entries`);
   if(total>plan.total.max)findings.push(`Lorebook produced ${total} above the maximum ${plan.total.max} planned entries`);
   return findings;
@@ -48,11 +55,14 @@ export function auditForgeBundleCoverage(plan:ForgeCoveragePlan,document:Record<
 
 export function shouldAuditForgeCoverage(bundleKeys:readonly string[]):boolean{return bundleKeys.includes("additionalLore");}
 
-const DESTINATION_BUNDLE:Record<ForgeLoreDestination,number>={rules:0,locations:1,factions:1,npcs:2,relationshipWeb:2,knowledgeMap:2,items:3,secrets:3,history:4,pressures:4,additionalLore:4};
-export function findForgeCoverageRestartBundle(plan:ForgeCoveragePlan,document:Record<string,any>):number|null{
-  if(!Object.hasOwn(document,"additionalLore")&&!["history","aesthetic","naming","pressures"].every(key=>Object.hasOwn(document,key)))return null;
-  const deficient=plan.categories.filter(category=>{const count=categoryCount(category,document);return category.forbidden?count>0:count<category.range.min||count>category.range.max;});
-  const total=[array(document.worldPhysics?.rules),array(document.locations),array(document.factions),array(document.npcs),array(document.relationshipWeb),array(document.knowledgeMap),array(document.items),array(document.secrets),array(document.history),array(document.pressures),array(document.additionalLore)].reduce((sum,entries)=>sum+entries.length,0);
-  if(total<plan.total.min||total>plan.total.max)return 0;
-  return deficient.length?Math.min(...deficient.map(category=>DESTINATION_BUNDLE[category.destination])):null;
+export class ForgeCoverageConflictError extends Error {
+  constructor() {
+    super("The saved Forge checkpoint conflicts with the selected Blueprint coverage. Completed bundles were preserved; choose compatible settings or explicitly start a new build.");
+    this.name="ForgeCoverageConflictError";
+  }
+}
+
+export function assertForgeCheckpointCoverage(plan:ForgeCoveragePlan,document:Record<string,any>):void{
+  if(!Object.hasOwn(document,"additionalLore"))return;
+  if(auditForgeCoverage(plan,document).length)throw new ForgeCoverageConflictError();
 }

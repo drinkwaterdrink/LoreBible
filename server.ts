@@ -33,7 +33,7 @@ import { registerConnectionRoutes } from "./server/routes/connections.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerPremiseSuggestionRoutes } from "./server/routes/premiseSuggestions.js";
 import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./server/projects/projectRepository.js";
-import { createModelGateway, ModelGatewayError, type ModelGateway } from "./server/model/gateway.js";
+import { createModelGateway, ModelGatewayError, StructuredOutputTruncatedError, type ModelGateway } from "./server/model/gateway.js";
 import { parseStructuredOutput } from "./server/model/structuredOutput.js";
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
@@ -41,13 +41,13 @@ import { createForgeResumePlan, selectForgeBundleSections, type ForgeExecutionMo
 import { createForgeGenerationBatches } from "./server/generation/forgeBatches.js";
 import { createForgeProjectCoordinator, type ActiveForgeAttempt, type PreparedForgeProject } from "./server/generation/forgeProjectCoordinator.js";
 import { FORGE_REQUIRED_FIELDS, sanitizeForgeSectionEntries } from "./server/generation/forgeValidation.js";
-import { formatForgeBundleFailure } from "./server/generation/forgeDiagnostics.js";
+import { formatForgeBundleFailure, safeForgeFailureReason } from "./server/generation/forgeDiagnostics.js";
 import { normalizeGenerationFailure, sendGenerationFailure } from "./server/generation/failureResponse.js";
 import { APP_VERSION } from "./src/version.js";
 import { RUNTIME_CAPABILITIES } from "./src/lib/runtimeDiagnostics.js";
 import { parseBlueprintSelectionV1, type BlueprintSelectionV1 } from "./src/contracts/blueprintSelection.js";
 import { createForgeBlueprintBrief, formatForgeBlueprintBrief } from "./server/generation/forgeBlueprintBrief.js";
-import { auditForgeBundleCoverage, createForgeCoveragePlan, findForgeCoverageRestartBundle, formatForgeBundleCoverage } from "./server/generation/forgeCoveragePlan.js";
+import { auditForgeBundleCoverage, assertForgeCheckpointCoverage, createForgeCoveragePlan } from "./server/generation/forgeCoveragePlan.js";
 
 dotenv.config();
 
@@ -171,13 +171,14 @@ async function callGeminiGenerate(
   config: any,
   thinkingLevel: ThinkingLevel = ThinkingLevel.MEDIUM,
   signal?: AbortSignal,
+  allowShortRateLimitRetry = true,
 ): Promise<any> {
   let lastError: any = null;
   if (!ENV_GEMINI_MODEL) {
     throw new ModelGatewayError("Choose a connection and model before generating.", "CREDENTIAL_MISSING", 401);
   }
   const model = ENV_GEMINI_MODEL;
-  for (let modelAttempt = 1; modelAttempt <= 2; modelAttempt++) {
+  for (let modelAttempt = 1; modelAttempt <= (allowShortRateLimitRetry ? 2 : 1); modelAttempt++) {
       try {
         signal?.throwIfAborted();
         const isGemini3 = model.startsWith("gemini-3.");
@@ -198,7 +199,7 @@ async function callGeminiGenerate(
 
         // If rate limit with short retry delay (<= 8s), wait and retry once
         const delayMs = parseRetryDelayMs(err);
-        if (delayMs && delayMs <= 8000 && modelAttempt < 2) {
+        if (allowShortRateLimitRetry && delayMs && delayMs <= 8000 && modelAttempt < 2) {
           console.log(`[Rate Limit on ${model}] Waiting ${delayMs}ms before retry...`);
           if (signal) await abortableDelay(delayMs, signal); else await new Promise((r) => setTimeout(r, delayMs));
           continue;
@@ -207,7 +208,11 @@ async function callGeminiGenerate(
         break;
       }
     }
-  throw new ModelGatewayError(cleanErrorMessage(lastError), isDailyQuotaExhausted(lastError) ? "QUOTA_EXHAUSTED" : isHighDemandError(lastError) ? "PROVIDER_UNAVAILABLE" : "INTERNAL_ERROR", isDailyQuotaExhausted(lastError) ? 429 : isHighDemandError(lastError) ? 503 : 500, "gemini");
+  const rawError = getRawErrorString(lastError);
+  const quotaExhausted = isDailyQuotaExhausted(lastError);
+  const highDemand = isHighDemandError(lastError);
+  const rateLimited = rawError.includes("429") || rawError.includes("RESOURCE_EXHAUSTED") || /rate limit|quota/i.test(rawError);
+  throw new ModelGatewayError(cleanErrorMessage(lastError), quotaExhausted ? "QUOTA_EXHAUSTED" : highDemand ? "PROVIDER_UNAVAILABLE" : rateLimited ? "RATE_LIMITED" : "INTERNAL_ERROR", quotaExhausted || rateLimited ? 429 : highDemand ? 503 : 500, "gemini");
 }
 
 async function executeSelectedModelWithRetry<T>(params: {
@@ -263,7 +268,9 @@ async function executeSelectedModelWithRetry<T>(params: {
         onProviderActivity: params.onProviderActivity,
         signal: params.signal,
       });
-      if (!params.onUsage && !params.onReasoningDelta) params.onMetadata?.(response.provenance);
+      params.onMetadata?.(params.onUsage || params.onReasoningDelta
+        ? { ...response.provenance, usage: undefined, reasoning: undefined }
+        : response.provenance);
       let parsed: any = response.parsed;
       if (parsed === undefined) parsed = JSON.parse(response.text);
       const contaminatedTerm = checkContamination(parsed);
@@ -487,7 +494,12 @@ async function executeGeminiWithRetry<T>(params: {
         },
         thinkingLevel,
         signal,
+        params.structuredOutputPolicy !== "single_document",
       );
+
+      if (params.structuredOutputPolicy === "single_document" && res.candidates?.some((candidate: { finishReason?: string }) => candidate.finishReason === "MAX_TOKENS")) {
+        throw new StructuredOutputTruncatedError("gemini");
+      }
 
       const usageMetadata = res.usageMetadata || {};
       onMetadata?.({
@@ -507,7 +519,11 @@ async function executeGeminiWithRetry<T>(params: {
       const rawText = res.text || "";
       let parsed: any;
       if (params.structuredOutputPolicy === "single_document") {
-        parsed = parseStructuredOutput(rawText, { policy: "single_document" });
+        try {
+          parsed = parseStructuredOutput(rawText, { policy: "single_document" });
+        } catch {
+          throw new ModelGatewayError("The provider returned invalid structured output. Expected one complete JSON document.", "INVALID_STRUCTURED_OUTPUT", 502, "gemini");
+        }
       } else {
         try {
           parsed = JSON.parse(rawText);
@@ -549,6 +565,7 @@ Return ONLY strictly valid, complete JSON matching the required schema. Do not o
     }
   }
 
+  if (params.structuredOutputPolicy === "single_document" && lastErr instanceof ModelGatewayError) throw lastErr;
   throw new Error(`[${stageName}]: ${cleanErrorMessage(lastErr)}`);
 }
 
@@ -1433,8 +1450,10 @@ app.post("/api/forge", async (req, res) => {
   const coveragePlan=acceptedBlueprintSelection?createForgeCoveragePlan(acceptedBlueprintSelection):null;
   const requireAdditionalLore=Boolean(coveragePlan?.categories.some(category=>category.destination==="additionalLore"&&!category.forbidden));
   const resumeSource=durableForge?.resumeSections??resumeSections;
-  const restartFromBundleIndex=coveragePlan?findForgeCoverageRestartBundle(coveragePlan,resumeSource as Record<string,unknown>):null;
-  try { resumePlan=createForgeResumePlan(resumeSource,executionMode as ForgeExecutionMode,{requireAdditionalLore,restartFromBundleIndex}); }
+  try {
+    if(coveragePlan)assertForgeCheckpointCoverage(coveragePlan,resumeSource as Record<string,unknown>);
+    resumePlan=createForgeResumePlan(resumeSource,executionMode as ForgeExecutionMode,{requireAdditionalLore});
+  }
   catch(error){sendEvent("error",{code:"INVALID_REQUEST",message:error instanceof Error?error.message:"Invalid Forge checkpoint."});return;}
   const doc: Record<string, any> = {
     id: "doc-" + Date.now(),
@@ -1475,9 +1494,8 @@ app.post("/api/forge", async (req, res) => {
       });
       const context = forgeBlueprintBrief ? `${sharedContext}\n\n${formatForgeBlueprintBrief(forgeBlueprintBrief)}` : sharedContext;
 
-      const coveragePrompt=forgeBlueprintBrief&&coveragePlan?formatForgeBundleCoverage(coveragePlan,bundle.keys):"";
       let candidate: ReturnType<typeof prepareForgeCandidate>;
-      const definition = { ...bundle, index: executionMode === "single_request" ? 5 : i, schema: normalizeForgeSchema(bundle.schema) };
+      const definition = { ...bundle, index: i, schema: normalizeForgeSchema(bundle.schema) };
       let durableAttempt:ActiveForgeAttempt|null=null;
       let durableProvenance:{provider:string;modelId:string;route:string}|null=null;
       try {
@@ -1488,9 +1506,10 @@ app.post("/api/forge", async (req, res) => {
         }
         candidate = await runForgeAttempts<ReturnType<typeof prepareForgeCandidate>>({
           signal: requestLifecycle.signal,
-          onEvent: (event) => session.send({ type: "progress", task: "forge", phase: event.phase === "request" ? "forge_bundle" : event.phase === "validation" ? "validating" : event.phase === "correction" ? "retrying" : "error", label: `${bundle.name}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum }),
+          onEvent: (event) => session.send({ type: "progress", task: "forge", phase: event.phase === "request" ? "forge_bundle" : event.phase === "validation" ? "validating" : event.phase === "correction" ? "retrying" : "error", label: `${bundle.name}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum, outputMode: event.outputMode, topLevelType: event.topLevelType, issueCount: event.issueCount, elapsedMs: event.elapsedMs }),
           request: ({ correction, signal }) => {
-            const compiled=compileForgePrompt({definition,context,coverageBrief:coveragePrompt||undefined,coveragePlan,correction});
+            const compiled=compileForgePrompt({definition,context,coveragePlan,correction});
+            let outputMode: "native_schema" | "json_only" | "prompt_contract" | "gemini_sdk_schema" | undefined;
             return executeGeminiWithRetry<unknown>({
               ai,
               systemInstruction: compiled.systemInstruction,
@@ -1504,6 +1523,7 @@ app.post("/api/forge", async (req, res) => {
               gateway: modelGateway,
               signal,
               onMetadata: (provenance) => {
+                outputMode = provenance.structuredOutputMode ?? (modelSelection ? undefined : "gemini_sdk_schema");
                 if (provenance.usage) session.send({ type: "usage", task: "forge", usage: provenance.usage });
                 if (provenance.reasoning) session.send({ type: "reasoning", task: "forge", delta: provenance.reasoning, complete: true });
               },
@@ -1511,7 +1531,7 @@ app.post("/api/forge", async (req, res) => {
               onReasoningDelta: (delta) => session.send({ type: "reasoning", task: "forge", delta }),
               onUsage: (usage) => session.send({ type: "usage", task: "forge", usage }),
               onProviderActivity: () => session.send({ type: "provider_activity", task: "forge", at: Date.now() }),
-            }).then(value => ({ value, finishReason: undefined }));
+            }).then(value => ({ value, outputMode }));
           },
           validate: value => prepareForgeCandidate({ value, definition, previousDocument: doc, coveragePlan }),
         });
@@ -1523,7 +1543,7 @@ app.post("/api/forge", async (req, res) => {
           return;
         }
         const failure = normalizeGenerationFailure(new ModelGatewayError(
-          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", bundleErr instanceof Error ? bundleErr.message : "Provider request failed."),
+          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", safeForgeFailureReason(bundleErr instanceof ModelGatewayError ? bundleErr.code : undefined, bundleErr instanceof StructuredOutputTruncatedError)),
           bundleErr instanceof ModelGatewayError ? bundleErr.code : "INTERNAL_ERROR",
           bundleErr instanceof ModelGatewayError ? bundleErr.status : 502,
           bundleErr instanceof ModelGatewayError ? bundleErr.provider : undefined,
@@ -1546,9 +1566,9 @@ app.post("/api/forge", async (req, res) => {
         }
       } catch (validationError) {
         const failure = normalizeGenerationFailure(new ModelGatewayError(
-          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", validationError instanceof Error ? validationError.message : "Structured output validation failed."),
-          validationError instanceof ModelGatewayError ? validationError.code : "INVALID_STRUCTURED_OUTPUT",
-          validationError instanceof ModelGatewayError ? validationError.status : 502,
+          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", "Validated Forge output could not be saved; existing checkpoints were preserved."),
+          "INTERNAL_ERROR",
+          500,
           validationError instanceof ModelGatewayError ? validationError.provider : undefined,
         ), { operation: "forge" });
         if(durableAttempt)await forgeProjectCoordinator.fail(durableAttempt,failure.code).catch(()=>undefined);

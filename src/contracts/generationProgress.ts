@@ -27,6 +27,10 @@ export interface GenerationProgressEvent {
   totalSteps?: number;
   attempt?: number;
   maxAttempts?: number;
+  outputMode?: "native_schema" | "json_only" | "prompt_contract" | "gemini_sdk_schema";
+  topLevelType?: "object" | "array" | "null" | "string" | "number" | "boolean" | "undefined" | "other";
+  issueCount?: number;
+  elapsedMs?: number;
 }
 
 export type GenerationTerminalEvent =
@@ -77,6 +81,10 @@ export function parseGenerationStreamEvent(value: unknown): GenerationStreamEven
       totalSteps: optionalNumber(input.totalSteps, "totalSteps"),
       attempt: optionalNumber(input.attempt, "attempt"),
       maxAttempts: optionalNumber(input.maxAttempts, "maxAttempts"),
+      outputMode: input.outputMode === "native_schema" || input.outputMode === "json_only" || input.outputMode === "prompt_contract" || input.outputMode === "gemini_sdk_schema" ? input.outputMode : undefined,
+      topLevelType: input.topLevelType === "object" || input.topLevelType === "array" || input.topLevelType === "null" || input.topLevelType === "string" || input.topLevelType === "number" || input.topLevelType === "boolean" || input.topLevelType === "undefined" || input.topLevelType === "other" ? input.topLevelType : undefined,
+      issueCount: optionalNumber(input.issueCount, "issueCount"),
+      elapsedMs: optionalNumber(input.elapsedMs, "elapsedMs"),
     };
   }
   if (eventType === "reasoning") {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { auditForgeBundleCoverage, auditForgeCoverage, createForgeCoveragePlan, findForgeCoverageRestartBundle, formatForgeBundleCoverage, shouldAuditForgeCoverage } from "../../server/generation/forgeCoveragePlan";
+import { auditForgeBundleCoverage, auditForgeCoverage, assertForgeCheckpointCoverage, createForgeCoveragePlan, formatForgeBundleCoverage, shouldAuditForgeCoverage } from "../../server/generation/forgeCoveragePlan";
 import { blueprintSelectionFixture } from "../fixtures/blueprintSelection";
 
 test("routes every enabled Blueprint category to a Forge storage destination", () => {
@@ -53,14 +53,17 @@ test("coverage audit rejects material generated for an omitted category",()=>{
   expect(auditForgeCoverage(createForgeCoveragePlan(selection),{worldPhysics:{rules:[]},locations:[],factions:[{}],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],history:[],pressures:[],additionalLore:[]})).toContain("Factions was omitted but produced 1 entry");
 });
 
-test("an undersized completed checkpoint restarts from its earliest deficient bundle",()=>{
+test("an undersized completed checkpoint raises a conflict without discarding accepted bundles",()=>{
   const selection=structuredClone(blueprintSelectionFixture);selection.lorebookRange={min:6,ideal:8,max:10};selection.categories=[{...selection.categories[0],id:"factions",label:"Factions",status:"required",targetRange:{min:3,ideal:4,max:5}}];
-  expect(findForgeCoverageRestartBundle(createForgeCoveragePlan(selection),{worldPhysics:{rules:[]},locations:[],factions:[{}],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],history:[],pressures:[],additionalLore:[]})).toBe(0);
+  const checkpoint={worldPhysics:{rules:[]},locations:[],factions:[{}],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],history:[],pressures:[],additionalLore:[]};
+  const before=structuredClone(checkpoint);
+  expect(()=>assertForgeCheckpointCoverage(createForgeCoveragePlan(selection),checkpoint)).toThrow("preserved");
+  expect(checkpoint).toEqual(before);
 });
 
 test("partial step-by-step checkpoints are not compared with final library totals",()=>{
   const selection=structuredClone(blueprintSelectionFixture);selection.lorebookRange={min:80,ideal:120,max:160};
-  expect(findForgeCoverageRestartBundle(createForgeCoveragePlan(selection),{core:{},user:{},worldPhysics:{rules:[{}]},status:{}})).toBeNull();
+  expect(()=>assertForgeCheckpointCoverage(createForgeCoveragePlan(selection),{core:{},user:{},worldPhysics:{rules:[{}]},status:{}})).not.toThrow();
 });
 
 test("each bundle validates its own categories before durable acceptance",()=>{

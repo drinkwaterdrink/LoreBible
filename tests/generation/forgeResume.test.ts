@@ -20,16 +20,11 @@ test("resume starts after the last complete contiguous bundle",()=>{
   expect(createForgeResumePlan(sections,"continuous")).toMatchObject({startBundleIndex:2,endBundleIndexExclusive:6,completedBundleCount:2});
 });
 
-test("a v0.60 bundle-five checkpoint reruns bundle five when supplemental lore is required",()=>{
+test("a v0.60 bundle-five checkpoint is preserved when supplemental lore needs a migration",()=>{
   const old={core:{},user:{},worldPhysics:{},status:{},locations:[],factions:[],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],conflict:{},pressureProtocol:"",history:[],aesthetic:{},naming:{},pressures:[]};
-  const plan=createForgeResumePlan(old,"continuous",{requireAdditionalLore:true});
-  expect(plan.startBundleIndex).toBe(4);expect(plan.resumeSections).not.toHaveProperty("history");
-});
-
-test("checkpoint restart truncates that bundle and every later bundle without a gap",()=>{
-  const complete={core:{},user:{},worldPhysics:{},status:{},locations:[],factions:[],npcs:[],relationshipWeb:[],knowledgeMap:[],items:[],secrets:[],conflict:{},pressureProtocol:"",history:[],aesthetic:{},naming:{},pressures:[],proceduralRolls:[],opening:{},expansionNotes:{},antiGravity:{},buildNotes:{}};
-  const plan=createForgeResumePlan(complete,"continuous",{restartFromBundleIndex:4});
-  expect(plan.startBundleIndex).toBe(4);expect(plan.resumeSections).not.toHaveProperty("opening");
+  const before=structuredClone(old);
+  expect(()=>createForgeResumePlan(old,"continuous",{requireAdditionalLore:true})).toThrow("preserved");
+  expect(old).toEqual(before);
 });
 
 test("step by step runs exactly one incomplete bundle",()=>{

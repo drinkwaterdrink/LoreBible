@@ -1,8 +1,9 @@
-import { ModelGatewayError } from "../model/gateway.js";
+import { ModelGatewayError, StructuredOutputTruncatedError } from "../model/gateway.js";
 
 export interface ForgeAttemptResult {
   value: unknown;
   finishReason?: string;
+  outputMode?: "native_schema" | "json_only" | "prompt_contract" | "gemini_sdk_schema";
 }
 
 export interface ForgeAttemptEvent {
@@ -10,18 +11,23 @@ export interface ForgeAttemptEvent {
   maximum: number;
   phase: "request" | "validation" | "correction" | "failed";
   code?: string;
+  outputMode?: ForgeAttemptResult["outputMode"];
+  topLevelType?: "object" | "array" | "null" | "string" | "number" | "boolean" | "undefined" | "other";
+  issueCount?: number;
+  elapsedMs?: number;
 }
 
-const NON_RETRYABLE_CODES = new Set([
-  "CLIENT_DISCONNECTED",
-  "CREDENTIAL_MISSING",
-  "AUTHENTICATION_FAILED",
-  "MODEL_UNAVAILABLE",
-  "QUOTA_EXHAUSTED",
-  "PROFILE_NOT_FOUND",
-  "PROVIDER_UNAVAILABLE",
-  "REQUEST_TIMEOUT",
-]);
+function topLevelType(value: unknown): NonNullable<ForgeAttemptEvent["topLevelType"]> {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  const kind = typeof value;
+  return kind === "object" || kind === "string" || kind === "number" || kind === "boolean" || kind === "undefined" ? kind : "other";
+}
+
+function issueCount(error: unknown): number {
+  if (error instanceof ModelGatewayError && "issues" in error && Array.isArray(error.issues)) return error.issues.length || 1;
+  return 1;
+}
 
 function issueText(error: unknown): string {
   const forgeError = error as ModelGatewayError & { issues?: unknown };
@@ -32,9 +38,7 @@ function issueText(error: unknown): string {
 }
 
 function isRecoverable(error: unknown): boolean {
-  if (!(error instanceof ModelGatewayError)) return false;
-  if (error.code === "INVALID_STRUCTURED_OUTPUT" || error.code === "INTERNAL_ERROR") return true;
-  return false;
+  return error instanceof ModelGatewayError && !(error instanceof StructuredOutputTruncatedError) && error.code === "INVALID_STRUCTURED_OUTPUT";
 }
 
 export async function runForgeAttempts<T>(input: {
@@ -48,27 +52,36 @@ export async function runForgeAttempts<T>(input: {
   for (let attempt = 1; attempt <= maximum; attempt += 1) {
     input.signal?.throwIfAborted();
     input.onEvent?.({ attempt, maximum, phase: "request" });
+    const requestStarted = performance.now();
     let result: ForgeAttemptResult;
     try {
       result = await input.request({ correction, signal: input.signal });
     } catch (error) {
-      input.onEvent?.({ attempt, maximum, phase: "failed", code: error instanceof ModelGatewayError ? error.code : "INTERNAL_ERROR" });
-      throw error;
+      const code = error instanceof ModelGatewayError ? error.code : "INTERNAL_ERROR";
+      if (attempt >= maximum || !isRecoverable(error)) {
+        input.onEvent?.({ attempt, maximum, phase: "failed", code, issueCount: issueCount(error), elapsedMs: performance.now() - requestStarted });
+        throw error;
+      }
+      correction = issueText(error);
+      input.onEvent?.({ attempt, maximum, phase: "correction", code });
+      continue;
     }
     if (result.finishReason === "length" || result.finishReason === "max_tokens") {
-      const error = new ModelGatewayError("The provider reached its output limit before completing this Forge response. Smaller specialist jobs are required for this content.", "INVALID_STRUCTURED_OUTPUT", 502);
-      input.onEvent?.({ attempt, maximum, phase: "failed", code: error.code });
+      const error = new StructuredOutputTruncatedError();
+      input.onEvent?.({ attempt, maximum, phase: "failed", code: error.code, outputMode: result.outputMode, topLevelType: topLevelType(result.value), issueCount: 1, elapsedMs: performance.now() - requestStarted });
       throw error;
     }
-    input.onEvent?.({ attempt, maximum, phase: "validation" });
+    input.onEvent?.({ attempt, maximum, phase: "validation", outputMode: result.outputMode, topLevelType: topLevelType(result.value), elapsedMs: performance.now() - requestStarted });
+    const validationStarted = performance.now();
     try {
       const validated = input.validate(result.value);
-      input.onEvent?.({ attempt, maximum, phase: "correction" });
       return validated;
     } catch (error) {
       const code = error instanceof ModelGatewayError ? error.code : "INTERNAL_ERROR";
-      input.onEvent?.({ attempt, maximum, phase: "failed", code });
-      if (attempt >= maximum || !isRecoverable(error)) throw error;
+      if (attempt >= maximum || !isRecoverable(error)) {
+        input.onEvent?.({ attempt, maximum, phase: "failed", code, outputMode: result.outputMode, topLevelType: topLevelType(result.value), issueCount: issueCount(error), elapsedMs: performance.now() - validationStarted });
+        throw error;
+      }
       correction = issueText(error);
       input.onEvent?.({ attempt, maximum, phase: "correction", code });
     }

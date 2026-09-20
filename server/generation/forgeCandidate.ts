@@ -1,6 +1,6 @@
 import { ModelGatewayError } from "../model/gateway.js";
 import type { ForgeCoveragePlan } from "./forgeCoveragePlan.js";
-import { auditForgeBundleCoverage } from "./forgeCoveragePlan.js";
+import { auditForgeBundleCoverage, countForgeCategory, countForgeTotalEntries } from "./forgeCoveragePlan.js";
 import { FORGE_BUNDLE_KEYS, selectForgeBundleSections } from "./forgeResume.js";
 import type { ForgeBundleDefinition } from "./forgeSchemas.js";
 import { sanitizeForgeSectionEntries } from "./forgeValidation.js";
@@ -64,8 +64,36 @@ export function prepareForgeCandidate(input: {
   const ids = allEntryIds(document);
   if (new Set(ids).size !== ids.length) throw new ForgeValidationError("Forge response contains duplicate entry IDs.");
   if (input.coveragePlan) {
+    if (Array.isArray(sections.additionalLore)) {
+      const assigned = new Map(input.coveragePlan.categories
+        .filter(category => category.destination === "additionalLore" && !category.forbidden)
+        .map(category => [category.id, category.label]));
+      const categoryIssues: SchemaIssue[] = [];
+      sections.additionalLore.forEach((entry, index) => {
+        const fields = isRecord(entry) && isRecord(entry.fields) ? entry.fields : {};
+        const id = fields.categoryId;
+        if (typeof id !== "string" || !assigned.has(id)) {
+          categoryIssues.push({ path: `/additionalLore/${index}/fields/categoryId`, code: "enum", expected: "an assigned additionalLore category ID", actual: "unassigned category ID" });
+        } else if (fields.categoryLabel !== assigned.get(id)) {
+          categoryIssues.push({ path: `/additionalLore/${index}/fields/categoryLabel`, code: "enum", expected: "the label for the assigned category ID", actual: "mismatched category label" });
+        }
+      });
+      if (categoryIssues.length) throw new ForgeValidationError("Forge response used unassigned supplemental lore categories.", categoryIssues.slice(0, 20));
+    }
     const findings = auditForgeBundleCoverage(input.coveragePlan, document, input.definition.keys);
-    if (findings.length) throw new ForgeValidationError(`Blueprint coverage failed for ${findings.length} requirement${findings.length === 1 ? "" : "s"}.`);
+    if (findings.length) {
+      const issues: SchemaIssue[] = input.coveragePlan.categories.flatMap((category, index) => {
+        if (!input.definition.keys.includes(category.destination)) return [];
+        const count = countForgeCategory(category, document);
+        const invalid = category.forbidden ? count !== 0 : count < category.range.min || count > category.range.max;
+        return invalid ? [{ path: `/coverage/categories/${index}`, code: "schema" as const, expected: category.forbidden ? "0 entries" : `${category.range.min}-${category.range.max} entries`, actual: `${count} ${count === 1 ? "entry" : "entries"}` }] : [];
+      });
+      if (input.definition.keys.includes("additionalLore")) {
+        const count = countForgeTotalEntries(document);
+        if (count < input.coveragePlan.total.min || count > input.coveragePlan.total.max) issues.push({ path: "/coverage/total", code: "schema", expected: `${input.coveragePlan.total.min}-${input.coveragePlan.total.max} entries`, actual: `${count} ${count === 1 ? "entry" : "entries"}` });
+      }
+      throw new ForgeValidationError(`Blueprint coverage failed for ${findings.length} requirement${findings.length === 1 ? "" : "s"}.`, issues.slice(0, 20));
+    }
   }
   return { sections, document, normalizations, ignoredKeyCount: selected.ignoredKeys.length };
 }

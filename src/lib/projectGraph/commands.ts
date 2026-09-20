@@ -24,10 +24,37 @@ function forgeBuild(graph:ProjectGraphV1,id:string):ForgeBuildRecordV1{const bui
 function forgeTransition<T>(work:()=>T):T{try{return work();}catch(error){if(error instanceof ForgeBuildError)throw new ProjectGraphCommandError(error.message,"invalid_command");throw error;}}
 function verifyForgeTransition(build:ForgeBuildRecordV1,command:{inputFingerprint:string;sourceRevision:number},revision:number){if(build.inputFingerprint!==command.inputFingerprint||build.sourceRevision!==command.sourceRevision)throw new ProjectGraphCommandError("Forge build input or source revision is stale.","invalid_command");if(build.lastTransitionRevision!==revision)throw new ProjectGraphCommandError("Project changed outside this Forge build; start a new build from current canon.","invalid_command");}
 
+function acceptedRangeReplay(input:ProjectGraphV1,envelope:ProjectGraphCommandEnvelope):ProjectGraphChangeResult|null{
+  const command=envelope.command;
+  if(command.type!=="forge.range.complete")return null;
+  const build=input.builds.find(item=>item.id===command.buildId);
+  if(!build||build.kind!=="forge")return null;
+  const forgeBuild=build as ForgeBuildRecordV1;
+  const allAccepted=forgeBuild.batches.filter(batch=>batch.acceptedCommandId===envelope.commandId);
+  if(!allAccepted.length)return null;
+  const batches=forgeBuild.batches.slice(command.startBundleIndex,command.endBundleIndexExclusive);
+  if(batches.length!==command.attemptIds.length||batches.length===0)throw new ProjectGraphCommandError("Forge range replay does not match the accepted command.","invalid_command");
+  const accepted=batches.map(batch=>batch.acceptedCommandId===envelope.commandId);
+  rejectCredentials(command.sections);
+  const acceptedRangeMatches=allAccepted.length===batches.length&&allAccepted.every((batch,index)=>batch.index===command.startBundleIndex+index);
+  const acceptedSections=Object.assign({},...batches.map(batch=>batch.sections??{}));
+  if(!accepted.every(Boolean)||!acceptedRangeMatches||canonicalizeJson(command.sections)!==canonicalizeJson(acceptedSections)||forgeBuild.inputFingerprint!==command.inputFingerprint||forgeBuild.sourceRevision!==command.sourceRevision)throw new ProjectGraphCommandError("Forge range replay does not match the accepted command.","invalid_command");
+  const matches=batches.every((batch,index)=>{
+    const attempt=batch.attempts.at(-1);
+    const selected=Object.fromEntries(batch.expectedKeys.map(key=>[key,command.sections[key]]));
+    return batch.status==="complete"&&attempt?.id===command.attemptIds[index]&&attempt.provider===command.provider&&attempt.modelId===command.modelId&&attempt.route===command.route&&canonicalizeJson(batch.sections)===canonicalizeJson(selected);
+  });
+  if(!matches)throw new ProjectGraphCommandError("Forge range replay does not match the accepted command.","invalid_command");
+  const revision=input.project.revision;
+  return {graph:structuredClone(input),receipt:{schema:"lorebible.project-graph-change/v1",commandId:envelope.commandId,projectId:input.project.id,fromRevision:revision,toRevision:revision,changedIds:[],automaticChanges:[],proposedSemanticEdits:[],unaffectedSummary:["The Forge range command was already accepted; no records changed."],appliedAt:envelope.issuedAt}};
+}
+
 export function applyProjectGraphCommand(input:ProjectGraphV1,envelope:ProjectGraphCommandEnvelope):ProjectGraphChangeResult{
   if(!envelope.commandId?.trim()||!Number.isSafeInteger(envelope.expectedRevision)||envelope.expectedRevision<1)throw new ProjectGraphCommandError("Invalid command envelope.","invalid_command");
   const revision=input.project.revision;
   if(!Number.isSafeInteger(revision)||revision!<1)throw new ProjectGraphCommandError("Graph revision is invalid.","invalid_graph");
+  const replay=acceptedRangeReplay(input,envelope);
+  if(replay)return replay;
   if(envelope.expectedRevision!==revision)throw new ProjectGraphCommandError("Project revision conflict.","revision_conflict",envelope.expectedRevision,revision);
   const graph=structuredClone(input); const automaticChanges:ChangeImpact[]=[]; let proposedSemanticEdits:ChangeImpact[]=[]; const changedIds:string[]=[];
   if(envelope.command.type==="entity.rename"){

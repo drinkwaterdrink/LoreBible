@@ -1,4 +1,4 @@
-import type { ForgeBundleDefinition } from "../forgeSchemas";
+import { FORGE_BUNDLE_DEFINITIONS, type ForgeBundleDefinition } from "../forgeSchemas";
 import type { ForgeCoveragePlan } from "../forgeCoveragePlan";
 import { renderSchemaContract } from "../schemaContract";
 import { FORGE_BUNDLE_MISSIONS, FORGE_CORRECTION, FORGE_CRAFT, FORGE_PROTOCOL, FORGE_SHARED_CONSTITUTION } from "./forgeDefaults";
@@ -15,7 +15,7 @@ export interface CompiledForgePrompt {
 export function formatForgeCoverageData(plan: ForgeCoveragePlan | null, destinations: readonly string[]): string {
   if (!plan) return "No coverage plan was supplied; generate only the schema-owned sections required by the assignment.";
   const relevant=plan.categories.filter(category=>destinations.includes(category.destination));
-  const rows=relevant.map(category=>({id:category.id,label:category.label,destination:category.destination,status:category.forbidden?"omitted with zero entries owned by this bundle":"assigned",min:category.range.min,target:category.range.ideal,max:category.range.max,detail:category.detail,required:category.required}));
+  const rows=relevant.map(category=>({id:category.id,label:category.label,destination:category.destination,...(category.id==="principal_cast"?{castTier:"principal"}:category.id==="roster_cast"?{castTier:"roster"}:{}),status:category.forbidden?"omitted with zero entries owned by this bundle":"assigned",min:category.range.min,target:category.range.ideal,max:category.range.max,detail:category.detail,required:category.required}));
   const omitted=plan.categories.filter(category=>!destinations.includes(category.destination)).map(category=>({id:category.id,destination:category.destination,ownedBy:"another bundle",entryCount:0}));
   return `COVERAGE_DATA\n${JSON.stringify({total:plan.total,categories:[...rows,...omitted]},null,2)}`;
 }
@@ -29,11 +29,14 @@ export function compileForgePrompt(input: {
 }): CompiledForgePrompt {
   const definition=input.definition;
   const coveragePlan=input.coveragePlan ?? null;
-  const missions=definition.index===5
-    ? [FORGE_BUNDLE_MISSIONS[0],FORGE_BUNDLE_MISSIONS[1]]
-    : [FORGE_BUNDLE_MISSIONS[definition.index] ?? definition.name];
+  const ownedKeys=new Set(definition.keys);
+  const missions=FORGE_BUNDLE_DEFINITIONS.flatMap((bundle,index)=>bundle.keys.some(key=>ownedKeys.has(key))
+    ? [FORGE_BUNDLE_MISSIONS[index] ?? bundle.name]
+    : []);
   const mission=missions.join("\n\n");
-  const coverageBrief=input.coverageBrief ?? formatForgeCoverageData(coveragePlan,definition.keys);
+  const coverageBrief=coveragePlan
+    ? formatForgeCoverageData(coveragePlan,definition.keys)
+    : input.coverageBrief ?? formatForgeCoverageData(null,definition.keys);
   const schema=renderSchemaContract(definition.schema);
   const assignment=`ASSIGNMENT: ${definition.name}\nPrompt version: forge-prompts/1\n${mission}\n\n${coverageBrief}\n\nSOURCE_CONTEXT\n${input.context}\n\nOUTPUT_SCHEMA\n${schema}`;
   const userPrompt=input.correction ? `${assignment}\n\n${FORGE_CORRECTION}\n${input.correction}` : assignment;

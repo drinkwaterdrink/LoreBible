@@ -45,3 +45,32 @@ test("forge range leaves the graph unchanged when any bundle section is invalid"
   } })).toThrow(ProjectGraphCommandError);
   expect(before).toEqual(input());
 });
+
+test("replaying an accepted range command is idempotent and a changed replay is rejected", () => {
+  const command = {
+    type:"forge.range.complete" as const, buildId:"build/one", startBundleIndex:0, endBundleIndexExclusive:6,
+    attemptIds:["attempt/0","attempt/1","attempt/2","attempt/3","attempt/4","attempt/5"],
+    sections, provider:"gemini", modelId:"gemini-2.5-flash", route:"openai_compatible",
+    inputFingerprint:"fixture-fingerprint", sourceRevision:1,
+  };
+  const envelope={commandId:"range/replay",expectedRevision:2,issuedAt:"2026-01-02T00:00:00Z",command};
+  const first=applyProjectGraphCommand(input(),envelope);
+  const replay=applyProjectGraphCommand(first.graph,envelope);
+  expect(replay.graph).toEqual(first.graph);
+  expect(replay.receipt.toRevision).toBe(first.graph.project.revision);
+  expect((replay.graph.builds[0] as any).batches.every((batch:any)=>batch.attempts.length===1)).toBe(true);
+  expect(()=>applyProjectGraphCommand(first.graph,{...envelope,command:{...command,sections:{...sections,history:[{id:"changed"}]}}})).toThrow(ProjectGraphCommandError);
+  expect(()=>applyProjectGraphCommand(first.graph,{...envelope,command:{...command,endBundleIndexExclusive:2,attemptIds:command.attemptIds.slice(0,2)}})).toThrow(ProjectGraphCommandError);
+});
+
+test("an accepted range command ID cannot be reused for a later range", () => {
+  const first=applyProjectGraphCommand(input(),{commandId:"range/same",expectedRevision:2,issuedAt:"x",command:{
+    type:"forge.range.complete",buildId:"build/one",startBundleIndex:0,endBundleIndexExclusive:2,attemptIds:["attempt/0","attempt/1"],sections:Object.fromEntries(Object.entries(sections).filter(([key])=>["core","user","worldPhysics","status","locations","factions"].includes(key))),provider:"gemini",modelId:"gemini-2.5-flash",route:"openai_compatible",inputFingerprint:"fixture-fingerprint",sourceRevision:1,
+  }});
+  const begun=applyProjectGraphCommand(first.graph,{commandId:"begin/2",expectedRevision:3,issuedAt:"x",command:{type:"forge.batch.begin",buildId:"build/one",bundleIndex:2,attemptId:"attempt/2",provider:"gemini",modelId:"gemini-2.5-flash",route:"openai_compatible",inputFingerprint:"fixture-fingerprint",sourceRevision:1}});
+  const before=structuredClone(begun.graph);
+  expect(()=>applyProjectGraphCommand(begun.graph,{commandId:"range/same",expectedRevision:4,issuedAt:"x",command:{
+    type:"forge.range.complete",buildId:"build/one",startBundleIndex:2,endBundleIndexExclusive:6,attemptIds:["attempt/2","attempt/3","attempt/4","attempt/5"],sections:Object.fromEntries(Object.entries(sections).filter(([key])=>!["core","user","worldPhysics","status","locations","factions"].includes(key))),provider:"gemini",modelId:"gemini-2.5-flash",route:"openai_compatible",inputFingerprint:"fixture-fingerprint",sourceRevision:1,
+  }})).toThrow(ProjectGraphCommandError);
+  expect(begun.graph).toEqual(before);
+});

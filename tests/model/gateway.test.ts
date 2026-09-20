@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createModelGateway, ModelGatewayError } from "../../server/model/gateway";
+import { createModelGateway, ModelGatewayError, StructuredOutputTruncatedError } from "../../server/model/gateway";
 import { createProfileStore, type SecretProtector } from "../../server/secrets/profileStore";
 import { FORGE_BUNDLE_DEFINITIONS } from "../../server/generation/forgeSchemas";
 import { renderSchemaContract } from "../../server/generation/schemaContract";
@@ -78,7 +78,7 @@ test("gateway rejects model IDs that the provider does not report", async () => 
   expect(requests).toEqual(["https://openrouter.ai/api/v1/models"]);
 });
 
-test("gateway preserves a safe HTTP status and provider reason for an unclassified request rejection", async () => {
+test("gateway preserves the HTTP status but not untrusted provider text for an unclassified request rejection", async () => {
   const { gateway, profile } = await makeGateway(async () => new Response(JSON.stringify({
     error: { message: "Invalid argument: this model does not accept the requested generation configuration" },
   }), { status: 400, headers: { "Content-Type": "application/json" } }));
@@ -93,7 +93,7 @@ test("gateway preserves a safe HTTP status and provider reason for an unclassifi
     timeoutMs: 5000,
   })).rejects.toMatchObject({
     code: "PROVIDER_UNAVAILABLE",
-    message: "Provider rejected the request (HTTP 400). Invalid argument: this model does not accept the requested generation configuration",
+    message: "Provider rejected the request (HTTP 400). Review the selected model and connection.",
   });
 });
 
@@ -532,4 +532,21 @@ test("Forge fallback retains its prompt contract and reports effective output mo
   expect(response.provenance.structuredOutputMode).toBe("json_only");
   expect(response.provenance.compatibilityAttempts).toBe(3);
   expect(response.provenance.finishReason).toBe("stop");
+});
+
+test("Forge recognizes an empty output-limit response before classifying it as unavailable", async () => {
+  const { gateway, profile } = await makeGateway(async () => new Response(JSON.stringify({ choices: [{ message: { content: "" }, finish_reason: "length" }] }), { status: 200, headers: { "Content-Type": "application/json" } }));
+  await expect(gateway.generate({ profileId: profile.id, modelId: "z-ai/glm-5.3", systemInstruction: "Forge", userPrompt: "schema", responseSchema: { type: "object" }, structuredOutputPolicy: "single_document", reasoningEffort: "medium", stageName: "Forge Bundle 5", timeoutMs: 5000 })).rejects.toBeInstanceOf(StructuredOutputTruncatedError);
+});
+
+test("provider 4xx details cannot echo private response text in a Forge failure", async () => {
+  const sentinel = "private-user-prose sk-secret";
+  const { gateway, profile } = await makeGateway(async () => new Response(JSON.stringify({ error: { message: `Invalid request: ${sentinel}` } }), { status: 422, headers: { "Content-Type": "application/json" } }));
+  try {
+    await gateway.generate({ profileId: profile.id, modelId: "z-ai/glm-5.3", systemInstruction: "Forge", userPrompt: "schema", responseSchema: { type: "object" }, structuredOutputPolicy: "single_document", reasoningEffort: "medium", stageName: "Forge Bundle 5", timeoutMs: 5000 });
+    throw new Error("expected provider rejection");
+  } catch (error) {
+    expect(error).toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
+    expect(String(error)).not.toContain(sentinel);
+  }
 });
