@@ -52,6 +52,7 @@ test("rejects self-links without changing a generated relationship", () => {
   (records[2].projection as { targetName: string }).targetName = "Mara";
   const report = resolveForgeLinks(graph, "build:one");
   expect(report.findings.map(item => item.code)).toContain("forge.link.self_reference");
+  expect(summarizeForgeLinks(report).unresolved).toBe(1);
   expect(records[2].payload).toEqual({ id: "rel:one", fields: { source: "Mara", target: "Vale", bond: "Former partners" } });
 });
 

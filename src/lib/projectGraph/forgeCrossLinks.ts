@@ -85,5 +85,5 @@ export function resolveForgeLinks(graph: ProjectGraphV1, buildId: string): Forge
 export function summarizeForgeLinks(report: ForgeLinkReport): { resolved: number; unresolved: number; unsupported: boolean } {
   if (report.status === "unsupported") return { resolved: 0, unresolved: 0, unsupported: true };
   const endpoints = report.records.flatMap(item => item.kind === "relationship" ? [item.source, item.target] : [item.knownBy, item.suspectedBy]).filter((item): item is ForgeEndpoint => item !== undefined);
-  return { resolved: endpoints.filter(item => item.status === "resolved").length, unresolved: endpoints.filter(item => item.status !== "resolved" && item.status !== "not_applicable").length, unsupported: false };
+  return { resolved: endpoints.filter(item => item.status === "resolved").length, unresolved: endpoints.filter(item => item.status !== "resolved" && item.status !== "not_applicable").length + report.findings.filter(item => item.code === "forge.link.self_reference").length, unsupported: false };
 }
