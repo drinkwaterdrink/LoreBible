@@ -4,6 +4,8 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.63 — 2026-09-20
+
 ### Added
 
 - Forge R2 now has a pure, deterministic preflight allocator for exact Blueprint category targets, accepted cast-tier ranges, completed-entry subtraction, and rough library-token estimates. Impossible total/category ranges and incompatible completed lore surface explicit conflicts; live specialist jobs are not yet wired to this allocator.
@@ -21,7 +23,7 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ### Validation boundary
 
-- Automated tests cover schema parity, strict parsing, candidate purity, atomic range completion, retry ceilings, checkpoint preservation, and prompt invariants. No live provider generation, Lumiverse import, or creative-quality certification was performed.
+- Automated tests cover schema parity, strict parsing, candidate purity, atomic range completion, retry ceilings, checkpoint preservation, prompt invariants, inventory allocation, and bounded job drafts. R2 job execution and persistence are not yet connected. No live provider generation, Lumiverse import, or creative-quality certification was performed.
 
 ## v0.62 — 2026-09-20
 
