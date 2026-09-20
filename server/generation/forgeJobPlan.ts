@@ -1,10 +1,13 @@
 import type { EstimateRange } from "../../src/contracts/blueprint.js";
 import type { BlueprintSelectionV1 } from "../../src/contracts/blueprintSelection.js";
-import type { ForgeAllocatedInventoryCategory, ForgeInventoryAllocationResult, ForgeInventoryIssueCode } from "../../src/contracts/forgeInventory.js";
+import type { ForgeAllocatedInventoryCategory, ForgeInventoryAllocation, ForgeInventoryAllocationResult, ForgeInventoryIssueCode, ForgeJobDraftPlanV1, ForgeJobDraftV1, ForgeInventoryDestination } from "../../src/contracts/forgeInventory.js";
+import { canonicalizeJson, sha256Hex } from "../../src/lib/projectGraph/canonicalJson.js";
 import { forgeDestinationForCategory } from "./forgeCoveragePlan.js";
 
 /** Versioned planning assumptions, not a promise to fill a library allowance. */
 export const FORGE_ENTRY_TOKEN_ESTIMATES_V1 = Object.freeze({ light: 140, standard: 220, rich: 320, exhaustive: 450 });
+export const FORGE_JOB_OUTPUT_TOKENS_MAX_V1 = 2400;
+export const FORGE_JOB_SCHEMA_OVERHEAD_TOKENS_V1 = 400;
 const STATUS_WEIGHT = { required: 3, recommended: 2, optional: 1, omitted: 0 } as const;
 const DETAIL_WEIGHT = { light: 1, standard: 2, rich: 3, exhaustive: 4 } as const;
 const SINGLETON_GUIDES = new Set(["aesthetic", "naming"]);
@@ -100,4 +103,42 @@ export function allocateForgeInventory(selection: BlueprintSelectionV1, complete
     categories, totalTarget: assigned, totalCompleted: completed, totalPending: assigned - completed,
     estimatedLibraryTokens: categories.reduce((sum, category) => sum + category.target * FORGE_ENTRY_TOKEN_ESTIMATES_V1[category.detail], 0),
   } };
+}
+
+const BUNDLE_FOR_DESTINATION: Record<ForgeInventoryDestination, number> = {
+  rules: 0, locations: 1, factions: 1, npcs: 2, relationshipWeb: 2, knowledgeMap: 2,
+  items: 3, secrets: 3, history: 4, pressures: 4, additionalLore: 4,
+};
+
+/** Stable, bounded drafts only. No provider calls, graph writes, or checkpoint mutation occur here. */
+export function partitionForgeInventory(selection: BlueprintSelectionV1, allocation: ForgeInventoryAllocation): ForgeJobDraftPlanV1 {
+  const { createdAt: _createdAt, updatedAt: _updatedAt, ...acceptedSelection } = selection;
+  const planHash = sha256Hex(canonicalizeJson({
+    version: 1, acceptedSelection,
+    targets: allocation.categories.map(({ categoryId, target }) => ({ categoryId, target })),
+  }));
+  const jobs: ForgeJobDraftV1[] = [];
+  for (const category of allocation.categories) {
+    if (!category.pending) continue;
+    const ceiling = category.detail === "rich" || category.detail === "exhaustive" ? 3 : 6;
+    const tokenBound = Math.floor((FORGE_JOB_OUTPUT_TOKENS_MAX_V1 - FORGE_JOB_SCHEMA_OVERHEAD_TOKENS_V1) / FORGE_ENTRY_TOKEN_ESTIMATES_V1[category.detail]);
+    const size = Math.max(1, Math.min(ceiling, tokenBound));
+    for (let start = category.completed; start < category.target; start += size) {
+      const count = Math.min(size, category.target - start);
+      const entryIds = Array.from({ length: count }, (_, offset) => `forge-entry:${sha256Hex(`${planHash}\0${category.categoryId}\0${category.destination}\0${start + offset}`).slice(0, 24)}`);
+      jobs.push({
+        version: 1, id: `forge-job:${sha256Hex(`${planHash}\0${category.categoryId}\0${category.destination}\0${start}\0${count}`).slice(0, 24)}`,
+        bundleIndex: BUNDLE_FOR_DESTINATION[category.destination], ordinal: start, kind: "category_entries",
+        destinations: [category.destination], categoryId: category.categoryId, entryIds, dependencies: [],
+        schemaId: "forge.job.category_entries/v1", schemaVersion: 1,
+        estimatedOutputTokens: count * FORGE_ENTRY_TOKEN_ESTIMATES_V1[category.detail] + FORGE_JOB_SCHEMA_OVERHEAD_TOKENS_V1,
+      });
+    }
+  }
+  const castJobIds = jobs.filter(job => job.destinations[0] === "npcs").map(job => job.id);
+  for (const job of jobs) if (job.destinations[0] === "relationshipWeb" || job.destinations[0] === "knowledgeMap") job.dependencies = [...castJobIds];
+  jobs.sort((a, b) => a.bundleIndex - b.bundleIndex ||
+    (Number(b.destinations[0] === "npcs") - Number(a.destinations[0] === "npcs")) ||
+    (a.categoryId < b.categoryId ? -1 : a.categoryId > b.categoryId ? 1 : 0) || a.ordinal - b.ordinal);
+  return { version: 1, planHash, jobs };
 }

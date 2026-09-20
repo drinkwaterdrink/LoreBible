@@ -7,6 +7,7 @@ All notable LoreBible changes are recorded here. The project adopted this change
 ### Added
 
 - Forge R2 now has a pure, deterministic preflight allocator for exact Blueprint category targets, accepted cast-tier ranges, completed-entry subtraction, and rough library-token estimates. Impossible total/category ranges and incompatible completed lore surface explicit conflicts; live specialist jobs are not yet wired to this allocator.
+- Pending R2 entries can be partitioned into bounded, deterministic specialist job drafts with stable plan/job/entry IDs and cast-first dependencies. This is planning infrastructure only; job execution and persistence remain unimplemented.
 - Forge R1 now extracts explicit bundle schemas, uses strict single-document parsing, validates complete candidates before publication, and supports one bounded schema/coverage correction attempt without hiding provider failures.
 - Combined Forge responses use a single atomic `forge.range.complete` graph transition, preventing partially committed bundle ranges when a late repository write fails.
 - Forge now uses the `forge-prompts/1` production prompt pack, including protected protocol, shared constitution, craft defaults, exact bundle missions, explicit coverage ownership, and safe correction instructions.

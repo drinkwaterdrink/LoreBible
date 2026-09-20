@@ -31,6 +31,23 @@ export interface ForgeInventoryAllocation {
   estimatedLibraryTokens: number;
 }
 
+/** Immutable pre-execution draft; prompt hash and provider attempts are assigned when jobs are compiled and persisted. */
+export interface ForgeJobDraftV1 {
+  version: 1;
+  id: string;
+  bundleIndex: number;
+  ordinal: number;
+  kind: "category_entries";
+  destinations: ForgeInventoryDestination[];
+  categoryId: string;
+  entryIds: string[];
+  dependencies: string[];
+  schemaId: "forge.job.category_entries/v1";
+  schemaVersion: 1;
+  estimatedOutputTokens: number;
+}
+export interface ForgeJobDraftPlanV1 { version: 1; planHash: string; jobs: ForgeJobDraftV1[] }
+
 export type ForgeInventoryIssueCode =
   | "invalid_category_range"
   | "duplicate_category_id"

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { BlueprintCategorySelection, BlueprintSelectionV1 } from "../../src/contracts/blueprintSelection";
 import { blueprintSelectionFixture as validSelection } from "../fixtures/blueprintSelection";
-import { allocateForgeInventory } from "../../server/generation/forgeJobPlan";
+import { allocateForgeInventory, partitionForgeInventory } from "../../server/generation/forgeJobPlan";
 
 const category = (id: string, min: number, ideal: number, max: number, changes: Partial<BlueprintCategorySelection> = {}): BlueprintCategorySelection => ({
   ...validSelection.categories[0], id, label: id, status: "recommended", detail: "standard",
@@ -118,4 +118,54 @@ test("library token allowance and runtime budget remain independent estimates", 
   if (!a.ok || !b.ok) return;
   expect(a.value.categories).toEqual(b.value.categories);
   expect(a.value.estimatedLibraryTokens).toBe(b.value.estimatedLibraryTokens);
+});
+
+test("partitions all pending slots into bounded jobs with stable IDs and exact ownership", () => {
+  const chosen = selection([
+    category("locations", 0, 8, 8, { detail: "standard" }),
+    category("principal_cast", 0, 0, 0, { detail: "rich" }),
+    category("custom:night-shifts", 0, 2, 2, { label: "Night Shifts" }),
+  ], 17, 17, 17);
+  chosen.principalCastRange = { min: 7, ideal: 7, max: 7 };
+  const allocation = allocateForgeInventory(chosen, {});
+  expect(allocation.ok).toBe(true);
+  if (allocation.ok === false) return;
+  const first = partitionForgeInventory(chosen, allocation.value);
+  const second = partitionForgeInventory(structuredClone(chosen), structuredClone(allocation.value));
+  expect(first).toEqual(second);
+  expect(first.jobs.filter(job => job.categoryId === "locations").map(job => job.entryIds.length)).toEqual([6, 2]);
+  expect(first.jobs.filter(job => job.categoryId === "principal_cast").map(job => job.entryIds.length)).toEqual([3, 3, 1]);
+  expect(first.jobs.filter(job => job.categoryId === "custom:night-shifts").map(job => job.entryIds.length)).toEqual([2]);
+  expect(first.jobs.flatMap(job => job.entryIds).length).toBe(17);
+  expect(new Set(first.jobs.flatMap(job => job.entryIds)).size).toBe(17);
+  expect(first.jobs.every(job => job.destinations.length === 1 && job.estimatedOutputTokens <= 2400)).toBe(true);
+  expect(first.jobs.find(job => job.categoryId === "custom:night-shifts")?.destinations).toEqual(["additionalLore"]);
+});
+
+test("completed slots are not regenerated and unchanged remaining job IDs survive reload", () => {
+  const chosen = selection([category("locations", 0, 8, 8)], 8, 8, 8);
+  const before = allocateForgeInventory(chosen, {});
+  const after = allocateForgeInventory(chosen, { locations: Array.from({ length: 6 }, (_, index) => ({ id: `saved-${index}` })) });
+  expect(before.ok && after.ok).toBe(true);
+  if (before.ok === false || after.ok === false) return;
+  const original = partitionForgeInventory(chosen, before.value);
+  const resumed = partitionForgeInventory(chosen, after.value);
+  expect(resumed.planHash).toBe(original.planHash);
+  expect(resumed.jobs).toEqual(original.jobs.slice(1));
+});
+
+test("relationship and knowledge jobs depend on planned cast jobs", () => {
+  const chosen = selection([
+    category("relationships", 0, 1, 1),
+    category("knowledge", 0, 1, 1),
+    category("principal_cast", 0, 0, 0),
+  ], 3, 3, 3);
+  chosen.principalCastRange = { min: 1, ideal: 1, max: 1 };
+  const result = allocateForgeInventory(chosen, {});
+  expect(result.ok).toBe(true);
+  if (result.ok === false) return;
+  const jobs = partitionForgeInventory(chosen, result.value).jobs;
+  const castId = jobs.find(job => job.categoryId === "principal_cast")?.id;
+  expect(jobs.find(job => job.categoryId === "relationships")?.dependencies).toEqual([castId]);
+  expect(jobs.find(job => job.categoryId === "knowledge")?.dependencies).toEqual([castId]);
 });
