@@ -24,6 +24,9 @@ export interface GenerationProvenance {
   offlineFallback: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number };
   reasoning?: string;
+  finishReason?: string;
+  structuredOutputMode?: "native_schema" | "json_only" | "prompt_contract";
+  compatibilityAttempts?: number;
 }
 export interface GenerationRequest {
   profileId: string;
@@ -31,6 +34,7 @@ export interface GenerationRequest {
   systemInstruction: string;
   userPrompt: string;
   responseSchema?: JsonSchema;
+  structuredOutputPolicy?: "single_document";
   reasoningEffort: ReasoningEffort;
   stageName: string;
   timeoutMs: number;

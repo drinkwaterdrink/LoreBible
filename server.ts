@@ -21,6 +21,11 @@ import {
 } from "./src/lib/authorProfiles.js";
 import { AuthorFlavorStrength, AuthorId } from "./src/types";
 import { parseModelSelection, type GenerationProvenance, type ModelSelection } from "./src/contracts/generation.js";
+import { FORGE_BUNDLE_DEFINITIONS } from "./server/generation/forgeSchemas.js";
+import { prepareForgeCandidate } from "./server/generation/forgeCandidate.js";
+import { runForgeAttempts } from "./server/generation/forgeAttemptRunner.js";
+import { compileForgePrompt } from "./server/generation/prompts/compileForgePrompt.js";
+import { normalizeForgeSchema } from "./server/generation/schemaContract.js";
 import { parseCanonicalSparkDNA } from "./src/contracts/spark.js";
 import { createWindowsDpapiProtector } from "./server/secrets/dpapi.js";
 import { createProfileStore, resolveDefaultProfileStorePath, type ProfileStore } from "./server/secrets/profileStore.js";
@@ -29,6 +34,7 @@ import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerPremiseSuggestionRoutes } from "./server/routes/premiseSuggestions.js";
 import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./server/projects/projectRepository.js";
 import { createModelGateway, ModelGatewayError, type ModelGateway } from "./server/model/gateway.js";
+import { parseStructuredOutput } from "./server/model/structuredOutput.js";
 import { lowerReasoningEffort } from "./server/model/providerTimeouts.js";
 import { abortableDelay, createRequestAbortSignal, createSseSession } from "./server/generation/requestLifecycle.js";
 import { createForgeResumePlan, selectForgeBundleSections, type ForgeExecutionMode } from "./server/generation/forgeResume.js";
@@ -221,6 +227,7 @@ async function executeSelectedModelWithRetry<T>(params: {
   onReasoningDelta?: (delta: string) => void;
   onUsage?: (usage: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number }) => void;
   onProviderActivity?: () => void;
+  structuredOutputPolicy?: "single_document";
 }): Promise<T> {
   const { gateway, selection, responseSchema, stageName, sparkText, maxAttempts = 3, thinkingLevel = ThinkingLevel.MEDIUM } = params;
   let reasoningEffort: "low" | "medium" | "high" = thinkingLevel === ThinkingLevel.LOW ? "low" : thinkingLevel === ThinkingLevel.HIGH ? "high" : "medium";
@@ -244,6 +251,7 @@ async function executeSelectedModelWithRetry<T>(params: {
         systemInstruction: params.systemInstruction,
         userPrompt,
         responseSchema,
+        structuredOutputPolicy: params.structuredOutputPolicy,
         reasoningEffort,
         stageName,
         timeoutMs: 150_000,
@@ -413,6 +421,7 @@ async function executeGeminiWithRetry<T>(params: {
   onReasoningDelta?: (delta: string) => void;
   onUsage?: (usage: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number }) => void;
   onProviderActivity?: () => void;
+  structuredOutputPolicy?: "single_document";
 }): Promise<T> {
   const {
     ai,
@@ -441,6 +450,7 @@ async function executeGeminiWithRetry<T>(params: {
       sparkText,
       maxAttempts,
       thinkingLevel,
+      structuredOutputPolicy: params.structuredOutputPolicy,
       signal,
       onAttempt,
       onMetadata,
@@ -496,25 +506,29 @@ async function executeGeminiWithRetry<T>(params: {
 
       const rawText = res.text || "";
       let parsed: any;
-      try {
-        parsed = JSON.parse(rawText);
-      } catch (parseErr) {
-        console.warn(`[JSON Parse Error in ${stageName} (attempt ${attempt})]:`, parseErr);
-        console.log(`[JSON Repair Attempt] Asking model to repair malformed JSON for ${stageName}...`);
-        const repairRes = await callGeminiGenerate(ai, {
-          contents: `You are a strict JSON repair utility.
+      if (params.structuredOutputPolicy === "single_document") {
+        parsed = parseStructuredOutput(rawText, { policy: "single_document" });
+      } else {
+        try {
+          parsed = JSON.parse(rawText);
+        } catch (parseErr) {
+          console.warn(`[JSON Parse Error in ${stageName} (attempt ${attempt})]:`, parseErr);
+          console.log(`[JSON Repair Attempt] Asking model to repair malformed JSON for ${stageName}...`);
+          const repairRes = await callGeminiGenerate(ai, {
+            contents: `You are a strict JSON repair utility.
 The previous model call produced malformed JSON for stage: "${stageName}".
 
 MALFORMED TEXT:
 ${rawText.slice(0, 3500)}
 
 Return ONLY strictly valid, complete JSON matching the required schema. Do not output markdown fences or conversational text.`,
-          config: {
-            responseMimeType: "application/json",
-            ...(responseSchema ? { responseSchema } : {}),
-          },
-        }, ThinkingLevel.MEDIUM, signal);
-        parsed = JSON.parse(repairRes.text || "{}");
+            config: {
+              responseMimeType: "application/json",
+              ...(responseSchema ? { responseSchema } : {}),
+            },
+          }, ThinkingLevel.MEDIUM, signal);
+          parsed = JSON.parse(repairRes.text || "{}");
+        }
       }
 
       // Contamination check against blocklist
@@ -1436,495 +1450,7 @@ app.post("/api/forge", async (req, res) => {
   };
 
   // Specific, strongly-typed Entry Schemas so Gemini generates full prose fields instead of empty objects {}
-  const ruleEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          rule: { type: Type.STRING },
-          profits: { type: Type.STRING },
-          pays: { type: Type.STRING },
-        },
-        required: ["name", "rule", "profits", "pays"],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  const locationEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          function: { type: Type.STRING },
-          mood: { type: Type.STRING },
-          whatsWrong: { type: Type.STRING },
-        },
-        required: ["name", "function", "mood", "whatsWrong"],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  const factionEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          publicFace: { type: Type.STRING },
-          trueAgenda: { type: Type.STRING },
-          independentWant: { type: Type.STRING },
-          stanceTowardUser: { type: Type.STRING },
-        },
-        required: ["name", "publicFace", "trueAgenda", "independentWant", "stanceTowardUser"],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  const npcEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          role: { type: Type.STRING },
-          wants: { type: Type.STRING },
-          body: { type: Type.STRING },
-          voice: { type: Type.STRING },
-          notDefault: { type: Type.STRING },
-          holds: { type: Type.STRING },
-          connection: { type: Type.STRING },
-          castTier: { type: Type.STRING, enum: ["principal", "roster"] },
-          independentActivity: { type: Type.STRING },
-        },
-        required: [...FORGE_REQUIRED_FIELDS.npcs],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  const relationshipEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          source: { type: Type.STRING },
-          target: { type: Type.STRING },
-          bond: { type: Type.STRING },
-          pressure: { type: Type.STRING },
-          relation: { type: Type.STRING },
-        },
-        required: [...FORGE_REQUIRED_FIELDS.relationshipWeb],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "permanence", "locked"],
-  };
-
-  const knowledgeEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          truth: { type: Type.STRING },
-          knows: { type: Type.STRING },
-          suspects: { type: Type.STRING },
-          surfacesWhen: { type: Type.STRING },
-        },
-        required: ["truth", "knows", "suspects", "surfacesWhen"],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "permanence", "locked"],
-  };
-
-  const itemEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          whatItDoes: { type: Type.STRING },
-          costOrLimit: { type: Type.STRING },
-          unfiredGun: { type: Type.STRING },
-        },
-        required: ["name", "whatItDoes", "costOrLimit", "unfiredGun"],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  const secretEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          truth: { type: Type.STRING },
-          whoKeepsIt: { type: Type.STRING },
-          howKept: { type: Type.STRING },
-          discoveryTrigger: { type: Type.STRING },
-          whatItChanges: { type: Type.STRING },
-        },
-        required: ["name", "truth", "whoKeepsIt", "howKept", "discoveryTrigger", "whatItChanges"],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-      disabledUntilEarned: { type: Type.BOOLEAN, nullable: true },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  const historyEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          event: { type: Type.STRING },
-          era: { type: Type.STRING },
-          consequence: { type: Type.STRING },
-        },
-        required: ["name", "event", "era", "consequence"],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  const pressureEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          force: { type: Type.STRING },
-          scope: { type: Type.STRING },
-          clock: { type: Type.STRING },
-        },
-        required: ["name", "force", "scope", "clock"],
-      },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } },
-      permanence: { type: Type.STRING },
-      locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  const additionalLoreEntrySchema = {
-    type: Type.OBJECT,
-    properties: {
-      id: { type: Type.STRING },
-      fields: { type: Type.OBJECT, properties: { categoryId: { type: Type.STRING }, categoryLabel: { type: Type.STRING }, name: { type: Type.STRING }, content: { type: Type.STRING } }, required: ["categoryId", "categoryLabel", "name", "content"] },
-      keys: { type: Type.ARRAY, items: { type: Type.STRING } }, permanence: { type: Type.STRING }, locked: { type: Type.BOOLEAN },
-    },
-    required: ["id", "fields", "keys", "permanence", "locked"],
-  };
-
-  // Define the 6 Bundles with their respective schemas and prompts
-  const bundles = [
-    {
-      name: "Bundle 1: Core, User, World Physics, and Status",
-      keys: ["core", "user", "worldPhysics", "status"],
-      includeExample: true, // Only Bundle 1 receives the quarantined format example
-      schema: {
-        type: Type.OBJECT,
-        properties: {
-          core: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              pitch: { type: Type.STRING },
-              genreTone: { type: Type.STRING },
-              eraScale: { type: Type.STRING },
-              theRule: { type: Type.STRING },
-              theCost: { type: Type.STRING },
-              theSituation: { type: Type.STRING },
-              thePressure: { type: Type.STRING },
-              theQuestion: { type: Type.STRING },
-              permanence: { type: Type.STRING },
-            },
-            required: ["title", "pitch", "genreTone", "eraScale", "theRule", "theCost", "theSituation", "thePressure", "theQuestion", "permanence"],
-          },
-          user: {
-            type: Type.OBJECT,
-            properties: {
-              rolePosition: { type: Type.STRING },
-              startsWith: { type: Type.STRING },
-              wants: { type: Type.STRING },
-              fears: { type: Type.STRING },
-              hookPull: { type: Type.STRING },
-              hookPush: { type: Type.STRING },
-              hookTrap: { type: Type.STRING },
-              permanence: { type: Type.STRING },
-            },
-            required: ["rolePosition", "startsWith", "wants", "fears", "hookPull", "hookPush", "hookTrap", "permanence"],
-          },
-          worldPhysics: {
-            type: Type.OBJECT,
-            properties: {
-              rules: { type: Type.ARRAY, items: ruleEntrySchema },
-              authorityCheck: { type: Type.STRING },
-              powerCeiling: { type: Type.STRING },
-              faultLines: { type: Type.ARRAY, items: { type: Type.STRING } },
-              permanence: { type: Type.STRING },
-            },
-            required: ["rules", "authorityCheck", "powerCeiling", "faultLines", "permanence"],
-          },
-          status: {
-            type: Type.OBJECT,
-            properties: {
-              content: { type: Type.STRING },
-              settings: { type: Type.STRING },
-              permanence: { type: Type.STRING },
-            },
-            required: ["content", "settings", "permanence"],
-          },
-        },
-        required: ["core", "user", "worldPhysics", "status"],
-      },
-      promptModifier: "Generate BUNDLE 1: [core, user, worldPhysics, status]. Define the unglamorous mechanics, costs, pressures, and status block at depth 4. Player character is {{user}}. Make sure every rule entry has rule, profits, and pays fully written.",
-    },
-    {
-      name: "Bundle 2: Locations and Factions",
-      keys: ["locations", "factions"],
-      includeExample: false,
-      schema: {
-        type: Type.OBJECT,
-        properties: {
-          locations: { type: Type.ARRAY, items: locationEntrySchema },
-          factions: { type: Type.ARRAY, items: factionEntrySchema },
-        },
-        required: ["locations", "factions"],
-      },
-      promptModifier: "Generate BUNDLE 2: [locations, factions]. Locations must include sensory textures, function, mood, and whatsWrong with distinctive lorebook KEYS.\nCONDITIONAL OMISSION FOR FACTIONS: If this scenario does NOT have distinct factions or formal organizations (e.g. an intimate domestic drama, psychological survival, or two-person isolation story), return an EMPTY ARRAY [] for factions! If factions do exist, write all required fields in full. Never return empty fields.",
-    },
-    {
-      name: "Bundle 3: NPCs, Relationship Web, and Knowledge Map",
-      keys: ["npcs", "relationshipWeb", "knowledgeMap"],
-      includeExample: false,
-      schema: {
-        type: Type.OBJECT,
-        properties: {
-          npcs: { type: Type.ARRAY, items: npcEntrySchema },
-          relationshipWeb: { type: Type.ARRAY, items: relationshipEntrySchema },
-          knowledgeMap: { type: Type.ARRAY, items: knowledgeEntrySchema },
-        },
-        required: ["npcs", "relationshipWeb", "knowledgeMap"],
-      },
-      promptModifier: "Generate BUNDLE 3: [npcs, relationshipWeb, knowledgeMap]. Follow the accepted Blueprint principal and roster ranges across the project without padding. Every NPC must have name, role, wants, body, voice, notDefault, holds, connection, castTier (principal or roster), and independentActivity describing meaningful offscreen work, routine, relationships, or plans that do not depend on {{user}}. Give principal NPCs deeper contradictions and connections; keep roster NPCs concise but playable. Build useful NPC-to-NPC relationships, not only NPC-to-user stances. Keep truth, belief, suspicion, and ignorance distinct in knowledgeMap. Trace relevant debts/grudges in relationshipWeb and discovery conditions in knowledgeMap. Never return empty fields.",
-    },
-    {
-      name: "Bundle 4: Items, Secrets, Conflict, and Pressure Protocol",
-      keys: ["items", "secrets", "conflict", "pressureProtocol"],
-      includeExample: false,
-      schema: {
-        type: Type.OBJECT,
-        properties: {
-          items: { type: Type.ARRAY, items: itemEntrySchema },
-          secrets: { type: Type.ARRAY, items: secretEntrySchema },
-          conflict: {
-            type: Type.OBJECT,
-            properties: {
-              central: { type: Type.STRING },
-              opposition: { type: Type.STRING },
-              stakesBad: { type: Type.STRING },
-              stakesAcceptable: { type: Type.STRING },
-              clock: { type: Type.STRING },
-              moralKnot: { type: Type.STRING },
-              theYield: { type: Type.STRING },
-              speedBumps: { type: Type.ARRAY, items: { type: Type.STRING } },
-              permanence: { type: Type.STRING },
-            },
-            required: ["central", "opposition", "stakesBad", "stakesAcceptable", "clock", "moralKnot", "theYield", "speedBumps", "permanence"],
-          },
-          pressureProtocol: { type: Type.STRING },
-        },
-        required: ["items", "secrets", "conflict", "pressureProtocol"],
-      },
-      promptModifier: "Generate BUNDLE 4: [items, secrets, conflict, pressureProtocol].\nCONDITIONAL OMISSION FOR ITEMS: If this scenario does not involve distinctive special equipment, relics, or abilities, return an EMPTY ARRAY [] for items! Secrets must have discovery triggers and whatItChanges. Define central clock and speed bumps in conflict. Fill all fields completely.",
-    },
-    {
-      name: "Bundle 5: History, Aesthetic, Naming, and Pressures",
-      keys: ["history", "aesthetic", "naming", "pressures", "additionalLore"],
-      includeExample: false,
-      schema: {
-        type: Type.OBJECT,
-        properties: {
-          history: { type: Type.ARRAY, items: historyEntrySchema },
-          aesthetic: {
-            type: Type.OBJECT,
-            properties: {
-              colors: { type: Type.ARRAY, items: { type: Type.STRING } },
-              sounds: { type: Type.ARRAY, items: { type: Type.STRING } },
-              smells: { type: Type.ARRAY, items: { type: Type.STRING } },
-              weather: { type: Type.STRING },
-              visualMotifs: { type: Type.ARRAY, items: { type: Type.STRING } },
-              fashion: { type: Type.STRING },
-              touchstones: { type: Type.ARRAY, items: { type: Type.STRING } },
-              permanence: { type: Type.STRING },
-            },
-            required: ["colors", "sounds", "smells", "weather", "visualMotifs", "fashion", "touchstones", "permanence"],
-          },
-          naming: {
-            type: Type.OBJECT,
-            properties: {
-              linguisticBase: { type: Type.STRING },
-              commonNames: { type: Type.ARRAY, items: { type: Type.STRING } },
-              eliteNames: { type: Type.ARRAY, items: { type: Type.STRING } },
-              placeNamePattern: { type: Type.STRING },
-              permanence: { type: Type.STRING },
-            },
-            required: ["linguisticBase", "commonNames", "eliteNames", "placeNamePattern", "permanence"],
-          },
-          pressures: { type: Type.ARRAY, items: pressureEntrySchema },
-          additionalLore: { type: Type.ARRAY, items: additionalLoreEntrySchema },
-        },
-        required: ["history", "aesthetic", "naming", "pressures", "additionalLore"],
-      },
-      promptModifier: "Generate BUNDLE 5: [history, aesthetic, naming, pressures, additionalLore]. Provide sensory textures, naming phonology fitting the world, and background pressures moving independently. Put every accepted Blueprint category without a named legacy section into additionalLore, preserving its categoryId and visible categoryLabel. Every rule, secret, history item, pressure, and additional lore entry needs a concise semantic name describing its subject.",
-    },
-    {
-      name: "Bundle 6: Procedural Rolls, Opening Scene, Expansion Notes, Anti-Gravity, and Build Notes",
-      keys: ["proceduralRolls", "opening", "expansionNotes", "antiGravity", "buildNotes"],
-      includeExample: false,
-      schema: {
-        type: Type.OBJECT,
-        properties: {
-          proceduralRolls: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                name: { type: Type.STRING },
-                triggerKeys: { type: Type.ARRAY, items: { type: Type.STRING } },
-                settings: { type: Type.STRING },
-                entries: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      id: { type: Type.STRING },
-                      weight: { type: Type.NUMBER },
-                      outcome: { type: Type.STRING },
-                    },
-                    required: ["id", "weight", "outcome"],
-                  },
-                },
-              },
-              required: ["id", "name", "triggerKeys", "settings", "entries"],
-            },
-          },
-          opening: {
-            type: Type.OBJECT,
-            properties: {
-              firstLocation: { type: Type.STRING },
-              firstNpc: { type: Type.STRING },
-              firstChoice: { type: Type.STRING },
-              style: { type: Type.STRING },
-              firstMessage: { type: Type.STRING },
-              permanence: { type: Type.STRING },
-            },
-            required: ["firstLocation", "firstNpc", "firstChoice", "style", "firstMessage", "permanence"],
-          },
-          expansionNotes: {
-            type: Type.OBJECT,
-            properties: {
-              explicit: { type: Type.STRING },
-              violence: { type: Type.STRING },
-              horror: { type: Type.STRING },
-              romance: { type: Type.STRING },
-              humor: { type: Type.STRING },
-              pacing: { type: Type.STRING },
-              playerDeath: { type: Type.STRING },
-              contentFlags: { type: Type.ARRAY, items: { type: Type.STRING } },
-              allCharactersAdult: { type: Type.BOOLEAN },
-              permanence: { type: Type.STRING },
-            },
-            required: ["explicit", "violence", "horror", "romance", "humor", "pacing", "playerDeath", "contentFlags", "allCharactersAdult", "permanence"],
-          },
-          antiGravity: {
-            type: Type.OBJECT,
-            properties: {
-              temptations: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    temptation: { type: Type.STRING },
-                    counter: { type: Type.STRING },
-                  },
-                  required: ["temptation", "counter"],
-                },
-              },
-              permanence: { type: Type.STRING },
-            },
-            required: ["temptations", "permanence"],
-          },
-          buildNotes: {
-            type: Type.OBJECT,
-            properties: {
-              permanenceRouting: { type: Type.STRING },
-              orderBands: { type: Type.STRING },
-              disabledUntilEarnedList: { type: Type.ARRAY, items: { type: Type.STRING } },
-              formatMatch: { type: Type.STRING },
-              permanence: { type: Type.STRING },
-            },
-            required: ["permanenceRouting", "orderBands", "disabledUntilEarnedList", "formatMatch", "permanence"],
-          },
-        },
-        required: ["proceduralRolls", "opening", "expansionNotes", "antiGravity", "buildNotes"],
-      },
-      promptModifier: "Generate BUNDLE 6: [proceduralRolls, opening, expansionNotes, antiGravity, buildNotes]. Opening message must begin mid-action, ~150 words, dialogue in quotes, never acting for {{user}}. Anti-gravity counters against model-voice, convenience, and protagonist gravity.",
-    },
-  ];
+  const bundles = FORGE_BUNDLE_DEFINITIONS;
 
   try {
     const generationBatches = createForgeGenerationBatches(bundles, resumePlan.startBundleIndex, resumePlan.endBundleIndexExclusive, executionMode as ForgeExecutionMode);
@@ -1949,20 +1475,9 @@ app.post("/api/forge", async (req, res) => {
       });
       const context = forgeBlueprintBrief ? `${sharedContext}\n\n${formatForgeBlueprintBrief(forgeBlueprintBrief)}` : sharedContext;
 
-      const systemInstruction = bundle.includeExample
-        ? `${GENERATOR_RULES}\n\n${FORMAT_EXAMPLE}`
-        : GENERATOR_RULES;
-
       const coveragePrompt=forgeBlueprintBrief&&coveragePlan?formatForgeBundleCoverage(coveragePlan,bundle.keys):"";
-      const userPrompt = `FORGE STEP (${bundle.name}):
-${context}
-
-${bundle.promptModifier}${coveragePrompt}
-
-Adhere strictly to all system constraints: no trope labels, no negations in seed content, loaded one-liners only, zero contamination.
-Emit strictly valid JSON matching the schema for this bundle.`;
-
-      let bundleResult: Record<string, any> | null = null;
+      let candidate: ReturnType<typeof prepareForgeCandidate>;
+      const definition = { ...bundle, index: executionMode === "single_request" ? 5 : i, schema: normalizeForgeSchema(bundle.schema) };
       let durableAttempt:ActiveForgeAttempt|null=null;
       let durableProvenance:{provider:string;modelId:string;route:string}|null=null;
       try {
@@ -1971,26 +1486,34 @@ Emit strictly valid JSON matching the schema for this bundle.`;
           durableProvenance={provider:metadata?.provider??"environment_gemini",modelId:modelSelection?.modelId??ENV_GEMINI_MODEL??"gemini-environment",route:modelSelection?"openai_compatible":"legacy_environment"};
           durableAttempt=await forgeProjectCoordinator.begin(durableForge,{bundleIndex:i,...durableProvenance});
         }
-        bundleResult = await executeGeminiWithRetry<Record<string, any>>({
-          ai,
-          systemInstruction,
-          userPrompt,
-          responseSchema: bundle.schema,
-          stageName: bundle.name,
-          sparkText,
-          maxAttempts: 3,
-          modelSelection,
-          gateway: modelGateway,
+        candidate = await runForgeAttempts<ReturnType<typeof prepareForgeCandidate>>({
           signal: requestLifecycle.signal,
-          onAttempt: (attempt, maxAttempts, stageName) => session.send({ type: "progress", task: "forge", phase: attempt > 1 ? "retrying" : "forge_bundle", label: attempt > 1 ? `Retrying ${stageName}` : `Waiting for ${stageName}`, completedSteps: i, totalSteps: bundles.length, attempt, maxAttempts }),
-          onMetadata: (provenance) => {
-            if (provenance.usage) session.send({ type: "usage", task: "forge", usage: provenance.usage });
-            if (provenance.reasoning) session.send({ type: "reasoning", task: "forge", delta: provenance.reasoning, complete: true });
+          onEvent: (event) => session.send({ type: "progress", task: "forge", phase: event.phase === "request" ? "forge_bundle" : event.phase === "validation" ? "validating" : event.phase === "correction" ? "retrying" : "error", label: `${bundle.name}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum }),
+          request: ({ correction, signal }) => {
+            const compiled=compileForgePrompt({definition,context,coverageBrief:coveragePrompt||undefined,coveragePlan,correction});
+            return executeGeminiWithRetry<unknown>({
+              ai,
+              systemInstruction: compiled.systemInstruction,
+              userPrompt: compiled.userPrompt,
+              responseSchema: bundle.schema,
+              structuredOutputPolicy: "single_document",
+              stageName: bundle.name,
+              sparkText,
+              maxAttempts: 1,
+              modelSelection,
+              gateway: modelGateway,
+              signal,
+              onMetadata: (provenance) => {
+                if (provenance.usage) session.send({ type: "usage", task: "forge", usage: provenance.usage });
+                if (provenance.reasoning) session.send({ type: "reasoning", task: "forge", delta: provenance.reasoning, complete: true });
+              },
+              onContentDelta: (delta) => session.send({ type: "output_delta", task: "forge", characters: delta.length }),
+              onReasoningDelta: (delta) => session.send({ type: "reasoning", task: "forge", delta }),
+              onUsage: (usage) => session.send({ type: "usage", task: "forge", usage }),
+              onProviderActivity: () => session.send({ type: "provider_activity", task: "forge", at: Date.now() }),
+            }).then(value => ({ value, finishReason: undefined }));
           },
-          onContentDelta: (delta) => session.send({ type: "output_delta", task: "forge", characters: delta.length }),
-          onReasoningDelta: (delta) => session.send({ type: "reasoning", task: "forge", delta }),
-          onUsage: (usage) => session.send({ type: "usage", task: "forge", usage }),
-          onProviderActivity: () => session.send({ type: "provider_activity", task: "forge", at: Date.now() }),
+          validate: value => prepareForgeCandidate({ value, definition, previousDocument: doc, coveragePlan }),
         });
       } catch (bundleErr: any) {
         if (requestLifecycle.signal.aborted || (bundleErr instanceof ModelGatewayError && bundleErr.code === "CLIENT_DISCONNECTED")) {
@@ -2013,32 +1536,14 @@ Emit strictly valid JSON matching the schema for this bundle.`;
       }
 
       try {
-        // Sanitize rules inside worldPhysics if present.
-        if (bundleResult.worldPhysics && Array.isArray(bundleResult.worldPhysics.rules)) {
-          bundleResult.worldPhysics.rules = sanitizeForgeSectionEntries("rules", bundleResult.worldPhysics.rules);
-        }
-
-        // Provider-compatible endpoints occasionally append top-level metadata
-        // such as `keys`. Merge only the schema-owned sections.
-        const selectedBundle = selectForgeBundleSections(bundleResult, bundle.keys);
-        const acceptedSections:Record<string,unknown>={};
-        if (selectedBundle.ignoredKeys.length) sendEvent("log", { stage: bundle.keys[0], label: `${bundle.name} ignored provider metadata: ${selectedBundle.ignoredKeys.join(", ")}`, status: "done" });
-        // Merge and stream sections as they arrive.
-        for (const [key, val] of Object.entries(selectedBundle.sections)) {
-          const sanitizedVal = Array.isArray(val) && key !== "proceduralRolls"
-            ? sanitizeForgeSectionEntries(key, val)
-            : val;
-          doc[key] = sanitizedVal;
-          acceptedSections[key]=sanitizedVal;
-          sendEvent("section", { key, data: sanitizedVal });
-        }
-        if(coveragePlan){
-          const coverageFindings=auditForgeBundleCoverage(coveragePlan,doc,bundle.keys);
-          if(coverageFindings.length)throw new ModelGatewayError(`Blueprint coverage was not satisfied: ${coverageFindings.join("; ")}. Retry this bundle with the same accepted Blueprint.`,"INVALID_STRUCTURED_OUTPUT",502);
-        }
+        if(candidate.ignoredKeyCount) sendEvent("log", { stage: bundle.keys[0], label: `${bundle.name} ignored provider metadata: ${candidate.ignoredKeyCount} unknown top-level key(s).`, status: "done" });
         if(durableAttempt&&executionMode==="single_request"){
-          durableForge=await forgeProjectCoordinator.completeRange(durableAttempt,acceptedSections,resumePlan.endBundleIndexExclusive,durableProvenance!);
-        }else if(durableAttempt)durableForge=await forgeProjectCoordinator.complete(durableAttempt,acceptedSections);
+          durableForge=await forgeProjectCoordinator.completeRange(durableAttempt,candidate.sections,resumePlan.endBundleIndexExclusive,durableProvenance!);
+        }else if(durableAttempt)durableForge=await forgeProjectCoordinator.complete(durableAttempt,candidate.sections);
+        Object.assign(doc,candidate.document);
+        for (const [key, data] of Object.entries(candidate.sections)) {
+          sendEvent("section", { key, data });
+        }
       } catch (validationError) {
         const failure = normalizeGenerationFailure(new ModelGatewayError(
           formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", validationError instanceof Error ? validationError.message : "Structured output validation failed."),

@@ -80,6 +80,34 @@ export function completeForgeBatch(build: ForgeBuildRecordV1, input: { bundleInd
   next.status = next.checkpoint.completedBundleCount === next.batches.length ? "complete" : "active"; next.updatedAt = input.completedAt; return next;
 }
 
+export function completeForgeRange(build: ForgeBuildRecordV1, input: { startBundleIndex: number; endBundleIndexExclusive: number; attemptIds: readonly string[]; commandId: string; sections: Record<string, unknown>; provider: string; modelId: string; route: string; completedAt: string }): ForgeBuildRecordV1 {
+  const { startBundleIndex, endBundleIndexExclusive, attemptIds, commandId, sections, provider, modelId, route, completedAt } = input;
+  if (!Number.isSafeInteger(startBundleIndex) || !Number.isSafeInteger(endBundleIndexExclusive) || startBundleIndex < 0 || endBundleIndexExclusive <= startBundleIndex || endBundleIndexExclusive > build.batches.length) throw new ForgeBuildError("Forge range bounds are invalid.", "invalid_transition");
+  const indexes = build.batches.slice(startBundleIndex, endBundleIndexExclusive).map((batch) => batch.index);
+  if (indexes.length !== attemptIds.length || indexes.some((index, position) => index !== startBundleIndex + position)) throw new ForgeBuildError("Forge range attempt IDs must map one-to-one with its bundles.", "invalid_transition");
+  const targetBatches = indexes.map((index) => batchAt(build, index));
+  if (targetBatches.every((batch) => batch.acceptedCommandId === commandId)) throw new ForgeBuildError("Forge range command was already accepted.", "invalid_transition");
+  if (targetBatches.some((batch) => batch.status === "complete")) throw new ForgeBuildError("Forge range cannot overwrite completed bundles.", "invalid_transition");
+  if (build.batches.findIndex((batch) => batch.status !== "complete") !== startBundleIndex) throw new ForgeBuildError("Forge range must start at the first incomplete bundle.", "invalid_transition");
+
+  let next = clone(build);
+  for (let position = 0; position < indexes.length; position += 1) {
+    const bundleIndex = indexes[position];
+    const attemptId = attemptIds[position];
+    const batch = batchAt(next, bundleIndex);
+    if (batch.status === "active") {
+      if (position !== 0 || batch.attempts.at(-1)?.id !== attemptId || batch.attempts.at(-1)?.status !== "active") throw new ForgeBuildError("Forge range can continue only its first active attempt.", "invalid_transition");
+      const attempt = batch.attempts.at(-1)!;
+      if (attempt.provider !== provider || attempt.modelId !== modelId || attempt.route !== route) throw new ForgeBuildError("Forge range provenance must match its active attempt.", "invalid_transition");
+    } else {
+      next = beginForgeBatch(next, { bundleIndex, attemptId, provider, modelId, route, startedAt: completedAt });
+    }
+    const selected = Object.fromEntries(batchAt(next, bundleIndex).expectedKeys.map((key) => [key, sections[key]]));
+    next = completeForgeBatch(next, { bundleIndex, attemptId, commandId, sections: selected, completedAt });
+  }
+  return next;
+}
+
 export function failForgeBatch(build: ForgeBuildRecordV1, input: { bundleIndex: number; attemptId: string; code: string; message: string; failedAt: string }): ForgeBuildRecordV1 {
   const next = clone(build); const batch = batchAt(next, input.bundleIndex); const attempt = batch.attempts.find((item) => item.id === input.attemptId);
   if (batch.status !== "active" || !attempt || attempt.status !== "active") throw new ForgeBuildError("Only the active Forge attempt can fail its bundle.", "invalid_transition");

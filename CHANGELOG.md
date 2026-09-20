@@ -4,6 +4,21 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+### Added
+
+- Forge R1 now extracts explicit bundle schemas, uses strict single-document parsing, validates complete candidates before publication, and supports one bounded schema/coverage correction attempt without hiding provider failures.
+- Combined Forge responses use a single atomic `forge.range.complete` graph transition, preventing partially committed bundle ranges when a late repository write fails.
+- Forge now uses the `forge-prompts/1` production prompt pack, including protected protocol, shared constitution, craft defaults, exact bundle missions, explicit coverage ownership, and safe correction instructions.
+
+### Changed
+
+- Rejected Forge output no longer mutates the active manuscript, durable checkpoint, or accepted SSE stream before validation and commit succeed.
+- Forge prompts no longer include the legacy generator rules, format demonstration, or conflicting no-negation/loaded-one-liner suffix; other generation routes retain their existing prompt behavior.
+
+### Validation boundary
+
+- Automated tests cover schema parity, strict parsing, candidate purity, atomic range completion, retry ceilings, checkpoint preservation, and prompt invariants. No live provider generation, Lumiverse import, or creative-quality certification was performed.
+
 ## v0.62 — 2026-09-20
 
 ### Added

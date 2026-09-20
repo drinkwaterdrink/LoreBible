@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { createModelGateway, ModelGatewayError } from "../../server/model/gateway";
 import { createProfileStore, type SecretProtector } from "../../server/secrets/profileStore";
+import { FORGE_BUNDLE_DEFINITIONS } from "../../server/generation/forgeSchemas";
+import { renderSchemaContract } from "../../server/generation/schemaContract";
 
 const protector: SecretProtector = {
   async protect(value) { return `cipher:${value}`; },
@@ -511,4 +513,23 @@ test("gateway removes optional stream usage metadata after a generic invalid-par
   expect(bodies[1].stream).toBe(true);
   expect(bodies[1].stream_options).toBeUndefined();
   expect(response.text).toBe("compatible answer");
+});
+
+test("Forge fallback retains its prompt contract and reports effective output mode", async () => {
+  const bodies: any[] = [];
+  const { gateway, profile } = await makeGateway(async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    bodies.push(body);
+    if (bodies.length <= 2) return new Response(JSON.stringify({ error: { message: "invalid request parameters: response_format unsupported" } }), { status: 400, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ model: "z-ai/glm-5.3:thinking", choices: [{ message: { content: '{"history":[]}' }, finish_reason: "stop" }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  });
+  const schema = FORGE_BUNDLE_DEFINITIONS[4].schema;
+  const contract = renderSchemaContract(schema);
+  const response = await gateway.generate({ profileId: profile.id, modelId: "z-ai/glm-5.3:thinking", systemInstruction: "Forge", userPrompt: `OUTPUT_SCHEMA\n${contract}`, responseSchema: schema, structuredOutputPolicy: "single_document", reasoningEffort: "medium", stageName: "Forge Bundle 5", timeoutMs: 5000 });
+  expect(bodies).toHaveLength(3);
+  expect(bodies[2].messages[1].content).toContain('"aesthetic":{"type":"object"');
+  expect(bodies[2].messages[1].content).toContain('"categoryId":{"type":"string"');
+  expect(response.provenance.structuredOutputMode).toBe("json_only");
+  expect(response.provenance.compatibilityAttempts).toBe(3);
+  expect(response.provenance.finishReason).toBe("stop");
 });

@@ -1,0 +1,7 @@
+{
+  "history": [{"id":"fixture-history-1","fields":{"name":"Reading Room Conversion","event":"Residents converted the former storeroom into a shared reading room.","era":"Five years before the opening","consequence":"Neighbors now share responsibility for the collection."},"keys":["Reading Room Conversion"],"permanence":"C","locked":false}],
+  "aesthetic": {"colors":["oak brown"],"sounds":["pages turning"],"smells":["book paper"],"weather":"Temperate seasons","visualMotifs":["annotated bookmarks"],"fashion":"Ordinary local work clothes","touchstones":["shared neighborhood spaces"],"permanence":"P"},
+  "naming": {"linguisticBase":"Names already established by the author","commonNames":[],"eliteNames":[],"placeNamePattern":"Local functional names","permanence":"P"},
+  "pressures": [{"id":"fixture-pressure-1","fields":{"name":"Reading Room Roster","force":"Volunteer availability changes with work schedules.","scope":"Reading room opening hours","clock":"Recurring weekly scheduling; no initial countdown established"},"keys":["Reading Room Roster"],"permanence":"C","locked":false}],
+  "additionalLore": [{"id":"fixture-routine-1","fields":{"categoryId":"custom_reading_routines","categoryLabel":"Reading Routines","name":"Saturday Book Exchange","content":"Residents place borrowed books on the return shelf before the weekly exchange."},"keys":["Saturday Book Exchange"],"permanence":"C","locked":false}]
+}

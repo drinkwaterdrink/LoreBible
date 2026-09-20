@@ -184,7 +184,9 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
         };
 
         let response!: globalThis.Response;
+        let compatibilityAttempts = 0;
         for (let compatibilityAttempt = 0; compatibilityAttempt < 4; compatibilityAttempt++) {
+          compatibilityAttempts += 1;
           response = await requestProvider();
           if (response.ok) break;
           const errorPayload = await readJsonWithSignal(response, deadlines.signal);
@@ -270,11 +272,18 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
             : `The provider returned no usable final answer${finishReason}.`;
           throw new ModelGatewayError(message, "PROVIDER_UNAVAILABLE", 502, profile.provider);
         }
+        const rawFinishReason = payload && typeof payload === "object" && Array.isArray((payload as { choices?: unknown[] }).choices)
+          ? (payload as { choices: Array<{ finish_reason?: unknown }> }).choices[0]?.finish_reason
+          : undefined;
+        const finishReason = typeof rawFinishReason === "string" && /^[a-z0-9_.-]{1,32}$/i.test(rawFinishReason) ? rawFinishReason : undefined;
+        if (request.structuredOutputPolicy === "single_document" && (finishReason === "length" || finishReason === "max_tokens")) {
+          throw new ModelGatewayError("The provider reached its output limit before completing this Forge response.", "INVALID_STRUCTURED_OUTPUT", 502, profile.provider);
+        }
         let parsed: unknown;
         let repaired = false;
         if (request.responseSchema) {
           try {
-            const structured = parseStructuredOutput(text);
+            const structured = parseStructuredOutput(text, { policy: request.structuredOutputPolicy });
             parsed = structured.parsed;
             text = structured.text;
             repaired = structured.repaired;
@@ -298,6 +307,12 @@ export function createModelGateway(store: ProfileStore, fetchImpl: FetchImplemen
             modelReported: typeof root.model === "string" ? root.model : null,
             repaired,
             offlineFallback: false,
+            finishReason,
+            compatibilityAttempts,
+            structuredOutputMode: request.responseSchema
+              ? (requestBody.response_format as { type?: string } | undefined)?.type === "json_schema" ? "native_schema"
+                : (requestBody.response_format as { type?: string } | undefined)?.type === "json_object" ? "json_only" : "prompt_contract"
+              : undefined,
             reasoning: streamedReasoning || reasoning.text,
             usage: clientUsage,
           },

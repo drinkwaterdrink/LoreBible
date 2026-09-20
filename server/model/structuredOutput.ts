@@ -40,7 +40,7 @@ function parseCandidate(value: string): { ok: true; value: unknown } | { ok: fal
  * those wrappers are safe to remove only when one complete JSON document can be
  * identified and parsed.
  */
-export function parseStructuredOutput(raw: string): StructuredOutputResult {
+export function parseStructuredOutput(raw: string, options: { policy?: "single_document" } = {}): StructuredOutputResult {
   const trimmed = raw.replace(/^\uFEFF/, "").trim();
   const direct = parseCandidate(trimmed);
   if (direct.ok) return { parsed: direct.value, text: trimmed, repaired: trimmed !== raw };
@@ -50,6 +50,21 @@ export function parseStructuredOutput(raw: string): StructuredOutputResult {
     const inner = fenced[1].trim();
     const parsed = parseCandidate(inner);
     if (parsed.ok) return { parsed: parsed.value, text: inner, repaired: true };
+  }
+
+  if (options.policy === "single_document") {
+    const candidates: Array<{ text: string; parsed: unknown }> = [];
+    for (let index = 0; index < trimmed.length; index += 1) {
+      if (trimmed[index] !== "{" && trimmed[index] !== "[") continue;
+      const candidate = balancedJsonSlice(trimmed, index);
+      if (!candidate) throw new SyntaxError("The provider returned an incomplete JSON document.");
+      const parsed = parseCandidate(candidate);
+      if (!parsed.ok) throw new SyntaxError("The provider returned invalid JSON.");
+      candidates.push({ text: candidate, parsed: parsed.value });
+      index += candidate.length - 1;
+    }
+    if (candidates.length !== 1) throw new SyntaxError("The provider did not return exactly one JSON document.");
+    return { parsed: candidates[0].parsed, text: candidates[0].text, repaired: true };
   }
 
   for (let index = 0; index < trimmed.length; index += 1) {
