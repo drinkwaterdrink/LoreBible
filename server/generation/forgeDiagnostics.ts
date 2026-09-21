@@ -1,7 +1,7 @@
 import type { GenerationErrorCode } from "../../src/contracts/generation.js";
 
 export function safeForgeFailureReason(code: GenerationErrorCode | undefined, truncated = false): string {
-  if (truncated) return "The model reached its output limit. A smaller specialist job is needed; saved bundles are unchanged.";
+  if (truncated) return "This request reached its output limit. Connected-model Forge requests currently ask for up to 16,000 output tokens; the provider may allow less. Saved bundles are unchanged.";
   switch (code) {
     case "INVALID_STRUCTURED_OUTPUT": return "The model response did not match the Forge contract after one correction; saved bundles are unchanged.";
     case "RATE_LIMITED": return "The provider rate limit was reached; saved bundles are unchanged.";

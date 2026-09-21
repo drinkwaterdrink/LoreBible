@@ -39,6 +39,8 @@ test("guided mode exposes selectable artifact outputs while preventing an empty 
   expect(html).toContain("World Book Primary");
   expect(html).toContain('name="artifact-target"');
   expect(html).toContain("Keep at least one output selected");
+  expect(html).toContain("A focused card for one main character");
+  expect(html).toContain("they do not yet change the compiler");
 });
 
 test("workflow launch opens editable Guided controls instead of a disabled Smart Auto form",()=>{

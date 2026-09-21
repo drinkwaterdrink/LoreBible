@@ -16,6 +16,7 @@ interface ForgeStageProps {
   generationActivity?: GenerationActivityProps;
   hasCheckpoint?: boolean;
   onContinueForge?: () => void;
+  boundedSpecialists?: boolean;
 }
 
 export const ForgeStage: React.FC<ForgeStageProps> = ({
@@ -30,6 +31,7 @@ export const ForgeStage: React.FC<ForgeStageProps> = ({
   generationActivity,
   hasCheckpoint = false,
   onContinueForge,
+  boundedSpecialists = false,
 }) => {
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +51,7 @@ export const ForgeStage: React.FC<ForgeStageProps> = ({
             Inking the manuscript.
           </h2>
           <p className="text-xs text-[var(--graphite)] font-manuscript mt-1">
-            Sequential 6-bundle streaming synthesis for <span className="italic">{workingTitle}</span>.
+            Six checkpointed bundles for <span className="italic">{workingTitle}</span>{boundedSpecialists ? "; Bundle 5 runs smaller specialist requests before its checkpoint is saved." : "."}
           </p>
         </div>
 

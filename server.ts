@@ -24,6 +24,7 @@ import { parseModelSelection, type GenerationProvenance, type ModelSelection } f
 import { FORGE_BUNDLE_DEFINITIONS } from "./server/generation/forgeSchemas.js";
 import { prepareForgeCandidate } from "./server/generation/forgeCandidate.js";
 import { runForgeAttempts } from "./server/generation/forgeAttemptRunner.js";
+import { planBundleFiveJobs, validateBundleFiveJob, compileBundleFiveJobPrompt, splitBundleFiveJob, BundleFivePlanningError } from "./server/generation/forgeBundleFiveJobs.js";
 import { compileForgePrompt } from "./server/generation/prompts/compileForgePrompt.js";
 import { normalizeForgeSchema } from "./server/generation/schemaContract.js";
 import { parseCanonicalSparkDNA } from "./src/contracts/spark.js";
@@ -1504,7 +1505,49 @@ app.post("/api/forge", async (req, res) => {
           durableProvenance={provider:metadata?.provider??"environment_gemini",modelId:modelSelection?.modelId??ENV_GEMINI_MODEL??"gemini-environment",route:modelSelection?"openai_compatible":"legacy_environment"};
           durableAttempt=await forgeProjectCoordinator.begin(durableForge,{bundleIndex:i,...durableProvenance});
         }
-        candidate = await runForgeAttempts<ReturnType<typeof prepareForgeCandidate>>({
+        if (i === 4 && coveragePlan) {
+          const jobs = planBundleFiveJobs(coveragePlan, doc);
+          const combined: Record<string, unknown> = { history: [], aesthetic: null, naming: null, pressures: [], additionalLore: [] };
+          for (let jobIndex = 0; jobIndex < jobs.length;) {
+            const job = jobs[jobIndex];
+            session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Bundle 5 specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
+            let owned: Record<string, unknown>;
+            try { owned = await runForgeAttempts({
+              signal: requestLifecycle.signal,
+              onEvent: event => session.send({ type: "progress", task: "forge", phase: event.phase === "correction" ? "retrying" : event.phase === "validation" ? "validating" : "forge_bundle", label: `${job.categoryLabel ?? job.key}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum }),
+              request: ({ correction, signal }) => {
+                const prompt = compileBundleFiveJobPrompt(job, context, correction);
+                let outputMode: "native_schema" | "json_only" | "prompt_contract" | "gemini_sdk_schema" | undefined;
+                return executeGeminiWithRetry<unknown>({
+                  ai, systemInstruction: prompt.systemInstruction, userPrompt: prompt.userPrompt,
+                  responseSchema: job.schema, structuredOutputPolicy: "single_document",
+                  stageName: `Bundle 5 ${job.categoryLabel ?? job.key}`, sparkText, maxAttempts: 1,
+                  modelSelection, gateway: modelGateway, signal,
+                  onMetadata: provenance => {
+                    outputMode = provenance.structuredOutputMode ?? (modelSelection ? undefined : "gemini_sdk_schema");
+                    if (provenance.usage) session.send({ type: "usage", task: "forge", usage: provenance.usage });
+                    if (provenance.reasoning) session.send({ type: "reasoning", task: "forge", delta: provenance.reasoning, complete: true });
+                  },
+                  onContentDelta: delta => session.send({ type: "output_delta", task: "forge", characters: delta.length }),
+                  onReasoningDelta: delta => session.send({ type: "reasoning", task: "forge", delta }),
+                  onUsage: usage => session.send({ type: "usage", task: "forge", usage }),
+                  onProviderActivity: () => session.send({ type: "provider_activity", task: "forge", at: Date.now() }),
+                }).then(value => ({ value, outputMode }));
+              },
+              validate: value => validateBundleFiveJob(job, value),
+            }); } catch (error) {
+              const children = error instanceof StructuredOutputTruncatedError ? splitBundleFiveJob(job) : null;
+              if (!children) throw error;
+              jobs.splice(jobIndex, 1, ...children);
+              session.send({ type: "progress", task: "forge", phase: "retrying", label: `${job.categoryLabel ?? job.key} reached the model output limit; splitting only this unfinished specialist job.`, completedSteps: i, totalSteps: bundles.length });
+              continue;
+            }
+            if (Array.isArray(combined[job.key])) (combined[job.key] as unknown[]).push(...(owned[job.key] as unknown[]));
+            else combined[job.key] = owned[job.key];
+            jobIndex++;
+          }
+          candidate = prepareForgeCandidate({ value: combined, definition, previousDocument: doc, coveragePlan });
+        } else candidate = await runForgeAttempts<ReturnType<typeof prepareForgeCandidate>>({
           signal: requestLifecycle.signal,
           onEvent: (event) => session.send({ type: "progress", task: "forge", phase: event.phase === "request" ? "forge_bundle" : event.phase === "validation" ? "validating" : event.phase === "correction" ? "retrying" : "error", label: `${bundle.name}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum, outputMode: event.outputMode, topLevelType: event.topLevelType, issueCount: event.issueCount, elapsedMs: event.elapsedMs }),
           request: ({ correction, signal }) => {
@@ -1543,7 +1586,7 @@ app.post("/api/forge", async (req, res) => {
           return;
         }
         const failure = normalizeGenerationFailure(new ModelGatewayError(
-          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", safeForgeFailureReason(bundleErr instanceof ModelGatewayError ? bundleErr.code : undefined, bundleErr instanceof StructuredOutputTruncatedError)),
+          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", bundleErr instanceof BundleFivePlanningError ? bundleErr.message : safeForgeFailureReason(bundleErr instanceof ModelGatewayError ? bundleErr.code : undefined, bundleErr instanceof StructuredOutputTruncatedError)),
           bundleErr instanceof ModelGatewayError ? bundleErr.code : "INTERNAL_ERROR",
           bundleErr instanceof ModelGatewayError ? bundleErr.status : 502,
           bundleErr instanceof ModelGatewayError ? bundleErr.provider : undefined,

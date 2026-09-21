@@ -4,6 +4,18 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.65 — 2026-09-20
+
+### Changed
+
+- Blueprint Studio and its preview now explain each artifact target and state plainly that current publishing still compiles a narrator/world card and World Book, not seven separate package types.
+- Blueprint-backed Forge Bundle 5 now runs bounded history, aesthetic, naming, pressure, and per-category supplemental-lore specialist requests. Each request has a projected schema and assigned entry IDs; an output-cap failure splits only the unfinished entry job up to two levels. The existing Bundle 5 checkpoint is saved only after the combined result passes validation. The plan aims at accepted category ideals within the total lorebook maximum, including custom categories with a zero minimum.
+- Forge's truncation message now states the app's current 16,000-token connected-model request allowance and notes that a provider may impose a lower limit.
+
+### Validation boundary
+
+- This is a Bundle 5 reliability bridge, not the complete Forge R2 durable-job ledger. Completed earlier bundles survive failure, but individual unfinished Bundle 5 specialist results are not yet persisted across a retry. Live provider reliability and literary quality still require a user run.
+
 ## v0.64 — 2026-09-20
 
 ### Fixed

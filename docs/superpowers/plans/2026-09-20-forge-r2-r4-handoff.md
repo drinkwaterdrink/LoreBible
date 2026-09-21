@@ -1,6 +1,6 @@
 # Forge R2–R4 continuation contracts and implementation handoff
 
-Status: planned, not implemented. Start only after the [R1 gate](2026-09-20-forge-r1-executable-blueprint.md) passes. This continuation makes downstream choices explicit; it is not authorization to combine all slices into one unreviewed change.
+Status: partially implemented. R1 passed; pure R2 allocation and bounded job drafts exist. v0.65 executes small Bundle 5 specialist requests with projected schemas and exact entry IDs, but it does not yet use the durable job ledger below. The rest of R2, R3, and R4 remain planned. This continuation makes downstream choices explicit; it is not authorization to combine all slices into one unreviewed change.
 
 Read the [design](../specs/2026-09-20-forge-overhaul-and-prompt-studio.md) and [prompt source](../specs/2026-09-20-forge-production-prompt-pack.md). Verify actual repository state again. Preserve R1 function names and responsibilities rather than inventing parallel validation/prompt systems.
 

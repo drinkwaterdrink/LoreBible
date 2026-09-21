@@ -1414,6 +1414,7 @@ export default function App() {
               hasCheckpoint={Object.keys(streamedSections).length > 0
                 && (forgeActivity.progress?.completedSteps ?? 0) < (forgeActivity.progress?.totalSteps ?? 6)}
               onContinueForge={() => void handleStartForge(true)}
+              boundedSpecialists={Boolean(blueprintSelection)}
               generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
             />
           )}
