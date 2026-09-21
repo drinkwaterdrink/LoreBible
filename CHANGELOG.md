@@ -4,6 +4,19 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.66 — 2026-09-20
+
+### Changed
+
+- Blueprint-backed Forge Bundle 5 now saves each validated specialist result in the existing Project Graph before starting the next job. Retrying after a failure, cancellation, or connection loss reuses completed jobs, even when the selected model changes.
+- Output-limit splits are recorded as exact child jobs with the parent's assigned entry slots. The existing six-bundle checkpoint still advances only after the merged Bundle 5 result passes aggregate validation.
+- Forge progress identifies reused specialist jobs. Saved job completions are idempotent for the same command and reject changed replay content or stale attempts.
+- The living M4 roadmap now specifies a Lore Quality Auditor and Retrieval Linter covering titles/categories, category-aware content depth, keywords and activation tests, advanced-setting rationale, redundancy/contradiction/reference checks, temporal/secret/agency safety, and book-level budget behavior. A roughly 150-token Production target applies to substantial reference entries, with explicit shorter atomic-entry profiles instead of padding every entry.
+
+### Validation boundary
+
+- Automated tests cover repository restart, model-switch reuse, failed-bundle preservation, split ownership, stale completion, and replay. This is durable Bundle 5 specialist recovery, not yet the full R2 inventory/job scheduler across every bundle. Live provider timing and content quality were not measured in this release.
+
 ## v0.65 — 2026-09-20
 
 ### Changed

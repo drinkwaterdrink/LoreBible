@@ -21,7 +21,7 @@ Numbering refers to the user's 150-section master proposal (including section 0)
 | 49–52 | Sticky, cooldown, delay, weighted groups | M4 versioned persistence/group simulation |
 | 53–55 | Controlled recursion, investigation, progressive reveal | M4 activation graph; earned-state gate separate |
 | 56–58 | Vector/hybrid retrieval and global budgets | M4 optional embedding evaluation and budget profiles |
-| 59–63 | Activation Lab/graph, dead entries, coverage, duplication | M4 core; M8 unified views |
+| 59–63 | Activation Lab/graph, dead entries, coverage, duplication | M4 core plus Lore Quality Auditor and Retrieval Linter; M8 unified views |
 | 64–68 | Character/narrator/scenario/ensemble compiler distinctions | M5 Card IR planning |
 | 69–71 | Modular world package, full WB versus embedded subset, CHARX | M6 serializers/manifests; verified native fixtures |
 | 72–75 | Greeting lab/audit, alternate fields, ownership audit | M5 variants; M6 native packaging |

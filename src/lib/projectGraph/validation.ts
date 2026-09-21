@@ -1,6 +1,7 @@
-import { PROJECT_GRAPH_SCHEMA, USER_AGENCY_RESERVATIONS, type ProjectGraphV1 } from "../../contracts/projectGraph";
+import { PROJECT_GRAPH_SCHEMA, USER_AGENCY_RESERVATIONS, type ForgeJobV1, type ForgeSpecialistLedgerV1, type ProjectGraphV1 } from "../../contracts/projectGraph";
 import { canonicalizeJson } from "./canonicalJson";
 import { deriveForgeSectionsFromCategoryRecords } from "./forgeCategoryRecords";
+import { createSpecialistLedger, mergeSpecialistJobs, validateForgeSpecialistJob, validateOwnedSpecialistSections } from "./forgeSpecialistLedger";
 
 export type ProjectGraphParseResult = { ok: true; value: ProjectGraphV1 } | { ok: false; issues: Array<{ path: string; message: string }> };
 const record = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -42,6 +43,26 @@ export function parseProjectGraph(value: unknown): ProjectGraphParseResult {
       let completed=0;let gap=false;const merged:Record<string,unknown>={};
       for(const batch of item.batches){if(batch?.status==="complete"){if(gap){issues.push({path:`${prefix}.batches`,message:"Completed Forge bundles must be contiguous."});break;}completed++;if(record(batch.sections))Object.assign(merged,batch.sections);}else gap=true;}
       if(item.checkpoint.completedBundleCount!==completed||canonicalizeJson(item.checkpoint.sections)!==canonicalizeJson(merged))issues.push({path:`${prefix}.checkpoint`,message:"Forge checkpoint does not match its completed bundle records."});
+    }
+    if(item.specialistLedger!==undefined){
+      const ledger=item.specialistLedger;
+      const path=`${prefix}.specialistLedger`;
+      if(!record(ledger)||ledger.version!==1||typeof ledger.planHash!=="string"||!ledger.planHash||ledger.inputFingerprint!==item.inputFingerprint||!Array.isArray(ledger.jobs))issues.push({path,message:"Forge specialist ledger identity is invalid."});
+      else try{
+        createSpecialistLedger({planHash:ledger.planHash,inputFingerprint:ledger.inputFingerprint,jobs:ledger.jobs.filter((candidate:any)=>candidate?.job?.splitDepth===0).map((candidate:any)=>candidate.job)});
+        const ids=new Set<string>();
+        for(const [jobIndex,candidate] of ledger.jobs.entries()){
+          const jobPath=`${path}.jobs[${jobIndex}]`;
+          if(!record(candidate)||!record(candidate.job)||ids.has(candidate.job.id)||!Array.isArray(candidate.attempts)||!["pending","active","complete","failed","cancelled","superseded"].includes(candidate.status))throw Error(`Invalid specialist job at ${jobPath}.`);
+          validateForgeSpecialistJob(candidate.job as ForgeJobV1,ledger.inputFingerprint);
+          ids.add(candidate.job.id);
+          if(candidate.status==="complete"&&(!record(candidate.sections)||typeof candidate.acceptedCommandId!=="string"))throw Error(`Completed specialist output is missing at ${jobPath}.`);
+          if(candidate.status==="complete")validateOwnedSpecialistSections(candidate.job as ForgeJobV1,candidate.sections);
+          if(candidate.status!=="complete"&&candidate.sections!==undefined)throw Error(`Unaccepted specialist output exists at ${jobPath}.`);
+          if(candidate.status==="superseded"&&(!Array.isArray(candidate.replacementJobIds)||candidate.replacementJobIds.length!==2))throw Error(`Replacement jobs are missing at ${jobPath}.`);
+        }
+        if(item.batches?.[4]?.status==="complete"&&canonicalizeJson(mergeSpecialistJobs(ledger as ForgeSpecialistLedgerV1))!==canonicalizeJson(item.batches[4].sections))throw Error("Completed Bundle 5 differs from saved specialist jobs.");
+      }catch(error){issues.push({path,message:error instanceof Error?error.message:"Forge specialist ledger is invalid."});}
     }
     if(item.categoryRecords!==undefined){if(!Array.isArray(item.categoryRecords))issues.push({path:`${prefix}.categoryRecords`,message:"Forge category records must be an array."});else{const recordIds=new Set<string>();let validCategoryRecords=true;for(const[recordIndex,candidate]of item.categoryRecords.entries()){const path=`${prefix}.categoryRecords[${recordIndex}]`;const valid=record(candidate)&&typeof candidate.id==="string"&&candidate.id.length>0&&candidate.schema==="lorebible.forge-category-record/v1"&&candidate.buildId===item.id&&candidate.status==="proposed"&&candidate.origin==="generated"&&typeof candidate.sectionKey==="string"&&typeof candidate.categoryId==="string"&&Number.isSafeInteger(candidate.bundleIndex)&&Number.isSafeInteger(candidate.ordinal);if(!valid){validCategoryRecords=false;issues.push({path,message:"Forge category record is invalid."});continue;}if(candidate.projection!==undefined&&!validForgeProjection(candidate.projection)){validCategoryRecords=false;issues.push({path:`${path}.projection`,message:"Forge specialist projection is invalid."});}if(recordIds.has(candidate.id))issues.push({path:`${path}.id`,message:"Duplicate Forge category record ID."});recordIds.add(candidate.id);}if(validCategoryRecords&&record(item.checkpoint)&&record(item.checkpoint.sections)&&canonicalizeJson(deriveForgeSectionsFromCategoryRecords(item.categoryRecords))!==canonicalizeJson(item.checkpoint.sections))issues.push({path:`${prefix}.categoryRecords`,message:"Forge category records do not derive the accepted checkpoint."});}}
   });

@@ -24,7 +24,8 @@ import { parseModelSelection, type GenerationProvenance, type ModelSelection } f
 import { FORGE_BUNDLE_DEFINITIONS } from "./server/generation/forgeSchemas.js";
 import { prepareForgeCandidate } from "./server/generation/forgeCandidate.js";
 import { runForgeAttempts } from "./server/generation/forgeAttemptRunner.js";
-import { planBundleFiveJobs, validateBundleFiveJob, compileBundleFiveJobPrompt, splitBundleFiveJob, BundleFivePlanningError } from "./server/generation/forgeBundleFiveJobs.js";
+import { planBundleFiveJobs, validateBundleFiveJob, compileBundleFiveJobPrompt, splitBundleFiveJob, BundleFivePlanningError, createBundleFiveLedgerPlan, createBundleFiveJobSpec, hydrateBundleFiveJob } from "./server/generation/forgeBundleFiveJobs.js";
+import { mergeSpecialistJobs } from "./src/lib/projectGraph/forgeSpecialistLedger.js";
 import { compileForgePrompt } from "./server/generation/prompts/compileForgePrompt.js";
 import { normalizeForgeSchema } from "./server/generation/schemaContract.js";
 import { parseCanonicalSparkDNA } from "./src/contracts/spark.js";
@@ -1449,6 +1450,7 @@ app.post("/api/forge", async (req, res) => {
   }
   let resumePlan;
   const coveragePlan=acceptedBlueprintSelection?createForgeCoveragePlan(acceptedBlueprintSelection):null;
+  if(coveragePlan&&!durableForge){sendEvent("error",{code:"FORGE_PROJECT_REQUIRED",message:"This Blueprint build needs a prepared Project Graph so specialist progress can be saved safely. Open Blueprint Studio from the current project and save the Blueprint before starting Forge."});return;}
   const requireAdditionalLore=Boolean(coveragePlan?.categories.some(category=>category.destination==="additionalLore"&&!category.forbidden));
   const resumeSource=durableForge?.resumeSections??resumeSections;
   try {
@@ -1506,12 +1508,20 @@ app.post("/api/forge", async (req, res) => {
           durableAttempt=await forgeProjectCoordinator.begin(durableForge,{bundleIndex:i,...durableProvenance});
         }
         if (i === 4 && coveragePlan) {
-          const jobs = planBundleFiveJobs(coveragePlan, doc);
+          const plannedJobs = planBundleFiveJobs(coveragePlan, doc);
+          let specialistLedger = durableAttempt ? await forgeProjectCoordinator.ensureJobs(durableAttempt, createBundleFiveLedgerPlan(plannedJobs, context, durableAttempt.inputFingerprint)) : null;
+          const jobs = specialistLedger ? specialistLedger.jobs.filter(item => item.status !== "superseded").map(item => hydrateBundleFiveJob(item.job)) : plannedJobs;
           const combined: Record<string, unknown> = { history: [], aesthetic: null, naming: null, pressures: [], additionalLore: [] };
           for (let jobIndex = 0; jobIndex < jobs.length;) {
             const job = jobs[jobIndex];
+            const saved = specialistLedger?.jobs.find(item => item.job.id === job.id);
+            if (saved?.status === "complete") {
+              session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Reusing saved Bundle 5 specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
+              jobIndex++; continue;
+            }
             session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Bundle 5 specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
             let owned: Record<string, unknown>;
+            const startedJob = durableAttempt && saved ? await forgeProjectCoordinator.beginJob(durableAttempt, saved.job, durableProvenance!.provider, durableProvenance!.modelId) : null;
             try { owned = await runForgeAttempts({
               signal: requestLifecycle.signal,
               onEvent: event => session.send({ type: "progress", task: "forge", phase: event.phase === "correction" ? "retrying" : event.phase === "validation" ? "validating" : "forge_bundle", label: `${job.categoryLabel ?? job.key}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum }),
@@ -1538,15 +1548,20 @@ app.post("/api/forge", async (req, res) => {
             }); } catch (error) {
               const children = error instanceof StructuredOutputTruncatedError ? splitBundleFiveJob(job) : null;
               if (!children) throw error;
+              if (durableAttempt && startedJob && saved) {
+                const nextOrdinal=Math.max(...specialistLedger!.jobs.map(item=>item.job.ordinal))+1;
+                specialistLedger = await forgeProjectCoordinator.replaceJob(durableAttempt, job.id, startedJob.attemptId, children.map((child, offset) => createBundleFiveJobSpec(child, nextOrdinal + offset, context, durableAttempt.inputFingerprint)));
+              }
               jobs.splice(jobIndex, 1, ...children);
               session.send({ type: "progress", task: "forge", phase: "retrying", label: `${job.categoryLabel ?? job.key} reached the model output limit; splitting only this unfinished specialist job.`, completedSteps: i, totalSteps: bundles.length });
               continue;
             }
+            if (durableAttempt && startedJob) specialistLedger = await forgeProjectCoordinator.completeJob(durableAttempt, job.id, startedJob.attemptId, owned);
             if (Array.isArray(combined[job.key])) (combined[job.key] as unknown[]).push(...(owned[job.key] as unknown[]));
             else combined[job.key] = owned[job.key];
             jobIndex++;
           }
-          candidate = prepareForgeCandidate({ value: combined, definition, previousDocument: doc, coveragePlan });
+          candidate = prepareForgeCandidate({ value: specialistLedger ? mergeSpecialistJobs(specialistLedger) : combined, definition, previousDocument: doc, coveragePlan });
         } else candidate = await runForgeAttempts<ReturnType<typeof prepareForgeCandidate>>({
           signal: requestLifecycle.signal,
           onEvent: (event) => session.send({ type: "progress", task: "forge", phase: event.phase === "request" ? "forge_bundle" : event.phase === "validation" ? "validating" : event.phase === "correction" ? "retrying" : "error", label: `${bundle.name}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum, outputMode: event.outputMode, topLevelType: event.topLevelType, issueCount: event.issueCount, elapsedMs: event.elapsedMs }),

@@ -241,6 +241,20 @@ Build a versioned deterministic simulator for the documented subset, calibrated 
 
 Views include activation graph, collision warnings, dead entries, graph entities without runtime coverage, duplicate facts, library category heatmap, scenario-specific activation heatmap, and crowded eviction explanation. Every count comes from a defined fixture set; do not imply empirical usage frequency without observed usage data.
 
+### Lore Quality Auditor and Retrieval Linter
+
+Run this deterministic audit on the canonical Lore Manifest before attached or standalone serialization. It produces evidence-linked `BLOCKER`, `MAJOR`, `MINOR`, and `NOTE` findings, never silent creative rewrites. A model-assisted editorial review may add clearly labeled proposals, but it cannot erase deterministic findings or certify runtime behavior.
+
+- **Identity and prose:** require a concise semantic `[CATEGORY] Subject` title, valid category identity, focused content, concrete runtime usefulness, premise/ownership references and resolved stable IDs. Detect placeholder titles, category mismatch, vague encyclopedia filler, multi-concept sludge, duplicated facts, contradictions and near-duplicate entries.
+- **Depth profile:** measure estimated tokens per entry and by category/purpose. A Production substantial-reference profile may target at least roughly 150 tokens, with explicit lower ranges for atomic rules, indexes, relationship bridges and routing entries. Treat ~25-token substantial entries as a strong quality finding. Detect padding and excessive length as well as thinness; word count alone never passes quality.
+- **Retrieval:** analyze primary/secondary aliases, generic/common-noun risk, substring hazards, whole-word opportunities, regex validity, case behavior, selective logic, collision/fan-out, dead keys and positive/negative fixtures. Explain why an entry should activate and why nearby scenes should leave it inactive.
+- **Injection and advanced settings:** lint scan depth, insertion position/depth/role, order, priority, probability, sticky/cooldown/delay, groups/weights/override, recursion prevent/exclude/delay, vectorization and embedding dependencies. Distinguish unsupported, unknown, simulated and native-observed behavior. Advanced settings without a purpose/rationale are findings; optimal never means enabling every feature.
+- **World consistency and safety:** audit temporal routing, secret/reveal eligibility, knowledge boundaries, player agency, premise counts, world autonomy, ordinary-life coverage, dangling references and card/World Book ownership. Compare facts across entries and card fields without mutating accepted text.
+- **Book-level behavior:** run First Message and representative roleplay probes, activation graph, fan-out/collision analysis, typical and crowded token budgets, group resolution, persistence sequences, bounded recursion and eviction. Report exact matched entries, reasons, estimated tokens and limitations as `SIMULATED` unless native runtime evidence exists.
+- **Repair workflow:** offer targeted setting changes, key edits, merge/split suggestions or scoped regeneration. Show before/after impact, preserve the prior version and require acceptance for creative prose changes. Deterministic setting repairs may apply only when unlocked and must produce a receipt.
+
+The mobile UI uses summary cards and expandable entry findings rather than a wide table: overall release gate, highest-severity issues, category/token distribution, keyword collision leaders, activation-budget profile and a per-entry inspector with rationale and test cases.
+
 ## 10. Artifact planning and compilation
 
 Introduce a minimal Artifact IR during export stabilization, then grow it after graph ownership is stable. Use one Canonical Lore Manifest for both full native World Book and embedded Character Book projections. Markdown and human briefs are projections too, with explicit spoiler/audience settings.

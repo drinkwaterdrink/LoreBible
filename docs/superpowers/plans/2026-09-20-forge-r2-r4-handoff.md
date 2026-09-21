@@ -1,6 +1,6 @@
 # Forge R2–R4 continuation contracts and implementation handoff
 
-Status: partially implemented. R1 passed; pure R2 allocation and bounded job drafts exist. v0.65 executes small Bundle 5 specialist requests with projected schemas and exact entry IDs, but it does not yet use the durable job ledger below. The rest of R2, R3, and R4 remain planned. This continuation makes downstream choices explicit; it is not authorization to combine all slices into one unreviewed change.
+Status: partially implemented. R1 passed; pure R2 allocation and bounded job drafts exist. v0.66 executes and durably saves bounded Bundle 5 specialist jobs in the existing Project Graph, with validated outputs, retry reuse, and recorded output-limit splits. Full inventory-driven scheduling for Bundles 1–4 and 6, context preflight, R3 Prompt Studio, and R4 raw-idea routing remain planned. This continuation makes downstream choices explicit; it is not authorization to combine all slices into one unreviewed change.
 
 Read the [design](../specs/2026-09-20-forge-overhaul-and-prompt-studio.md) and [prompt source](../specs/2026-09-20-forge-production-prompt-pack.md). Verify actual repository state again. Preserve R1 function names and responsibilities rather than inventing parallel validation/prompt systems.
 

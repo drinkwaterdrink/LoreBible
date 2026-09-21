@@ -1,5 +1,6 @@
 import type { JsonSchema } from "../../src/contracts/generation.js";
-import { sha256Hex } from "../../src/lib/projectGraph/canonicalJson.js";
+import type { ForgeJobV1 } from "../../src/contracts/projectGraph.js";
+import { canonicalizeJson, sha256Hex } from "../../src/lib/projectGraph/canonicalJson.js";
 import { FORGE_BUNDLE_DEFINITIONS } from "./forgeSchemas.js";
 import type { ForgeCoveragePlan } from "./forgeCoveragePlan.js";
 import { countForgeTotalEntries } from "./forgeCoveragePlan.js";
@@ -38,6 +39,20 @@ function projectedSchema(key: BundleFiveKey): JsonSchema {
   const property = bundleSchema.properties?.[key];
   if (!property) throw new Error(`Bundle 5 schema has no ${key} property.`);
   return { type: "object", properties: { [key]: property }, required: [key] };
+}
+
+export function hydrateBundleFiveJob(job: ForgeJobV1): BundleFiveJob {
+  return { id: job.id, key: job.destinations[0], categoryId: job.categoryId, categoryLabel: job.categoryLabel, purpose: job.purpose, entryIds: [...job.entryIds], schema: projectedSchema(job.destinations[0]), splitDepth: job.splitDepth };
+}
+
+export function createBundleFiveJobSpec(job: BundleFiveJob, ordinal: number, context: string, inputFingerprint: string): ForgeJobV1 {
+  const prompt = compileBundleFiveJobPrompt(job, context, null);
+  return { version: 1, id: job.id, bundleIndex: 4, ordinal, kind: "bundle5_section", destinations: [job.key], categoryId: job.categoryId, categoryLabel: job.categoryLabel, purpose: job.purpose, entryIds: [...job.entryIds], dependencies: [], schemaId: `forge.bundle5.${job.key}/v1`, schemaVersion: 1, promptHash: `sha256:${sha256Hex(canonicalizeJson(prompt))}`, inputFingerprint, estimatedOutputTokens: Math.max(400, job.entryIds.length * 400), splitDepth: job.splitDepth ?? 0 };
+}
+
+export function createBundleFiveLedgerPlan(jobs: BundleFiveJob[], context: string, inputFingerprint: string) {
+  const specs = jobs.map((job, ordinal) => createBundleFiveJobSpec(job, ordinal, context, inputFingerprint));
+  return { planHash: `sha256:${sha256Hex(canonicalizeJson({ inputFingerprint, specs }))}`, jobs: specs };
 }
 
 /** Conservative, bounded R2 bridge. Existing completed bundles remain immutable. */
@@ -86,7 +101,7 @@ export function planBundleFiveJobs(plan: ForgeCoveragePlan, previousDocument: Re
 export function validateBundleFiveJob(job: BundleFiveJob, value: unknown): Record<BundleFiveKey, unknown> {
   const issues = validateSchemaValue(value, job.schema);
   if (issues.length) throw new ForgeValidationError(`Specialist ${job.id} failed schema validation.`, issues);
-  const output = value as Record<string, unknown>;
+  const output = structuredClone(value) as Record<string, unknown>;
   if (Object.keys(output).length !== 1 || !Object.hasOwn(output, job.key)) throw new ForgeValidationError(`Specialist ${job.id} returned an unowned section.`);
   if (ARRAY_KEYS.has(job.key)) {
     const entries = output[job.key] as Array<Record<string, unknown>>;
@@ -98,7 +113,7 @@ export function validateBundleFiveJob(job: BundleFiveJob, value: unknown): Recor
       const fields = entry.fields as Record<string, unknown>;
       return fields.categoryId !== job.categoryId || fields.categoryLabel !== job.categoryLabel;
     })) throw new ForgeValidationError(`Specialist ${job.id} changed its assigned category.`);
-    sanitizeForgeSectionEntries(job.key, entries);
+    output[job.key] = sanitizeForgeSectionEntries(job.key, entries);
   }
   return output as Record<BundleFiveKey, unknown>;
 }

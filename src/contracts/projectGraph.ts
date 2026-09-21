@@ -24,6 +24,10 @@ export type BuildStatus = "pending" | "active" | "complete" | "failed" | "cancel
 export interface BuildRecord { id: string; stage: string; status: BuildStatus; artifactIds: string[]; sourceRevision: number; kind?: string; }
 export interface ForgeAttemptRecord { id: string; provider: string; modelId: string; route: string; status: "active" | "complete" | "failed" | "cancelled"; startedAt: string; finishedAt: string | null; diagnostic?: { code: string; message: string }; }
 export interface ForgeBatchRecord { index: number; name: string; expectedKeys: string[]; status: BuildStatus; sections: Record<string, unknown>; attempts: ForgeAttemptRecord[]; acceptedCommandId: string | null; }
+export interface ForgeJobV1 { version: 1; id: string; bundleIndex: 4; ordinal: number; kind: "bundle5_section"; destinations: ["history" | "aesthetic" | "naming" | "pressures" | "additionalLore"]; categoryId?: string; categoryLabel?: string; purpose?: string; entryIds: string[]; dependencies: string[]; schemaId: string; schemaVersion: 1; promptHash: string; inputFingerprint: string; estimatedOutputTokens: number; splitDepth: number; }
+export interface ForgeJobAttemptV1 { id: string; status: "active" | "complete" | "failed" | "cancelled"; provider: string; modelId: string; promptHash: string; startedAt: string; endedAt?: string; failureCode?: string; }
+export interface ForgeJobRecordV1 { job: ForgeJobV1; status: "pending" | "active" | "complete" | "failed" | "cancelled" | "superseded"; attempts: ForgeJobAttemptV1[]; sections?: Record<string, unknown>; acceptedCommandId?: string; replacementJobIds?: string[]; }
+export interface ForgeSpecialistLedgerV1 { version: 1; planHash: string; inputFingerprint: string; jobs: ForgeJobRecordV1[]; }
 export type ForgeCategoryRecordKind = "entity" | "relationship" | "knowledge" | "temporal_fact" | "section" | "empty_collection";
 export type ForgeCastTier = "principal" | "roster" | "unclassified";
 export type ForgeSpecialistProjectionV1 =
@@ -43,6 +47,7 @@ export interface ForgeBuildRecordV1 extends BuildRecord {
   batches: ForgeBatchRecord[];
   /** Optional while reading v0.53-v0.54 saved builds; every new completion populates this collection. */
   categoryRecords?: ForgeCategoryRecordV1[];
+  specialistLedger?: ForgeSpecialistLedgerV1;
   checkpoint: { completedBundleCount: number; sections: Record<string, unknown> };
 }
 export interface ValidationFinding { id: string; severity: "blocker" | "major" | "minor" | "info"; code: string; path: string; message: string; evidence?: unknown; }
