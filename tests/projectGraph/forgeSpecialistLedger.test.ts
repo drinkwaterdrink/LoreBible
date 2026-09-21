@@ -38,3 +38,13 @@ test("the durable command boundary rejects incomplete lore content and duplicate
   ledger=beginSpecialistJob(ledger,{jobId:first.id,attemptId:"attempt/one",provider:"gemini",modelId:"flash",promptHash:first.promptHash,startedAt:at});
   expect(()=>completeSpecialistJob(ledger,{jobId:first.id,attemptId:"attempt/one",commandId:"command/one",sections:{history:[{id:"entry/one",fields:{name:"Too Thin"},keys:[],permanence:"P",locked:false}]},completedAt:at})).toThrow("projected schema");
 });
+
+test("the durable ledger accepts and merges an independently completed location bundle",()=>{
+  const locationJob={...job("job/location",["entry/location"]),bundleIndex:1,kind:"category_entries",destinations:["locations"],schemaId:"forge.bundle2.locations/v1",ordinal:10} as unknown as ForgeJobV1;
+  let ledger=createSpecialistLedger({planHash:"sha256:multi-bundle",inputFingerprint:source,jobs:[locationJob]});
+  ledger=beginSpecialistJob(ledger,{jobId:locationJob.id,attemptId:"attempt/location",provider:"gemini",modelId:"flash",promptHash:"sha256:rendered-location-prompt",startedAt:at});
+  expect(ledger.jobs[0].attempts[0].promptHash).toBe("sha256:rendered-location-prompt");
+  const location={id:"entry/location",fields:{name:"Salt Gate",function:"Checkpoint",mood:"Watchful",whatsWrong:"The guards keep two ledgers."},keys:["Salt Gate"],permanence:"P",locked:false};
+  ledger=completeSpecialistJob(ledger,{jobId:locationJob.id,attemptId:"attempt/location",commandId:"complete/location",sections:{locations:[location]},completedAt:at});
+  expect(mergeSpecialistJobs(ledger,1)).toEqual({locations:[location]});
+});

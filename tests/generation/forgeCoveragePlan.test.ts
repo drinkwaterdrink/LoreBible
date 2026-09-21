@@ -19,6 +19,16 @@ test("routes every enabled Blueprint category to a Forge storage destination", (
   const prompt = formatForgeBundleCoverage(plan, ["history", "additionalLore"]);
   expect(prompt).toContain("Economy: generate 3–6 focused entries");
   expect(prompt).toContain("Night Shifts: generate 2–4 focused entries");
+  expect(plan.categories.some(item => item.id === "lore" || item.label === "Cross-category Lore")).toBe(false);
+});
+
+test("coverage planning never invents an unaccepted catch-all category to fill the library target", () => {
+  const selection = structuredClone(blueprintSelectionFixture);
+  selection.lorebookRange = { min: 60, ideal: 90, max: 120 };
+  selection.categories = [
+    { ...selection.categories[0], id: "locations", label: "Locations", status: "required", targetRange: { min: 2, ideal: 4, max: 6 } },
+  ];
+  expect(createForgeCoveragePlan(selection).categories.map(item => item.id)).toEqual(["locations"]);
 });
 
 test("omitted Blueprint categories receive no Forge allocation", () => {

@@ -42,7 +42,8 @@ function projectedSchema(key: BundleFiveKey): JsonSchema {
 }
 
 export function hydrateBundleFiveJob(job: ForgeJobV1): BundleFiveJob {
-  return { id: job.id, key: job.destinations[0], categoryId: job.categoryId, categoryLabel: job.categoryLabel, purpose: job.purpose, entryIds: [...job.entryIds], schema: projectedSchema(job.destinations[0]), splitDepth: job.splitDepth };
+  const key=job.destinations[0] as BundleFiveKey;
+  return { id: job.id, key, categoryId: job.categoryId, categoryLabel: job.categoryLabel, purpose: job.purpose, entryIds: [...job.entryIds], schema: projectedSchema(key), splitDepth: job.splitDepth };
 }
 
 export function createBundleFiveJobSpec(job: BundleFiveJob, ordinal: number, context: string, inputFingerprint: string): ForgeJobV1 {

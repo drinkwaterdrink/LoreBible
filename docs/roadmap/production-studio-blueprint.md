@@ -255,6 +255,8 @@ Run this deterministic audit on the canonical Lore Manifest before attached or s
 
 The mobile UI uses summary cards and expandable entry findings rather than a wide table: overall release gate, highest-severity issues, category/token distribution, keyword collision leaders, activation-budget profile and a per-entry inspector with rationale and test cases.
 
+The same canonical manifest powers a Lorebook Viewer/Editor. Content and Engineering modes provide focused prose editing and complete retrieval-setting editing without maintaining separate copies. Every save is a typed revision with stable identity, lock awareness, targeted revalidation and a visible attached/standalone parity consequence.
+
 ## 10. Artifact planning and compilation
 
 Introduce a minimal Artifact IR during export stabilization, then grow it after graph ownership is stable. Use one Canonical Lore Manifest for both full native World Book and embedded Character Book projections. Markdown and human briefs are projections too, with explicit spoiler/audience settings.

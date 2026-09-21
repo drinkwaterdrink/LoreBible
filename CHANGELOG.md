@@ -4,6 +4,21 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.67 — 2026-09-21
+
+### Changed
+
+- Forge R2 now schedules accepted Location and Faction inventory as bounded, schema-projected specialist jobs alongside the durable Bundle 5 specialists. Each job owns exact application-assigned entry IDs, validates only its section, and can split an unfinished multi-entry request without changing its assigned scope.
+- The Project Graph specialist ledger now supports multiple logical bundles. Bundle completion, failure, cancellation, aggregate validation, and merge operations are scoped to the active bundle so completed work in another bundle remains untouched.
+- New specialist attempts record the hash of the fully rendered prompt actually sent, while their deterministic job plan retains a separate template/ownership hash. Resumed v0.66 jobs retain their original compiler and exact legacy prompt-hash contract.
+- Forge coverage no longer invents a hidden Cross-category Lore category to satisfy a library-size minimum. An infeasible accepted Blueprint now stops before provider generation with an explicit inventory conflict instead of displacing or padding user-selected categories.
+- Existing v0.66 Bundle 5 ledgers remain resumable. New deterministic plans include Bundle 2 and Bundle 5 jobs; the remaining bundle families stay on the existing validated whole-bundle path until their R2 projections ship.
+- The living roadmap now includes a mobile-safe canonical Lorebook Viewer/Editor and a future conversational Project Steward Agent that proposes typed, reviewable changes without bypassing locks, validation, or publishing evidence gates.
+
+### Validation boundary
+
+- Automated coverage includes deterministic planning, exact location ownership, projected prompt/schema contracts, split ownership, bundle-scoped persistence and merge behavior, and the existing restart/retry tests. Bundles 1, 3, 4, and 6 have not yet moved to R2 specialists. No live provider generation, literary-quality certification, or Lumiverse runtime test was performed for this release.
+
 ## v0.66 — 2026-09-20
 
 ### Changed

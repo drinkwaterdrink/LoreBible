@@ -2,9 +2,13 @@ import type { ForgeJobV1, ForgeSpecialistLedgerV1 } from "../../contracts/projec
 import { canonicalizeJson } from "./canonicalJson";
 
 export class ForgeSpecialistError extends Error {}
-const arrayKeys = new Set(["history", "pressures", "additionalLore"]);
-const keys = new Set(["history", "aesthetic", "naming", "pressures", "additionalLore"]);
-const requiredFields: Record<string, readonly string[]> = { history:["name","event","era","consequence"], pressures:["name","force","scope","clock"], additionalLore:["categoryId","categoryLabel","name","content"] };
+const arrayKeys = new Set(["locations","factions","npcs","relationshipWeb","knowledgeMap","items","secrets","history", "pressures", "additionalLore"]);
+const keys = new Set([...arrayKeys,"aesthetic","naming"]);
+const requiredFields: Record<string, readonly string[]> = {
+  locations:["name","function","mood","whatsWrong"],factions:["name","publicFace","trueAgenda","independentWant","stanceTowardUser"],
+  npcs:["name","role","wants","body","voice","notDefault","holds","connection","castTier","independentActivity"],relationshipWeb:["source","target","bond","pressure","relation"],knowledgeMap:["truth","knows","suspects","surfacesWhen"],
+  items:["name","whatItDoes","costOrLimit","unfiredGun"],secrets:["name","truth","whoKeepsIt","howKept","discoveryTrigger","whatItChanges"],history:["name","event","era","consequence"], pressures:["name","force","scope","clock"], additionalLore:["categoryId","categoryLabel","name","content"]
+};
 const requiredSingletonFields: Record<string, readonly string[]> = { aesthetic:["colors","sounds","smells","weather","visualMotifs","fashion","touchstones","permanence"], naming:["linguisticBase","commonNames","eliteNames","placeNamePattern","permanence"] };
 const clone = (ledger: ForgeSpecialistLedgerV1) => structuredClone(ledger);
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -15,7 +19,7 @@ const find = (ledger: ForgeSpecialistLedgerV1, id: string) => {
 };
 
 export function validateForgeSpecialistJob(job: ForgeJobV1, inputFingerprint: string): void {
-  if (job.version !== 1 || job.bundleIndex !== 4 || job.kind !== "bundle5_section" || job.destinations.length !== 1 || !keys.has(job.destinations[0]) ||
+  if (job.version !== 1 || !Number.isSafeInteger(job.bundleIndex) || job.bundleIndex < 1 || job.bundleIndex > 4 || !["category_entries","bundle5_section"].includes(job.kind) || job.destinations.length !== 1 || !keys.has(job.destinations[0]) ||
     !job.id || !job.schemaId || job.schemaVersion !== 1 || !job.promptHash || job.inputFingerprint !== inputFingerprint ||
     !Number.isSafeInteger(job.ordinal) || job.ordinal < 0 || !Number.isSafeInteger(job.splitDepth) || job.splitDepth < 0 || job.splitDepth > 2 ||
     !Number.isSafeInteger(job.estimatedOutputTokens) || job.estimatedOutputTokens < 0 || !Array.isArray(job.entryIds) || !Array.isArray(job.dependencies) ||
@@ -42,7 +46,7 @@ export function createSpecialistLedger(input: { planHash: string; inputFingerpri
 
 export function beginSpecialistJob(ledger: ForgeSpecialistLedgerV1, input: { jobId: string; attemptId: string; provider: string; modelId: string; promptHash: string; startedAt: string }): ForgeSpecialistLedgerV1 {
   const next = clone(ledger); const item = find(next, input.jobId);
-  if (!["pending", "failed", "cancelled"].includes(item.status) || !input.attemptId || item.attempts.some(attempt => attempt.id === input.attemptId) || input.promptHash !== item.job.promptHash ||
+  if (!["pending", "failed", "cancelled"].includes(item.status) || !input.attemptId || item.attempts.some(attempt => attempt.id === input.attemptId) || !input.promptHash.startsWith("sha256:") || (item.job.kind==="bundle5_section"&&input.promptHash !== item.job.promptHash) ||
     item.job.dependencies.some(id => find(next, id).status !== "complete")) throw new ForgeSpecialistError("Forge specialist job is not ready for this attempt.");
   item.status = "active";
   item.attempts.push({ id: input.attemptId, status: "active", provider: input.provider, modelId: input.modelId, promptHash: input.promptHash, startedAt: input.startedAt });
@@ -106,9 +110,10 @@ export function replaceSpecialistJob(ledger: ForgeSpecialistLedgerV1, input: { j
   return next;
 }
 
-export function mergeSpecialistJobs(ledger: ForgeSpecialistLedgerV1): Record<string, unknown> {
+export function mergeSpecialistJobs(ledger: ForgeSpecialistLedgerV1, bundleIndex?: number): Record<string, unknown> {
   const merged: Record<string, unknown> = {};
   for (const item of ledger.jobs) {
+    if (bundleIndex !== undefined && item.job.bundleIndex !== bundleIndex) continue;
     if (item.status === "superseded") continue;
     if (item.status !== "complete" || !item.sections) throw new ForgeSpecialistError("Forge specialist bundle has unfinished jobs.");
     const key = item.job.destinations[0];

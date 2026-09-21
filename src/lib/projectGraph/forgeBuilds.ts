@@ -71,7 +71,7 @@ export function completeForgeBatch(build: ForgeBuildRecordV1, input: { bundleInd
   const next = clone(build); const batch = batchAt(next, input.bundleIndex);
   const attempt = batch.attempts.find((item) => item.id === input.attemptId);
   if (batch.status !== "active" || !attempt || attempt.status !== "active") throw new ForgeBuildError("Only the active Forge attempt can complete its bundle.", "invalid_transition");
-  if (input.bundleIndex === 4 && next.specialistLedger && canonicalizeJson(mergeSpecialistJobs(next.specialistLedger)) !== canonicalizeJson(input.sections)) throw new ForgeBuildError("Bundle 5 must match its completed specialist jobs.", "invalid_sections");
+  if (next.specialistLedger?.jobs.some(item=>item.job.bundleIndex===input.bundleIndex) && canonicalizeJson(mergeSpecialistJobs(next.specialistLedger,input.bundleIndex)) !== canonicalizeJson(input.sections)) throw new ForgeBuildError(`Bundle ${input.bundleIndex+1} must match its completed specialist jobs.`, "invalid_sections");
   for (const key of batch.expectedKeys) if (!Object.hasOwn(input.sections, key)) throw new ForgeBuildError(`Forge bundle is missing ${key}.`, "invalid_sections");
   const extra = Object.keys(input.sections).filter((key) => !batch.expectedKeys.includes(key));
   if (extra.length) throw new ForgeBuildError(`Forge bundle contains unexpected section ${extra[0]}.`, "invalid_sections");
@@ -114,7 +114,7 @@ export function completeForgeRange(build: ForgeBuildRecordV1, input: { startBund
 export function failForgeBatch(build: ForgeBuildRecordV1, input: { bundleIndex: number; attemptId: string; code: string; message: string; failedAt: string }): ForgeBuildRecordV1 {
   const next = clone(build); const batch = batchAt(next, input.bundleIndex); const attempt = batch.attempts.find((item) => item.id === input.attemptId);
   if (batch.status !== "active" || !attempt || attempt.status !== "active") throw new ForgeBuildError("Only the active Forge attempt can fail its bundle.", "invalid_transition");
-  if(input.bundleIndex===4&&next.specialistLedger){for(const job of next.specialistLedger.jobs.filter(item=>item.status==="active")){const active=job.attempts.at(-1);if(active)next.specialistLedger=stopSpecialistJob(next.specialistLedger,{jobId:job.job.id,attemptId:active.id,status:"failed",failureCode:input.code,stoppedAt:input.failedAt});}}
+  if(next.specialistLedger){for(const job of next.specialistLedger.jobs.filter(item=>item.status==="active"&&item.job.bundleIndex===input.bundleIndex)){const active=job.attempts.at(-1);if(active)next.specialistLedger=stopSpecialistJob(next.specialistLedger,{jobId:job.job.id,attemptId:active.id,status:"failed",failureCode:input.code,stoppedAt:input.failedAt});}}
   attempt.status = "failed"; attempt.finishedAt = input.failedAt; attempt.diagnostic = safeDiagnostic(input.code);
   batch.status = "failed"; next.status = "failed"; next.updatedAt = input.failedAt; return next;
 }
@@ -122,7 +122,7 @@ export function failForgeBatch(build: ForgeBuildRecordV1, input: { bundleIndex: 
 export function cancelForgeBatch(build: ForgeBuildRecordV1, input: { bundleIndex: number; attemptId: string; cancelledAt: string }): ForgeBuildRecordV1 {
   const next = clone(build); const batch = batchAt(next, input.bundleIndex); const attempt = batch.attempts.find((item) => item.id === input.attemptId);
   if (batch.status !== "active" || !attempt || attempt.status !== "active") throw new ForgeBuildError("Only the active Forge attempt can be cancelled.", "invalid_transition");
-  if(input.bundleIndex===4&&next.specialistLedger){for(const job of next.specialistLedger.jobs.filter(item=>item.status==="active")){const active=job.attempts.at(-1);if(active)next.specialistLedger=stopSpecialistJob(next.specialistLedger,{jobId:job.job.id,attemptId:active.id,status:"cancelled",stoppedAt:input.cancelledAt});}}
+  if(next.specialistLedger){for(const job of next.specialistLedger.jobs.filter(item=>item.status==="active"&&item.job.bundleIndex===input.bundleIndex)){const active=job.attempts.at(-1);if(active)next.specialistLedger=stopSpecialistJob(next.specialistLedger,{jobId:job.job.id,attemptId:active.id,status:"cancelled",stoppedAt:input.cancelledAt});}}
   attempt.status = "cancelled"; attempt.finishedAt = input.cancelledAt; batch.status = "cancelled"; next.status = "cancelled"; next.updatedAt = input.cancelledAt; return next;
 }
 

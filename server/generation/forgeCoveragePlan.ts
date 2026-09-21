@@ -18,8 +18,6 @@ export function forgeDestinationForCategory(categoryId:string):ForgeLoreDestinat
 
 export function createForgeCoveragePlan(selection:BlueprintSelectionV1):ForgeCoveragePlan{
   const categories=selection.categories.map(category=>({id:category.id,label:category.label,purpose:category.purpose,destination:forgeDestinationForCategory(category.id),range:{...(category.id==="principal_cast"?selection.principalCastRange:category.id==="roster_cast"?selection.rosterCastRange:category.targetRange)},detail:category.detail,required:category.status==="required",forbidden:category.status==="omitted"||category.targetRange.max===0}));
-  const plannedMinimum=categories.filter(category=>!category.forbidden).reduce((sum,category)=>sum+category.range.min,0);const remainder=Math.max(0,selection.lorebookRange.min-plannedMinimum);
-  if(remainder)categories.push({id:"lore",label:"Cross-category Lore",purpose:"Useful focused concepts not owned by another accepted category.",destination:"additionalLore",range:{min:remainder,ideal:Math.max(remainder,selection.lorebookRange.ideal-plannedMinimum),max:Math.max(remainder,selection.lorebookRange.max-plannedMinimum)},detail:"rich",required:true,forbidden:false});
   return {total:{...selection.lorebookRange},categories};
 }
 

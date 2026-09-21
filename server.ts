@@ -24,7 +24,7 @@ import { parseModelSelection, type GenerationProvenance, type ModelSelection } f
 import { FORGE_BUNDLE_DEFINITIONS } from "./server/generation/forgeSchemas.js";
 import { prepareForgeCandidate } from "./server/generation/forgeCandidate.js";
 import { runForgeAttempts } from "./server/generation/forgeAttemptRunner.js";
-import { planBundleFiveJobs, validateBundleFiveJob, compileBundleFiveJobPrompt, splitBundleFiveJob, BundleFivePlanningError, createBundleFiveLedgerPlan, createBundleFiveJobSpec, hydrateBundleFiveJob } from "./server/generation/forgeBundleFiveJobs.js";
+import { createForgeSpecialistPlan, hydrateForgeSpecialistJob, compileForgeSpecialistJobPrompt, validateForgeSpecialistJob, splitForgeSpecialistJob, createForgeReplacementSpec, canUseForgeSpecialistsForBatch, hashForgeSpecialistPrompt, ForgeSpecialistPlanningError } from "./server/generation/forgeSpecialistPlan.js";
 import { mergeSpecialistJobs } from "./src/lib/projectGraph/forgeSpecialistLedger.js";
 import { compileForgePrompt } from "./server/generation/prompts/compileForgePrompt.js";
 import { normalizeForgeSchema } from "./server/generation/schemaContract.js";
@@ -1470,6 +1470,8 @@ app.post("/api/forge", async (req, res) => {
     updatedAt: new Date().toISOString(),
     ...resumePlan.resumeSections,
   };
+  let forgeSpecialistPlan:ReturnType<typeof createForgeSpecialistPlan>|null=null;
+  if(acceptedBlueprintSelection&&durableForge){try{forgeSpecialistPlan=createForgeSpecialistPlan(acceptedBlueprintSelection,resumePlan.resumeSections,"",durableForge.inputFingerprint);}catch(error){sendEvent("error",{code:"FORGE_INVENTORY_CONFLICT",message:error instanceof Error?error.message:"Blueprint inventory could not be scheduled."});return;}}
 
   // Specific, strongly-typed Entry Schemas so Gemini generates full prose fields instead of empty objects {}
   const bundles = FORGE_BUNDLE_DEFINITIONS;
@@ -1507,31 +1509,34 @@ app.post("/api/forge", async (req, res) => {
           durableProvenance={provider:metadata?.provider??"environment_gemini",modelId:modelSelection?.modelId??ENV_GEMINI_MODEL??"gemini-environment",route:modelSelection?"openai_compatible":"legacy_environment"};
           durableAttempt=await forgeProjectCoordinator.begin(durableForge,{bundleIndex:i,...durableProvenance});
         }
-        if (i === 4 && coveragePlan) {
-          const plannedJobs = planBundleFiveJobs(coveragePlan, doc);
-          let specialistLedger = durableAttempt ? await forgeProjectCoordinator.ensureJobs(durableAttempt, createBundleFiveLedgerPlan(plannedJobs, context, durableAttempt.inputFingerprint)) : null;
-          const jobs = specialistLedger ? specialistLedger.jobs.filter(item => item.status !== "superseded").map(item => hydrateBundleFiveJob(item.job)) : plannedJobs;
-          const combined: Record<string, unknown> = { history: [], aesthetic: null, naming: null, pressures: [], additionalLore: [] };
+        const plannedSpecialists=canUseForgeSpecialistsForBatch(generationBatch.startBundleIndex,generationBatch.completedBundleCount)?forgeSpecialistPlan?.jobs.filter(job=>job.bundleIndex===i)??[]:[];
+        if (plannedSpecialists.length && durableAttempt) {
+          const persistedLedger=(durableForge?.graph.builds.find(item=>item.id===durableAttempt!.buildId) as {specialistLedger?:unknown}|undefined)?.specialistLedger;
+          let specialistLedger = persistedLedger
+            ? persistedLedger as Awaited<ReturnType<typeof forgeProjectCoordinator.ensureJobs>>
+            : await forgeProjectCoordinator.ensureJobs(durableAttempt, forgeSpecialistPlan!);
+          const jobs = specialistLedger.jobs.filter(item => item.job.bundleIndex===i&&item.status !== "superseded").map(item => hydrateForgeSpecialistJob(item.job));
           for (let jobIndex = 0; jobIndex < jobs.length;) {
             const job = jobs[jobIndex];
             const saved = specialistLedger?.jobs.find(item => item.job.id === job.id);
             if (saved?.status === "complete") {
-              session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Reusing saved Bundle 5 specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
+              session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Reusing saved ${bundle.name} specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
               jobIndex++; continue;
             }
-            session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Bundle 5 specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
+            session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `${bundle.name} specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
             let owned: Record<string, unknown>;
-            const startedJob = durableAttempt && saved ? await forgeProjectCoordinator.beginJob(durableAttempt, saved.job, durableProvenance!.provider, durableProvenance!.modelId) : null;
+            const renderedPromptHash=hashForgeSpecialistPrompt(job,context);
+            const startedJob = durableAttempt && saved ? await forgeProjectCoordinator.beginJob(durableAttempt, saved.job, durableProvenance!.provider, durableProvenance!.modelId,renderedPromptHash) : null;
             try { owned = await runForgeAttempts({
               signal: requestLifecycle.signal,
               onEvent: event => session.send({ type: "progress", task: "forge", phase: event.phase === "correction" ? "retrying" : event.phase === "validation" ? "validating" : "forge_bundle", label: `${job.categoryLabel ?? job.key}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum }),
               request: ({ correction, signal }) => {
-                const prompt = compileBundleFiveJobPrompt(job, context, correction);
+                const prompt = compileForgeSpecialistJobPrompt(job, context, correction);
                 let outputMode: "native_schema" | "json_only" | "prompt_contract" | "gemini_sdk_schema" | undefined;
                 return executeGeminiWithRetry<unknown>({
                   ai, systemInstruction: prompt.systemInstruction, userPrompt: prompt.userPrompt,
                   responseSchema: job.schema, structuredOutputPolicy: "single_document",
-                  stageName: `Bundle 5 ${job.categoryLabel ?? job.key}`, sparkText, maxAttempts: 1,
+                  stageName: `${bundle.name} ${job.categoryLabel ?? job.key}`, sparkText, maxAttempts: 1,
                   modelSelection, gateway: modelGateway, signal,
                   onMetadata: provenance => {
                     outputMode = provenance.structuredOutputMode ?? (modelSelection ? undefined : "gemini_sdk_schema");
@@ -1544,24 +1549,24 @@ app.post("/api/forge", async (req, res) => {
                   onProviderActivity: () => session.send({ type: "provider_activity", task: "forge", at: Date.now() }),
                 }).then(value => ({ value, outputMode }));
               },
-              validate: value => validateBundleFiveJob(job, value),
+              validate: value => validateForgeSpecialistJob(job, value),
             }); } catch (error) {
-              const children = error instanceof StructuredOutputTruncatedError ? splitBundleFiveJob(job) : null;
+              const children = error instanceof StructuredOutputTruncatedError ? splitForgeSpecialistJob(job) : null;
               if (!children) throw error;
-              if (durableAttempt && startedJob && saved) {
+              if (startedJob && saved) {
                 const nextOrdinal=Math.max(...specialistLedger!.jobs.map(item=>item.job.ordinal))+1;
-                specialistLedger = await forgeProjectCoordinator.replaceJob(durableAttempt, job.id, startedJob.attemptId, children.map((child, offset) => createBundleFiveJobSpec(child, nextOrdinal + offset, context, durableAttempt.inputFingerprint)));
+                specialistLedger = await forgeProjectCoordinator.replaceJob(durableAttempt, job.id, startedJob.attemptId, children.map((child, offset) => createForgeReplacementSpec(child,saved.job,nextOrdinal+offset,context)));
               }
               jobs.splice(jobIndex, 1, ...children);
               session.send({ type: "progress", task: "forge", phase: "retrying", label: `${job.categoryLabel ?? job.key} reached the model output limit; splitting only this unfinished specialist job.`, completedSteps: i, totalSteps: bundles.length });
               continue;
             }
-            if (durableAttempt && startedJob) specialistLedger = await forgeProjectCoordinator.completeJob(durableAttempt, job.id, startedJob.attemptId, owned);
-            if (Array.isArray(combined[job.key])) (combined[job.key] as unknown[]).push(...(owned[job.key] as unknown[]));
-            else combined[job.key] = owned[job.key];
+            if (startedJob) specialistLedger = await forgeProjectCoordinator.completeJob(durableAttempt, job.id, startedJob.attemptId, owned);
             jobIndex++;
           }
-          candidate = prepareForgeCandidate({ value: specialistLedger ? mergeSpecialistJobs(specialistLedger) : combined, definition, previousDocument: doc, coveragePlan });
+          const merged=mergeSpecialistJobs(specialistLedger,i);
+          for(const key of bundle.keys){const property=bundle.schema.properties?.[key] as {type?:unknown}|undefined;if(!Object.hasOwn(merged,key)&&property?.type==="array")merged[key]=[];}
+          candidate = prepareForgeCandidate({ value: merged, definition, previousDocument: doc, coveragePlan });
         } else candidate = await runForgeAttempts<ReturnType<typeof prepareForgeCandidate>>({
           signal: requestLifecycle.signal,
           onEvent: (event) => session.send({ type: "progress", task: "forge", phase: event.phase === "request" ? "forge_bundle" : event.phase === "validation" ? "validating" : event.phase === "correction" ? "retrying" : "error", label: `${bundle.name}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum, outputMode: event.outputMode, topLevelType: event.topLevelType, issueCount: event.issueCount, elapsedMs: event.elapsedMs }),
@@ -1601,7 +1606,7 @@ app.post("/api/forge", async (req, res) => {
           return;
         }
         const failure = normalizeGenerationFailure(new ModelGatewayError(
-          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", bundleErr instanceof BundleFivePlanningError ? bundleErr.message : safeForgeFailureReason(bundleErr instanceof ModelGatewayError ? bundleErr.code : undefined, bundleErr instanceof StructuredOutputTruncatedError)),
+          formatForgeBundleFailure(i, bundle.name, modelSelection?.modelId || "selected model", bundleErr instanceof ForgeSpecialistPlanningError ? bundleErr.message : safeForgeFailureReason(bundleErr instanceof ModelGatewayError ? bundleErr.code : undefined, bundleErr instanceof StructuredOutputTruncatedError)),
           bundleErr instanceof ModelGatewayError ? bundleErr.code : "INTERNAL_ERROR",
           bundleErr instanceof ModelGatewayError ? bundleErr.status : 502,
           bundleErr instanceof ModelGatewayError ? bundleErr.provider : undefined,

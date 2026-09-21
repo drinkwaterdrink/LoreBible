@@ -106,7 +106,8 @@ export function applyProjectGraphCommand(input:ProjectGraphV1,envelope:ProjectGr
     const index=graph.builds.findIndex(item=>item.id===command.buildId);
     const build=forgeBuild(graph,command.buildId);
     verifyForgeTransition(build,command,revision);
-    if(build.batches[4]?.status!=="active")throw new ProjectGraphCommandError("Bundle 5 must be active for specialist changes.","invalid_command");
+    const activeBundle=build.batches.find(batch=>batch.status==="active")?.index;
+    if(activeBundle===undefined)throw new ProjectGraphCommandError("A Forge bundle must be active for specialist changes.","invalid_command");
     const next=structuredClone(build);
     if(command.type==="forge.jobs.initialize"){
       if(next.specialistLedger)throw new ProjectGraphCommandError("Specialist plan already exists.","invalid_command");
@@ -114,6 +115,8 @@ export function applyProjectGraphCommand(input:ProjectGraphV1,envelope:ProjectGr
     }else{
       const ledger=next.specialistLedger;
       if(!ledger)throw new ProjectGraphCommandError("Specialist plan is missing.","invalid_command");
+      const ownedJob=ledger.jobs.find(item=>item.job.id===command.jobId)?.job;
+      if(!ownedJob||ownedJob.bundleIndex!==activeBundle)throw new ProjectGraphCommandError("Specialist job does not belong to the active Forge bundle.","invalid_command");
       if(command.type==="forge.job.begin")next.specialistLedger=forgeTransition(()=>beginSpecialistJob(ledger,{jobId:command.jobId,attemptId:command.attemptId,provider:command.provider,modelId:command.modelId,promptHash:command.promptHash,startedAt:envelope.issuedAt}));
       else if(command.type==="forge.job.complete"){
         rejectCredentials(command.sections);canonicalizeJson(command.sections);
