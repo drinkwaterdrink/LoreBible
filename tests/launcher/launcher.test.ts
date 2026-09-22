@@ -96,3 +96,16 @@ test("primary launcher resets existing listeners on port 3000 and targets Test-3
   expect(installer).toContain("Lore Bible (Test-3-UI-Overhaul).lnk");
 });
 
+test("Test-3-UI-Overhaul shortcut runs the reset path and specifically targets Test-3-UI-Overhaul branch", async () => {
+  const launcher = await readFile(join(root, "scripts", "Start-LoreBible-Test-3-UI-Overhaul.ps1"), "utf8");
+  const installer = await readFile(join(root, "scripts", "Install-LoreBible-Test-3-UI-Overhaul-Shortcut.ps1"), "utf8");
+
+  expect(launcher).toContain("Test-3-UI-Overhaul");
+  expect(launcher).toContain("Start-LoreBible.ps1");
+  expect(installer).toContain("Start-LoreBible-Test-3-UI-Overhaul.ps1");
+  expect(installer).toContain("Lore Bible Test-3-UI-Overhaul.lnk");
+  expect(installer).toContain("Lore Bible (Test-3-UI-Overhaul).lnk");
+  expect(installer).toContain("Reset");
+});
+
+

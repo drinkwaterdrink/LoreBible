@@ -12,13 +12,12 @@ $shortcut.WorkingDirectory = $appRoot
 $shortcut.Description = "Launch Lore Bible Scenario Studio (Resets and opens latest)"
 $shortcut.Save()
 
-$branchShortcutPath = Join-Path $desktop "Lore Bible (Test-3-UI-Overhaul).lnk"
-$branchShortcut = $shell.CreateShortcut($branchShortcutPath)
-$branchShortcut.TargetPath = (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe")
-$branchShortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`""
-$branchShortcut.WorkingDirectory = $appRoot
-$branchShortcut.Description = "Launch Lore Bible Scenario Studio (Test-3-UI-Overhaul)"
-$branchShortcut.Save()
+# Also ensure the branch-specific shortcuts (Lore Bible Test-3-UI-Overhaul.lnk and Lore Bible (Test-3-UI-Overhaul).lnk) are installed
+$branchInstaller = Join-Path $PSScriptRoot "Install-LoreBible-Test-3-UI-Overhaul-Shortcut.ps1"
+if (Test-Path $branchInstaller) {
+  & $branchInstaller | Out-Null
+}
 
 Write-Output $shortcutPath
+
 

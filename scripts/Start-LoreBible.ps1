@@ -20,19 +20,23 @@ try {
 function Stop-ExistingLoreBible {
   param([int]$Port = 3000)
 
-  # 1. Terminate any process currently listening on port 3000
-  try {
-    $listeners = @(netstat.exe -ano 2>$null | Select-String -Pattern ":$Port\s+.*LISTENING")
-    foreach ($line in $listeners) {
-      $parts = ([string]$line).Trim() -split "\s+"
-      $listenerPid = 0
-      if ([int]::TryParse($parts[-1], [ref]$listenerPid) -and $listenerPid -gt 0 -and $listenerPid -ne $PID) {
-        try {
-          Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
-        } catch {}
+  $candidatePorts = @($Port) + @(3001..3010)
+
+  # 1. Terminate any process currently listening on target port or test candidate ports
+  foreach ($p in $candidatePorts) {
+    try {
+      $listeners = @(netstat.exe -ano 2>$null | Select-String -Pattern ":$p\s+.*LISTENING")
+      foreach ($line in $listeners) {
+        $parts = ([string]$line).Trim() -split "\s+"
+        $listenerPid = 0
+        if ([int]::TryParse($parts[-1], [ref]$listenerPid) -and $listenerPid -gt 0 -and $listenerPid -ne $PID) {
+          try {
+            Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
+          } catch {}
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   # 2. Terminate any bun process running in this repository directory
   try {
@@ -45,6 +49,7 @@ function Stop-ExistingLoreBible {
       }
     }
   } catch {}
+
 
   # 3. Wait up to 3 seconds for port to clear
   $deadline = (Get-Date).AddSeconds(3)
