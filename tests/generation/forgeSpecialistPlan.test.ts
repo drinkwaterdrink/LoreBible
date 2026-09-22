@@ -25,7 +25,7 @@ test("one deterministic plan owns bounded Bundle 2 and Bundle 5 category jobs",(
 test("location specialists validate exact slots and split only their unfinished ownership",()=>{
   const selection=structuredClone(blueprintSelectionFixture);
   selection.categories=[{...selection.categories[0],id:"locations",label:"Locations",purpose:"Playable places",status:"required",detail:"standard",targetRange:{min:2,ideal:2,max:2}}];selection.lorebookRange={min:2,ideal:2,max:2};
-  const spec=createForgeSpecialistPlan(selection,{},"source context","sha256:source").jobs[0];
+  const spec=createForgeSpecialistPlan(selection,{},"source context","sha256:source").jobs.find(job=>job.destinations[0]==="locations")!;
   const job=hydrateForgeSpecialistJob(spec);
   const entry=(id:string)=>({id,fields:{name:"Salt Gate",function:"Checkpoint",mood:"Watchful",whatsWrong:"Two ledgers disagree."},keys:["Salt Gate"],permanence:"P",locked:false});
   expect(()=>validateForgeSpecialistJob(job,{locations:[entry("wrong"),entry(spec.entryIds[1])]})).toThrow("changed or duplicated");
@@ -43,10 +43,11 @@ test("a location specialist receives only its owned schema and slots",()=>{
   selection.categories=[{...selection.categories[0],id:"locations",label:"Locations",purpose:"Playable places",status:"required",detail:"standard",targetRange:{min:1,ideal:1,max:1}}];
   selection.lorebookRange={min:1,ideal:1,max:1};
   const plan=createForgeSpecialistPlan(selection,{},"source context","sha256:source");
-  const job=hydrateForgeSpecialistJob(plan.jobs[0]);
+  const spec=plan.jobs.find(job=>job.destinations[0]==="locations")!;
+  const job=hydrateForgeSpecialistJob(spec);
   const prompt=compileForgeSpecialistJobPrompt(job,"source context",null);
   expect(job.key).toBe("locations");
-  expect(prompt.userPrompt).toContain(plan.jobs[0].entryIds[0]);
+  expect(prompt.userPrompt).toContain(spec.entryIds[0]);
   expect(prompt.userPrompt).toContain('"locations"');
   expect(prompt.userPrompt).not.toContain('"factions"');
   expect(prompt.userPrompt).not.toContain('"history"');

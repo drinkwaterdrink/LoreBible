@@ -13,9 +13,13 @@ import {compileBundleFiveJobPrompt,createBundleFiveJobSpec,splitBundleFiveJob,va
 
 export interface ForgeSpecialistJob {id:string;bundleIndex:number;kind:ForgeJobV1["kind"];key:ForgeJobDestinationV1;categoryId?:string;categoryLabel?:string;purpose?:string;entryIds:string[];schema:JsonSchema;splitDepth:number}
 export class ForgeSpecialistPlanningError extends Error {}
-const ENABLED_BUNDLES=new Set([1,2,3,4]);
-const SINGLETONS:[ForgeJobDestinationV1,number][]=[["conflict",3],["pressureProtocol",3],["aesthetic",4],["naming",4]];
+const ENABLED_BUNDLES=new Set([0,1,2,3,4]);
+const SINGLETONS:[ForgeJobDestinationV1,number][]=[["core",0],["user",0],["worldPhysics",0],["status",0],["conflict",3],["pressureProtocol",3],["aesthetic",4],["naming",4]];
 const MISSIONS:Partial<Record<ForgeJobDestinationV1,string>>={
+  core:"Use core to express the premise's playable situation, scale, tone, and central forces. Summarize without replacing the user's distinctive premise with a stock setting. State operating conditions, not a predetermined plot or ending.",
+  user:"Use user only for the player's explicitly established position and resources. Where an attribute is unspecified, state that it remains player-defined. Never invent durable player backstory, feelings, attraction, or voluntary actions.",
+  worldPhysics:"Use worldPhysics for durable constraints that actually affect decisions. Include the nested rules array with semantic names, plus authorityCheck, powerCeiling, faultLines, and permanence. Do not invent supernatural mechanics if the setting is grounded.",
+  status:"Use status for the initial snapshot only: what is true at the starting moment. Opening facts, current locations, active deadlines, and temporary pressures belong here, not in permanent identity or evergreen lore.",
   locations:"Write playable, concrete locations with a distinct function, mood, and specific pressure or problem. Do not invent people merely to fill a location.",
   factions:"Write autonomous organizations with public face, real agenda, independent activity, and a premise-supported stance toward the player. Do not make every faction revolve around {{user}}.",
   npcs:"Write only the assigned cast tier. Give each person a distinct role, want, embodiment, voice, contradiction, knowledge boundary, social connection, and independent activity. Do not invent player intimacy or make every want involve {{user}}.",
@@ -45,6 +49,7 @@ export function validateForgeSpecialistJob(job:ForgeSpecialistJob,value:unknown)
   const issues=validateSchemaValue(value,job.schema);if(issues.length)throw new ForgeValidationError(`Specialist ${job.id} failed schema validation.`,issues);
   const output=structuredClone(value)as Record<string,unknown>;if(Object.keys(output).length!==1||!Object.hasOwn(output,job.key))throw new ForgeValidationError(`Specialist ${job.id} returned an unowned section.`);
   if(job.entryIds.length){const entries=output[job.key]as Array<Record<string,unknown>>;if(entries.length!==job.entryIds.length)throw new ForgeValidationError(`Specialist ${job.id} returned ${entries.length} of ${job.entryIds.length} assigned entries.`);if(new Set(entries.map(entry=>entry.id)).size!==entries.length||entries.some(entry=>!job.entryIds.includes(String(entry.id))))throw new ForgeValidationError(`Specialist ${job.id} changed or duplicated assigned entry IDs.`);if(job.key==="additionalLore"&&entries.some(entry=>{const fields=entry.fields as Record<string,unknown>;return fields.categoryId!==job.categoryId||fields.categoryLabel!==job.categoryLabel;}))throw new ForgeValidationError(`Specialist ${job.id} changed its assigned category.`);const castTier=job.categoryId==="principal_cast"?"principal":job.categoryId==="roster_cast"?"roster":null;if(job.key==="npcs"&&castTier&&entries.some(entry=>(entry.fields as Record<string,unknown>)?.castTier!==castTier))throw new ForgeValidationError(`Specialist ${job.id} changed its assigned ${castTier} cast tier.`);output[job.key]=sanitizeForgeSectionEntries(job.key,entries);}
+  if(job.key==="worldPhysics"&&output.worldPhysics&&typeof output.worldPhysics==="object"){const wp=output.worldPhysics as Record<string,unknown>;if(Array.isArray(wp.rules))wp.rules=sanitizeForgeSectionEntries("rules",wp.rules);}
   return output;
 }
 export function splitForgeSpecialistJob(job:ForgeSpecialistJob):[ForgeSpecialistJob,ForgeSpecialistJob]|null{if(job.kind==="bundle5_section"){const children=splitBundleFiveJob(job as BundleFiveJob);return children?.map(child=>({...child,bundleIndex:4,kind:"bundle5_section" as const})) as [ForgeSpecialistJob,ForgeSpecialistJob]|null;}if(job.entryIds.length<2||job.splitDepth>=2)return null;const midpoint=Math.ceil(job.entryIds.length/2);const splitDepth=job.splitDepth+1;return[{...job,id:`${job.id}:a`,entryIds:job.entryIds.slice(0,midpoint),splitDepth},{...job,id:`${job.id}:b`,entryIds:job.entryIds.slice(midpoint),splitDepth}];}
@@ -69,9 +74,25 @@ export function createForgeSpecialistPlan(selection:BlueprintSelectionV1,complet
   if(allocation.ok===false)throw new ForgeSpecialistPlanningError(`Blueprint inventory is not feasible: ${allocation.issues.map(item=>item.code).join(", ")}.`);
   const draft=partitionForgeInventory(selection,allocation.value);
   const categories=new Map(allocation.value.categories.map(category=>[category.categoryId,category]));
-  const inputs=draft.jobs.filter(job=>ENABLED_BUNDLES.has(job.bundleIndex)).map(job=>{const category=categories.get(job.categoryId)!;return{id:job.id,bundleIndex:job.bundleIndex,key:job.destinations[0] as ForgeJobDestinationV1,categoryId:job.categoryId,categoryLabel:category.categoryLabel,purpose:category.purpose,entryIds:job.entryIds,dependencies:job.dependencies,estimatedOutputTokens:job.estimatedOutputTokens,sourceOrdinal:job.ordinal};});
-  for(const[key,bundleIndex]of SINGLETONS)inputs.push({id:`forge-job:${sha256Hex(`${draft.planHash}\0${key}`).slice(0,24)}`,bundleIndex,key,categoryId:undefined,categoryLabel:undefined,purpose:undefined,entryIds:[],dependencies:[],estimatedOutputTokens:800,sourceOrdinal:0});
-  const priority=(key:ForgeJobDestinationV1)=>key==="npcs"?0:key==="relationshipWeb"||key==="knowledgeMap"?1:0;
+  const inputs=draft.jobs.filter(job=>ENABLED_BUNDLES.has(job.bundleIndex)&&job.bundleIndex!==0).map(job=>{const category=categories.get(job.categoryId)!;return{id:job.id,bundleIndex:job.bundleIndex,key:job.destinations[0] as ForgeJobDestinationV1,categoryId:job.categoryId,categoryLabel:category.categoryLabel,purpose:category.purpose,entryIds:job.entryIds,dependencies:job.dependencies,estimatedOutputTokens:job.estimatedOutputTokens,sourceOrdinal:job.ordinal};});
+  const coreId=`forge-job:${sha256Hex(`${draft.planHash}\0core`).slice(0,24)}`;
+  const userId=`forge-job:${sha256Hex(`${draft.planHash}\0user`).slice(0,24)}`;
+  const physicsId=`forge-job:${sha256Hex(`${draft.planHash}\0worldPhysics`).slice(0,24)}`;
+  const statusId=`forge-job:${sha256Hex(`${draft.planHash}\0status`).slice(0,24)}`;
+  for(const[key,bundleIndex]of SINGLETONS){
+    const id=key==="core"?coreId:key==="user"?userId:key==="worldPhysics"?physicsId:key==="status"?statusId:`forge-job:${sha256Hex(`${draft.planHash}\0${key}`).slice(0,24)}`;
+    const dependencies=key==="user"||key==="worldPhysics"?[coreId]:key==="status"?[coreId,userId,physicsId]:[];
+    inputs.push({id,bundleIndex,key,categoryId:undefined,categoryLabel:undefined,purpose:undefined,entryIds:[],dependencies,estimatedOutputTokens:800,sourceOrdinal:0});
+  }
+  const priority=(key:ForgeJobDestinationV1)=>{
+    if(key==="core")return 0;
+    if(key==="user")return 1;
+    if(key==="worldPhysics")return 2;
+    if(key==="status")return 3;
+    if(key==="npcs")return 0;
+    if(key==="relationshipWeb"||key==="knowledgeMap")return 1;
+    return 0;
+  };
   inputs.sort((a,b)=>a.bundleIndex-b.bundleIndex||priority(a.key)-priority(b.key)||a.key.localeCompare(b.key)||a.sourceOrdinal-b.sourceOrdinal||a.id.localeCompare(b.id));
   const jobs=inputs.map((input,ordinal)=>spec({...input,ordinal},inputFingerprint));
   return{planHash:`sha256:${sha256Hex(canonicalizeJson({version:1,draftPlanHash:draft.planHash,jobs}))}`,jobs};

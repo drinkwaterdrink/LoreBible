@@ -3,14 +3,22 @@ import { canonicalizeJson } from "./canonicalJson";
 
 export class ForgeSpecialistError extends Error {}
 const arrayKeys = new Set(["locations","factions","npcs","relationshipWeb","knowledgeMap","items","secrets","history", "pressures", "additionalLore"]);
-const keys = new Set([...arrayKeys,"conflict","pressureProtocol","aesthetic","naming"]);
+const keys = new Set([...arrayKeys,"core","user","worldPhysics","status","conflict","pressureProtocol","aesthetic","naming"]);
 const optionalActivationKeys = new Set(["relationshipWeb","knowledgeMap"]);
 const requiredFields: Record<string, readonly string[]> = {
   locations:["name","function","mood","whatsWrong"],factions:["name","publicFace","trueAgenda","independentWant","stanceTowardUser"],
   npcs:["name","role","wants","body","voice","notDefault","holds","connection","castTier","independentActivity"],relationshipWeb:["source","target","bond","pressure","relation"],knowledgeMap:["truth","knows","suspects","surfacesWhen"],
   items:["name","whatItDoes","costOrLimit","unfiredGun"],secrets:["name","truth","whoKeepsIt","howKept","discoveryTrigger","whatItChanges"],history:["name","event","era","consequence"], pressures:["name","force","scope","clock"], additionalLore:["categoryId","categoryLabel","name","content"]
 };
-const requiredSingletonFields: Record<string, readonly string[]> = { conflict:["central","opposition","stakesBad","stakesAcceptable","clock","moralKnot","theYield","speedBumps","permanence"], aesthetic:["colors","sounds","smells","weather","visualMotifs","fashion","touchstones","permanence"], naming:["linguisticBase","commonNames","eliteNames","placeNamePattern","permanence"] };
+const requiredSingletonFields: Record<string, readonly string[]> = {
+  core:["title","pitch","genreTone","eraScale","theRule","theCost","theSituation","thePressure","theQuestion","permanence"],
+  user:["rolePosition","startsWith","wants","fears","hookPull","hookPush","hookTrap","permanence"],
+  worldPhysics:["rules","authorityCheck","powerCeiling","faultLines","permanence"],
+  status:["content","settings","permanence"],
+  conflict:["central","opposition","stakesBad","stakesAcceptable","clock","moralKnot","theYield","speedBumps","permanence"],
+  aesthetic:["colors","sounds","smells","weather","visualMotifs","fashion","touchstones","permanence"],
+  naming:["linguisticBase","commonNames","eliteNames","placeNamePattern","permanence"],
+};
 const clone = (ledger: ForgeSpecialistLedgerV1) => structuredClone(ledger);
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
 const find = (ledger: ForgeSpecialistLedgerV1, id: string) => {
@@ -20,7 +28,7 @@ const find = (ledger: ForgeSpecialistLedgerV1, id: string) => {
 };
 
 export function validateForgeSpecialistJob(job: ForgeJobV1, inputFingerprint: string): void {
-  if (job.version !== 1 || !Number.isSafeInteger(job.bundleIndex) || job.bundleIndex < 1 || job.bundleIndex > 4 || !["category_entries","bundle5_section"].includes(job.kind) || job.destinations.length !== 1 || !keys.has(job.destinations[0]) ||
+  if (job.version !== 1 || !Number.isSafeInteger(job.bundleIndex) || job.bundleIndex < 0 || job.bundleIndex > 4 || !["category_entries","bundle5_section"].includes(job.kind) || job.destinations.length !== 1 || !keys.has(job.destinations[0]) ||
     !job.id || !job.schemaId || job.schemaVersion !== 1 || !job.promptHash || job.inputFingerprint !== inputFingerprint ||
     !Number.isSafeInteger(job.ordinal) || job.ordinal < 0 || !Number.isSafeInteger(job.splitDepth) || job.splitDepth < 0 || job.splitDepth > 2 ||
     !Number.isSafeInteger(job.estimatedOutputTokens) || job.estimatedOutputTokens < 0 || !Array.isArray(job.entryIds) || !Array.isArray(job.dependencies) ||
@@ -66,7 +74,20 @@ export function validateOwnedSpecialistSections(job: ForgeJobV1, sections: Recor
     }
     if (!record(value)) throw new ForgeSpecialistError("Forge singleton specialist output is invalid.");
     const fields=requiredSingletonFields[key]??[];
-    if(fields.some(field=>!Object.hasOwn(value,field))||key==="conflict"&&(!["central","opposition","stakesBad","stakesAcceptable","clock","moralKnot","theYield","permanence"].every(field=>typeof value[field]==="string")||!Array.isArray(value.speedBumps)||value.speedBumps.some(item=>typeof item!=="string"))||key==="aesthetic"&&(["colors","sounds","smells","visualMotifs","touchstones"].some(field=>!Array.isArray(value[field])))||key==="naming"&&(["commonNames","eliteNames"].some(field=>!Array.isArray(value[field]))))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(fields.some(field=>!Object.hasOwn(value,field)))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(key==="conflict"&&(!["central","opposition","stakesBad","stakesAcceptable","clock","moralKnot","theYield","permanence"].every(field=>typeof value[field]==="string"&&Boolean(String(value[field]).trim()))||!Array.isArray(value.speedBumps)||value.speedBumps.some(item=>typeof item!=="string"||!item.trim())))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(key==="aesthetic"&&(["colors","sounds","smells","visualMotifs","touchstones"].some(field=>!Array.isArray(value[field]))))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(key==="naming"&&(["commonNames","eliteNames"].some(field=>!Array.isArray(value[field]))))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(["core","user","status"].includes(key)&&fields.some(field=>typeof value[field]!=="string"||!String(value[field]).trim()))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(key==="worldPhysics"){
+      if(!Array.isArray(value.rules)||typeof value.authorityCheck!=="string"||!value.authorityCheck.trim()||typeof value.powerCeiling!=="string"||!value.powerCeiling.trim()||!Array.isArray(value.faultLines)||typeof value.permanence!=="string"||!value.permanence.trim())throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+      for(const rule of value.rules){
+        if(!record(rule)||typeof rule.id!=="string"||!record(rule.fields)||typeof rule.permanence!=="string"||typeof rule.locked!=="boolean"||!Array.isArray(rule.keys))throw new ForgeSpecialistError("Forge worldPhysics rule failed its projected schema.");
+        if(["name","rule","profits","pays"].some(f=>typeof (rule.fields as Record<string,unknown>)[f]!=="string"||!String((rule.fields as Record<string,unknown>)[f]).trim()))throw new ForgeSpecialistError("Forge worldPhysics rule fields failed its projected schema.");
+        const semanticName=typeof (rule.fields as Record<string,unknown>).name==="string"?String((rule.fields as Record<string,unknown>).name).trim():"";
+        if(/^(?:(?:world\s+)?rule|entry)\s+\d+$/i.test(semanticName))throw new ForgeSpecialistError("Forge worldPhysics rule needs a descriptive semantic name.");
+      }
+    }
     return;
   }
   if (!Array.isArray(value) || value.length !== job.entryIds.length) throw new ForgeSpecialistError("Forge specialist entry count does not match assigned slots.");
