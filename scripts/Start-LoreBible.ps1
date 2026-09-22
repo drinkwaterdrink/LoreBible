@@ -9,13 +9,18 @@ if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
 }
 
 # Ensure we are on the active UI overhaul branch if git is available
-try {
-  $currentBranch = (git branch --show-current 2>$null).Trim()
-  if ($currentBranch -and $currentBranch -ne "Test-3-UI-Overhaul") {
-    Write-Host "Switching from $currentBranch to Test-3-UI-Overhaul..."
-    git switch Test-3-UI-Overhaul 2>$null
+$oldEap = $ErrorActionPreference
+$ErrorActionPreference = "SilentlyContinue"
+$currentBranch = (git.exe branch --show-current 2>$null)
+if ($currentBranch) {
+  $currentBranch = $currentBranch.Trim()
+  if ($currentBranch -ne "Test-3-UI-Overhaul") {
+    Write-Host "Switching from $currentBranch to Test-3-UI-Overhaul..." -ForegroundColor Cyan
+    git.exe switch Test-3-UI-Overhaul 2>$null
   }
-} catch {}
+}
+$ErrorActionPreference = $oldEap
+
 
 function Stop-ExistingLoreBible {
   param([int]$Port = 3000)
@@ -61,6 +66,7 @@ function Stop-ExistingLoreBible {
 }
 
 # Reset any existing running instance so we always open a fresh, latest build
+Write-Host "Resetting existing Lore Bible instances..." -ForegroundColor Cyan
 Stop-ExistingLoreBible -Port 3000
 
 $healthUri = "http://127.0.0.1:3000/api/health"
@@ -82,6 +88,8 @@ $logRoot = Join-Path $localBase "LoreBible\logs"
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 $stdoutPath = Join-Path $logRoot "launcher.out.log"
 $stderrPath = Join-Path $logRoot "launcher.err.log"
+
+Write-Host "Starting Lore Bible v$expectedVersion background server..." -ForegroundColor Cyan
 Start-Process -FilePath "bun" -ArgumentList @("run", "dev") -WorkingDirectory $appRoot -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 
 $deadline = (Get-Date).AddSeconds(30)
@@ -94,5 +102,8 @@ if (-not $healthy) {
   throw "Lore Bible did not become healthy at v$expectedVersion within 30 seconds. A previous server may still own port 3000; close that process and relaunch. See the local launcher log under %LOCALAPPDATA%\LoreBible\logs."
 }
 
+Write-Host "Lore Bible is healthy. Launching browser at http://localhost:3000..." -ForegroundColor Green
 Start-Process "http://localhost:3000"
+Start-Sleep -Seconds 1
+
 
