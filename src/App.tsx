@@ -24,6 +24,10 @@ import { DivergenceStage } from "./components/DivergenceStage";
 import { PhysicsStage } from "./components/PhysicsStage";
 import { ForgeStage } from "./components/ForgeStage";
 import { RefineStage } from "./components/RefineStage";
+import { AdventureSparkWorkspace } from "./ui/adventure/workspaces/AdventureSparkWorkspace";
+import { AdventureDivergenceWorkspace } from "./ui/adventure/workspaces/AdventureDivergenceWorkspace";
+import { AdventureBlueprintWorkspace } from "./ui/adventure/workspaces/AdventureBlueprintWorkspace";
+import { AdventureMarginPanel } from "./ui/adventure/workspaces/AdventureMarginPanel";
 import { VaultModal } from "./components/VaultModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { ExportModal } from "./components/ExportModal";
@@ -1354,6 +1358,137 @@ export default function App() {
     </>
   );
 
+  const renderAdventureStageContent = () => (
+    <>
+      {currentStage === 1 && (
+        <AdventureSparkWorkspace
+          sparkText={sparkText}
+          onChangeSpark={setSparkText}
+          onProceed={handleProceedToDivergence}
+          isLoading={isLoadingDivergence || isParsingSpark}
+          onAnalyzeMargin={handleAnalyzeSpark}
+          isParsingMargin={isParsingSpark}
+          hasParsedMargin={Boolean(parse && (parse.nonNegotiables.length > 0 || parse.registerWords.length > 0))}
+          onOpenMargin={() => setIsMarginOpen(true)}
+          settings={settings}
+          onUpdateSettings={setSettings}
+          premiseSuggestions={premiseSuggestions}
+          onGeneratePremiseSuggestions={handleGeneratePremises}
+          isGeneratingPremises={isGeneratingPremises}
+          generationActivity={(isParsingSpark ? anchorActivity : divergenceActivity).status !== "idle" ? {
+            ...(isParsingSpark ? anchorActivity : divergenceActivity),
+            task: isParsingSpark ? "anchors" : "divergence",
+            onCancel: isParsingSpark ? handleCancelAnchors : handleCancelDivergence,
+            onClearReasoning: () => isParsingSpark ? setAnchorActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) : setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })),
+            onOpenConnections: () => setIsSettingsOpen(true),
+          } : undefined}
+          parse={parse}
+          onUpdateParse={setParse}
+          canon={canon}
+          onUpdateCanon={setCanon}
+          workingTitle={workingTitle}
+          isSaved={Boolean(savedProjects.some((p) => p.document.id === document?.id))}
+        />
+      )}
+
+      {currentStage === 2 && (
+        <AdventureDivergenceWorkspace
+          takes={takes}
+          selectedTakeId={selectedTakeId}
+          onSelectTake={(take) => setSelectedTakeId(take.id)}
+          onRerollAll={handleRerollDivergence}
+          onPushFurther={handlePushFurther}
+          onRerollSingleTake={handleRerollSingleTake}
+          onCancelSingleTake={handleCancelDivergence}
+          onSteerSingleTake={handleSteerSingleTake}
+          onUpdateTake={handleUpdateTake}
+          onSwitchTakeVersion={handleSwitchTakeVersion}
+          rerollingSingleId={rerollingSingleId}
+          onProceed={handleProceedToPhysics}
+          isLoading={isLoadingDivergence}
+          sparkText={sparkText}
+          divergenceError={divergenceError}
+          onRetry={handleProceedToDivergence}
+          onOpenConnections={() => setIsSettingsOpen(true)}
+          settings={settings}
+          onUpdateSettings={setSettings}
+          generationActivity={divergenceActivity.status !== "idle" ? { ...divergenceActivity, task: "divergence", onCancel: handleCancelDivergence, onClearReasoning: () => setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
+          boardIndex={activeDivergenceBoardIndex}
+          boardCount={divergenceBoards.length || 1}
+          onSwitchBoard={handleSwitchDivergenceBoard}
+          workingTitle={workingTitle}
+          isSaved={Boolean(savedProjects.some((p) => p.document.id === document?.id))}
+        />
+      )}
+
+      {currentStage === 3 && (
+        <AdventureBlueprintWorkspace
+          physics={physics}
+          onChangePhysics={setPhysics}
+          onProceed={() => void handleStartForge(false)}
+          isCanonActive={canon.enabled}
+          chosenTitle={chosenTake?.title || workingTitle}
+          forgeExecutionMode={forgeExecutionMode}
+          onChangeForgeExecutionMode={handleChangeForgeExecutionMode}
+          blueprintSelection={blueprintSelection}
+          blueprintBusy={blueprintBusy}
+          blueprintError={blueprintError}
+          onOpenBlueprint={() => void handleOpenWorkflowBlueprint()}
+          onSaveBlueprint={handleSaveBlueprint}
+          workingTitle={workingTitle}
+          isSaved={Boolean(savedProjects.some((p) => p.document.id === document?.id))}
+        />
+      )}
+
+      {currentStage === 4 && (
+        <ForgeStage
+          buildLogs={buildLogs}
+          streamedSections={streamedSections}
+          isForging={isForging}
+          document={document}
+          onProceedToRefine={handleProceedToRefine}
+          workingTitle={workingTitle}
+          forgeError={forgeError}
+          onRetryForge={() => void handleStartForge(true)}
+          hasCheckpoint={Object.keys(streamedSections).length > 0
+            && (forgeActivity.progress?.completedSteps ?? 0) < (forgeActivity.progress?.totalSteps ?? 6)}
+          onContinueForge={() => void handleStartForge(true)}
+          boundedSpecialists={Boolean(blueprintSelection)}
+          generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
+        />
+      )}
+
+      {currentStage === 5 && document && (
+        <RefineStage
+          document={document}
+          settings={settings}
+          onUpdateDocument={(updated) => {
+            setDocument(updated);
+            const existing = savedProjects.find((project) => project.document.id === updated.id);
+            if (existing) {
+              const nextProject = captureSavedProject({
+                document: updated,
+                currentStage: 5,
+                maxUnlockedStage,
+                sparkText,
+                parse,
+                canon,
+                physics,
+                takes,
+                selectedTakeId,
+                settings,
+                provenance,
+              });
+              commitProjectStore(saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, nextProject).projects);
+            }
+          }}
+          onOpenExport={() => setIsExportOpen(true)}
+          onOpenConnections={() => setIsSettingsOpen(true)}
+        />
+      )}
+    </>
+  );
+
   const renderSharedModals = () => (
     <>
       <VaultModal
@@ -1510,7 +1645,7 @@ export default function App() {
           onToggleDark={() => setIsDark(!isDark)}
           telemetry={activeTelemetry}
           marginPanel={
-            <RightMarginPanel
+            <AdventureMarginPanel
               parse={parse}
               onUpdateParse={setParse}
               canon={canon}
@@ -1520,7 +1655,7 @@ export default function App() {
             />
           }
         >
-          {renderActiveStageContent()}
+          {renderAdventureStageContent()}
         </AdventureStudioShell>
 
         {/* Floating / Slide-over Drawer for Margin Panel on screens < xl */}
@@ -1535,7 +1670,7 @@ export default function App() {
               className="relative w-[88vw] max-w-sm h-full max-h-[100dvh] shadow-2xl bg-[var(--vellum-deep)] border-l border-[var(--ink-soft)] flex flex-col overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <RightMarginPanel
+              <AdventureMarginPanel
                 parse={parse}
                 onUpdateParse={setParse}
                 canon={canon}
