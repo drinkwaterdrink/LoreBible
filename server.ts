@@ -25,6 +25,7 @@ import { FORGE_BUNDLE_DEFINITIONS } from "./server/generation/forgeSchemas.js";
 import { prepareForgeCandidate } from "./server/generation/forgeCandidate.js";
 import { runForgeAttempts } from "./server/generation/forgeAttemptRunner.js";
 import { createForgeSpecialistPlan, hydrateForgeSpecialistJob, compileForgeSpecialistJobPrompt, validateForgeSpecialistJob, splitForgeSpecialistJob, createForgeReplacementSpec, canUseForgeSpecialistsForBatch, canUsePersistedForgeSpecialistsForBundle, hashForgeSpecialistPrompt, ForgeSpecialistPlanningError } from "./server/generation/forgeSpecialistPlan.js";
+import { assertSpecialistContextPreflight } from "./server/generation/contextPreflight.js";
 import { mergeSpecialistJobs } from "./src/lib/projectGraph/forgeSpecialistLedger.js";
 import { compileForgePrompt } from "./server/generation/prompts/compileForgePrompt.js";
 import { normalizeForgeSchema } from "./server/generation/schemaContract.js";
@@ -1547,7 +1548,15 @@ app.post("/api/forge", async (req, res) => {
               isPreservedSpecialist: false,
             });
             let owned: Record<string, unknown>;
-            const renderedPromptHash=hashForgeSpecialistPrompt(job,context);
+            const preflight = assertSpecialistContextPreflight({
+              job,
+              baseContext: { sparkText, parse, canon, chosenTake, physics },
+              completedSections: doc,
+            });
+            const specialistContext = forgeBlueprintBrief
+              ? `${preflight.context}\n\n${formatForgeBlueprintBrief(forgeBlueprintBrief)}`
+              : preflight.context;
+            const renderedPromptHash=hashForgeSpecialistPrompt(job,specialistContext);
             const startedJob = durableAttempt && saved ? await forgeProjectCoordinator.beginJob(durableAttempt, saved.job, durableProvenance!.provider, durableProvenance!.modelId,renderedPromptHash) : null;
             try { owned = await runForgeAttempts({
               signal: requestLifecycle.signal,
@@ -1566,7 +1575,7 @@ app.post("/api/forge", async (req, res) => {
                 isPreservedSpecialist: false,
               }),
               request: ({ correction, signal }) => {
-                const prompt = compileForgeSpecialistJobPrompt(job, context, correction);
+                const prompt = compileForgeSpecialistJobPrompt(job, specialistContext, correction);
                 let outputMode: "native_schema" | "json_only" | "prompt_contract" | "gemini_sdk_schema" | undefined;
                 return executeGeminiWithRetry<unknown>({
                   ai, systemInstruction: prompt.systemInstruction, userPrompt: prompt.userPrompt,
@@ -1590,7 +1599,7 @@ app.post("/api/forge", async (req, res) => {
               if (!children) throw error;
               if (startedJob && saved) {
                 const nextOrdinal=Math.max(...specialistLedger!.jobs.map(item=>item.job.ordinal))+1;
-                specialistLedger = await forgeProjectCoordinator.replaceJob(durableAttempt, job.id, startedJob.attemptId, children.map((child, offset) => createForgeReplacementSpec(child,saved.job,nextOrdinal+offset,context)));
+                specialistLedger = await forgeProjectCoordinator.replaceJob(durableAttempt, job.id, startedJob.attemptId, children.map((child, offset) => createForgeReplacementSpec(child,saved.job,nextOrdinal+offset,specialistContext)));
               }
               jobs.splice(jobIndex, 1, ...children);
               session.send({ type: "progress", task: "forge", phase: "retrying", label: `${job.categoryLabel ?? job.key} reached the model output limit; splitting only this unfinished specialist job.`, completedSteps: i, totalSteps: bundles.length });
