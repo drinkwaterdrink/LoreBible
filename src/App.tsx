@@ -62,6 +62,10 @@ import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext"
 import { abortBlueprintRequest, findBlueprintSourceProject, findPreparedGraphForDocument, getBlueprintFailure, shouldClearBlueprintPlan, shouldOpenProjectGraphPanel } from "./lib/blueprint/previewLifecycle";
 import { commitBlueprintStudioDraft, createBlueprintStudioDraft } from "./lib/blueprint/studioLifecycle";
 import { updateBlueprintField, withEverydayLifeDetail } from "./lib/blueprint/selection";
+import { AdventureStudioShell } from "./ui/adventure/AdventureStudioShell";
+import type { UiMode } from "./ui/adventure/types";
+import { getStoredUiMode, setStoredUiMode } from "./ui/adventure/uiMode";
+import { selectActiveGenerationTelemetry } from "./ui/adventure/activityAdapter";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -170,6 +174,12 @@ export default function App() {
   // Wizard state
   const [currentStage, setCurrentStage] = useState<1 | 2 | 3 | 4 | 5>(initialPersistence.active?.currentStage || 1);
   const [maxUnlockedStage, setMaxUnlockedStage] = useState<1 | 2 | 3 | 4 | 5>(initialPersistence.active?.maxUnlockedStage || 1);
+  const [uiMode, setUiMode] = useState<UiMode>(getStoredUiMode);
+
+  const handleSetUiMode = (nextMode: UiMode) => {
+    setUiMode(nextMode);
+    setStoredUiMode(nextMode);
+  };
 
   // Spark state
   const [sparkText, setSparkText] = useState<string>(initialPersistence.fallbackSparkText);
@@ -1178,6 +1188,372 @@ export default function App() {
     }
   };
 
+  const activeTelemetry = selectActiveGenerationTelemetry({
+    forge: forgeActivity.status !== "idle" ? {
+      status: forgeActivity.status,
+      progress: forgeActivity.progress,
+      startedAt: forgeActivity.startedAt,
+      usage: forgeActivity.usage,
+      outputCharacters: forgeActivity.outputCharacters,
+      modelName: settings.modelSelection?.modelId || "Gemini",
+      onCancel: handleCancelForge,
+    } : null,
+    divergence: divergenceActivity.status !== "idle" ? {
+      status: divergenceActivity.status,
+      progress: divergenceActivity.progress,
+      startedAt: divergenceActivity.startedAt,
+      usage: divergenceActivity.usage,
+      outputCharacters: divergenceActivity.outputCharacters,
+      modelName: settings.modelSelection?.modelId || "Gemini",
+      onCancel: handleCancelDivergence,
+    } : null,
+    anchor: anchorActivity.status !== "idle" ? {
+      status: anchorActivity.status,
+      progress: anchorActivity.progress,
+      startedAt: anchorActivity.startedAt,
+      usage: anchorActivity.usage,
+      outputCharacters: anchorActivity.outputCharacters,
+      modelName: settings.modelSelection?.modelId || "Gemini",
+      onCancel: handleCancelAnchors,
+    } : null,
+    premise: premiseActivity.status !== "idle" ? {
+      status: premiseActivity.status,
+      progress: premiseActivity.progress,
+      startedAt: premiseActivity.startedAt,
+      usage: premiseActivity.usage,
+      outputCharacters: premiseActivity.outputCharacters,
+      modelName: settings.modelSelection?.modelId || "Gemini",
+      onCancel: handleCancelPremises,
+    } : null,
+  });
+
+  const renderActiveStageContent = () => (
+    <>
+      {currentStage === 1 && (
+        <SparkStage
+          sparkText={sparkText}
+          onChangeSpark={setSparkText}
+          onProceed={handleProceedToDivergence}
+          isLoading={isLoadingDivergence || isParsingSpark}
+          onAnalyzeMargin={handleAnalyzeSpark}
+          isParsingMargin={isParsingSpark}
+          hasParsedMargin={Boolean(parse && (parse.nonNegotiables.length > 0 || parse.registerWords.length > 0))}
+          onOpenMargin={() => setIsMarginOpen(true)}
+          settings={settings}
+          onUpdateSettings={setSettings}
+          premiseSuggestions={premiseSuggestions}
+          onGeneratePremiseSuggestions={handleGeneratePremises}
+          isGeneratingPremises={isGeneratingPremises}
+          premiseGenerationActivity={premiseActivity.status !== "idle" ? {
+            ...premiseActivity,
+            task: "premises",
+            onCancel: handleCancelPremises,
+            onClearReasoning: () => setPremiseActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })),
+            onOpenConnections: () => setIsSettingsOpen(true),
+          } : undefined}
+          generationActivity={(isParsingSpark ? anchorActivity : divergenceActivity).status !== "idle" ? {
+            ...(isParsingSpark ? anchorActivity : divergenceActivity),
+            task: isParsingSpark ? "anchors" : "divergence",
+            onCancel: isParsingSpark ? handleCancelAnchors : handleCancelDivergence,
+            onClearReasoning: () => isParsingSpark ? setAnchorActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) : setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })),
+            onOpenConnections: () => setIsSettingsOpen(true),
+          } : undefined}
+        />
+      )}
+
+      {currentStage === 2 && (
+        <DivergenceStage
+          takes={takes}
+          selectedTakeId={selectedTakeId}
+          onSelectTake={(take) => setSelectedTakeId(take.id)}
+          onRerollAll={handleRerollDivergence}
+          onPushFurther={handlePushFurther}
+          onRerollSingleTake={handleRerollSingleTake}
+          onCancelSingleTake={handleCancelDivergence}
+          onSteerSingleTake={handleSteerSingleTake}
+          onUpdateTake={handleUpdateTake}
+          onSwitchTakeVersion={handleSwitchTakeVersion}
+          rerollingSingleId={rerollingSingleId}
+          onProceed={handleProceedToPhysics}
+          isLoading={isLoadingDivergence}
+          sparkText={sparkText}
+          divergenceError={divergenceError}
+          onRetry={handleProceedToDivergence}
+          onOpenConnections={() => setIsSettingsOpen(true)}
+          settings={settings}
+          onUpdateSettings={setSettings}
+          generationActivity={divergenceActivity.status !== "idle" ? { ...divergenceActivity, task: "divergence", onCancel: handleCancelDivergence, onClearReasoning: () => setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
+          boardIndex={activeDivergenceBoardIndex}
+          boardCount={divergenceBoards.length || 1}
+          onSwitchBoard={handleSwitchDivergenceBoard}
+        />
+      )}
+
+      {currentStage === 3 && (
+        <PhysicsStage
+          physics={physics}
+          onChangePhysics={setPhysics}
+          onProceed={() => void handleStartForge(false)}
+          isCanonActive={canon.enabled}
+          chosenTitle={chosenTake?.title || workingTitle}
+          forgeExecutionMode={forgeExecutionMode}
+          onChangeForgeExecutionMode={handleChangeForgeExecutionMode}
+          blueprintSelection={blueprintSelection}
+          blueprintBusy={blueprintBusy}
+          blueprintError={blueprintError}
+          onOpenBlueprint={() => void handleOpenWorkflowBlueprint()}
+        />
+      )}
+
+      {currentStage === 4 && (
+        <ForgeStage
+          buildLogs={buildLogs}
+          streamedSections={streamedSections}
+          isForging={isForging}
+          document={document}
+          onProceedToRefine={handleProceedToRefine}
+          workingTitle={workingTitle}
+          forgeError={forgeError}
+          onRetryForge={() => void handleStartForge(true)}
+          hasCheckpoint={Object.keys(streamedSections).length > 0
+            && (forgeActivity.progress?.completedSteps ?? 0) < (forgeActivity.progress?.totalSteps ?? 6)}
+          onContinueForge={() => void handleStartForge(true)}
+          boundedSpecialists={Boolean(blueprintSelection)}
+          generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
+        />
+      )}
+
+      {currentStage === 5 && document && (
+        <RefineStage
+          document={document}
+          settings={settings}
+          onUpdateDocument={(updated) => {
+            setDocument(updated);
+            const existing = savedProjects.find((project) => project.document.id === updated.id);
+            if (existing) {
+              const nextProject = captureSavedProject({
+                document: updated,
+                currentStage: 5,
+                maxUnlockedStage,
+                sparkText,
+                parse,
+                canon,
+                physics,
+                takes,
+                selectedTakeId,
+                settings,
+                provenance,
+              });
+              commitProjectStore(saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, nextProject).projects);
+            }
+          }}
+          onOpenExport={() => setIsExportOpen(true)}
+          onOpenConnections={() => setIsSettingsOpen(true)}
+        />
+      )}
+    </>
+  );
+
+  const renderSharedModals = () => (
+    <>
+      <VaultModal
+        isOpen={isVaultOpen}
+        onClose={() => setIsVaultOpen(false)}
+        savedProjects={savedProjects}
+        onLoadProject={handleLoadProject}
+        onDeleteProject={handleDeleteProject}
+        onDuplicateProject={handleDuplicateProject}
+        onRenameProject={handleRenameProject}
+        currentDocumentId={document?.id}
+        preparedGraphs={preparedGraphs}
+        preparingProjectId={preparingGraphId}
+        onPrepareGraph={handlePrepareGraph}
+        onOpenGraph={handleOpenGraph}
+      />
+
+      {activeGraph && isGraphPanelOpen && (
+        <ProjectGraphPanel
+          graph={activeGraph}
+          preview={graphPreview}
+          blueprintPlan={blueprintPlan}
+          blueprintBusy={blueprintBusy}
+          blueprintError={blueprintError}
+          blueprintReloadRequired={blueprintReloadRequired}
+          onPreviewBlueprint={handlePreviewBlueprint}
+          onReloadBlueprint={handleReloadBlueprint}
+          onOpenBlueprint={() => setIsBlueprintOpen(true)}
+          onClose={() => {
+            closeBlueprint();
+            setIsGraphPanelOpen(false);
+            setActiveGraph(null);
+            setGraphPreview(null);
+          }}
+          onRename={handleRenameGraphEntity}
+          onReload={handleReloadGraph}
+          onCompile={handleCompileGraph}
+        />
+      )}
+
+      {isBlueprintOpen && blueprintPlan && (
+        <BlueprintStudio
+          plan={blueprintPlan}
+          initialSelection={createBlueprintStudioDraft(blueprintPlan, blueprintSelection)}
+          onSave={handleSaveBlueprint}
+          onCancel={closeBlueprint}
+          startGuided={currentStage === 3}
+        />
+      )}
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        selection={settings.modelSelection || null}
+        onSelectionChange={(modelSelection) => setSettings((current) => ({ ...current, modelSelection }))}
+        uiMode={uiMode}
+        onUiModeChange={handleSetUiMode}
+      />
+
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigateStage={(s) => {
+          if (s <= maxUnlockedStage) setCurrentStage(s);
+        }}
+        onOpenVault={() => setIsVaultOpen(true)}
+        onToggleTheme={() => setIsDark(!isDark)}
+        isDark={isDark}
+        onNewScenario={handlePromptNewScenario}
+        onOpenExport={() => setIsExportOpen(true)}
+        hasDocument={!!document}
+      />
+
+      {document && (
+        <ExportModal
+          isOpen={isExportOpen}
+          onClose={() => setIsExportOpen(false)}
+          document={document}
+        />
+      )}
+
+      {/* Onboarding handwritten note overlay */}
+      <OnboardingNote
+        isOpen={isOnboardingOpen}
+        onClose={handleCloseOnboarding}
+      />
+
+      {/* Keyboard shortcuts reference card */}
+      <ShortcutsReferenceCard
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      {/* New Scenario Confirmation Modal */}
+      <NewScenarioModal
+        isOpen={isNewScenarioModalOpen}
+        onClose={() => setIsNewScenarioModalOpen(false)}
+        onSaveAndStartNew={() => handleStartFreshScenario(true)}
+        onDiscardAndStartNew={() => handleStartFreshScenario(false)}
+        currentTitle={workingTitle}
+      />
+
+      {/* Wax Seal Stamp Animation Overlay */}
+      <WaxSealStamp
+        isActive={isWaxStampActive}
+        onComplete={() => setIsWaxStampActive(false)}
+        scenarioTitle={workingTitle}
+      />
+
+      {storageWarning && (
+        <StorageRecoveryNotice
+          message={storageWarning}
+          onDismiss={() => setStorageWarning(null)}
+        />
+      )}
+
+      {/* Tactile Manuscript Toast Notification */}
+      {toastMessage && (
+        <div
+          id="manuscript-toast-badge"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[var(--vellum-raised)] border border-[var(--ink-soft)] px-4 py-2 rounded shadow-xl flex items-center gap-2.5 animate-fade-in select-none"
+        >
+          <div className="w-2 h-2 rounded-full bg-[var(--rubric)] animate-pulse" />
+          <span className="text-xs font-apparatus text-[var(--ink)] tracking-wide">
+            {toastMessage}
+          </span>
+        </div>
+      )}
+    </>
+  );
+
+  if (uiMode === "adventure_journal") {
+    return (
+      <>
+        <AdventureStudioShell
+          currentStage={currentStage}
+          maxUnlockedStage={maxUnlockedStage}
+          onSelectStage={(s) => setCurrentStage(s)}
+          workingTitle={workingTitle}
+          sparkText={sparkText}
+          isSaved={Boolean(savedProjects.some((p) => p.document.id === document?.id))}
+          savedProjects={savedProjects}
+          onSaveScenario={handleSaveCurrentScenario}
+          onNewScenario={handlePromptNewScenario}
+          onOpenVault={() => setIsVaultOpen(true)}
+          onLoadSavedProject={handleLoadProject}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenShortcuts={() => setIsShortcutsOpen(true)}
+          onToggleMargin={() => setIsMarginOpen(!isMarginOpen)}
+          isMarginOpen={isMarginOpen}
+          marginBadgeCount={parse?.nonNegotiables?.length || 0}
+          isDark={isDark}
+          onToggleDark={() => setIsDark(!isDark)}
+          telemetry={activeTelemetry}
+          marginPanel={
+            <RightMarginPanel
+              parse={parse}
+              onUpdateParse={setParse}
+              canon={canon}
+              onUpdateCanon={setCanon}
+              currentStage={currentStage}
+              onClose={() => setIsMarginOpen(false)}
+            />
+          }
+        >
+          {renderActiveStageContent()}
+        </AdventureStudioShell>
+
+        {/* Floating / Slide-over Drawer for Margin Panel on screens < xl */}
+        {isMarginOpen && (
+          <div
+            id="margin-drawer-backdrop"
+            className="xl:hidden fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-ink-bleed"
+            onClick={() => setIsMarginOpen(false)}
+          >
+            <div
+              id="margin-drawer-sheet"
+              className="relative w-[88vw] max-w-sm h-full max-h-[100dvh] shadow-2xl bg-[var(--vellum-deep)] border-l border-[var(--ink-soft)] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <RightMarginPanel
+                parse={parse}
+                onUpdateParse={setParse}
+                canon={canon}
+                onUpdateCanon={setCanon}
+                currentStage={currentStage}
+                onClose={() => setIsMarginOpen(false)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Shared Root Modals */}
+        {renderSharedModals()}
+      </>
+    );
+  }
+
+  // Classic UI Mode fallback
   return (
     <div className="h-screen h-[100dvh] w-full flex flex-col relative bg-[var(--vellum)] text-[var(--ink)] overflow-hidden">
       {/* Paper texture overlay (fixed SVG grain + laid lines) */}
@@ -1252,6 +1628,7 @@ export default function App() {
             onOpenSettings={() => setIsSettingsOpen(true)}
             onNewScenario={handlePromptNewScenario}
             onSaveScenario={handleSaveCurrentScenario}
+            onSwitchToAdventure={() => handleSetUiMode("adventure_journal")}
           />
         </div>
 
@@ -1325,128 +1702,7 @@ export default function App() {
             </div>
           </div>
 
-          {currentStage === 1 && (
-            <SparkStage
-              sparkText={sparkText}
-              onChangeSpark={setSparkText}
-              onProceed={handleProceedToDivergence}
-              isLoading={isLoadingDivergence || isParsingSpark}
-              onAnalyzeMargin={handleAnalyzeSpark}
-              isParsingMargin={isParsingSpark}
-              hasParsedMargin={Boolean(parse && (parse.nonNegotiables.length > 0 || parse.registerWords.length > 0))}
-              onOpenMargin={() => setIsMarginOpen(true)}
-              settings={settings}
-              onUpdateSettings={setSettings}
-              premiseSuggestions={premiseSuggestions}
-              onGeneratePremiseSuggestions={handleGeneratePremises}
-              isGeneratingPremises={isGeneratingPremises}
-              premiseGenerationActivity={premiseActivity.status !== "idle" ? {
-                ...premiseActivity,
-                task: "premises",
-                onCancel: handleCancelPremises,
-                onClearReasoning: () => setPremiseActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })),
-                onOpenConnections: () => setIsSettingsOpen(true),
-              } : undefined}
-              generationActivity={(isParsingSpark ? anchorActivity : divergenceActivity).status !== "idle" ? {
-                ...(isParsingSpark ? anchorActivity : divergenceActivity),
-                task: isParsingSpark ? "anchors" : "divergence",
-                onCancel: isParsingSpark ? handleCancelAnchors : handleCancelDivergence,
-                onClearReasoning: () => isParsingSpark ? setAnchorActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })) : setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })),
-                onOpenConnections: () => setIsSettingsOpen(true),
-              } : undefined}
-            />
-          )}
-
-          {currentStage === 2 && (
-            <DivergenceStage
-              takes={takes}
-              selectedTakeId={selectedTakeId}
-              onSelectTake={(take) => setSelectedTakeId(take.id)}
-              onRerollAll={handleRerollDivergence}
-              onPushFurther={handlePushFurther}
-              onRerollSingleTake={handleRerollSingleTake}
-              onCancelSingleTake={handleCancelDivergence}
-              onSteerSingleTake={handleSteerSingleTake}
-              onUpdateTake={handleUpdateTake}
-              onSwitchTakeVersion={handleSwitchTakeVersion}
-              rerollingSingleId={rerollingSingleId}
-              onProceed={handleProceedToPhysics}
-              isLoading={isLoadingDivergence}
-              sparkText={sparkText}
-              divergenceError={divergenceError}
-              onRetry={handleProceedToDivergence}
-              onOpenConnections={() => setIsSettingsOpen(true)}
-              settings={settings}
-              onUpdateSettings={setSettings}
-              generationActivity={divergenceActivity.status !== "idle" ? { ...divergenceActivity, task: "divergence", onCancel: handleCancelDivergence, onClearReasoning: () => setDivergenceActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
-              boardIndex={activeDivergenceBoardIndex}
-              boardCount={divergenceBoards.length || 1}
-              onSwitchBoard={handleSwitchDivergenceBoard}
-            />
-          )}
-
-          {currentStage === 3 && (
-            <PhysicsStage
-              physics={physics}
-              onChangePhysics={setPhysics}
-              onProceed={() => void handleStartForge(false)}
-              isCanonActive={canon.enabled}
-              chosenTitle={chosenTake?.title || workingTitle}
-              forgeExecutionMode={forgeExecutionMode}
-              onChangeForgeExecutionMode={handleChangeForgeExecutionMode}
-              blueprintSelection={blueprintSelection}
-              blueprintBusy={blueprintBusy}
-              blueprintError={blueprintError}
-              onOpenBlueprint={() => void handleOpenWorkflowBlueprint()}
-            />
-          )}
-
-          {currentStage === 4 && (
-            <ForgeStage
-              buildLogs={buildLogs}
-              streamedSections={streamedSections}
-              isForging={isForging}
-              document={document}
-              onProceedToRefine={handleProceedToRefine}
-              workingTitle={workingTitle}
-              forgeError={forgeError}
-              onRetryForge={() => void handleStartForge(true)}
-              hasCheckpoint={Object.keys(streamedSections).length > 0
-                && (forgeActivity.progress?.completedSteps ?? 0) < (forgeActivity.progress?.totalSteps ?? 6)}
-              onContinueForge={() => void handleStartForge(true)}
-              boundedSpecialists={Boolean(blueprintSelection)}
-              generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
-            />
-          )}
-
-          {currentStage === 5 && document && (
-            <RefineStage
-              document={document}
-              settings={settings}
-              onUpdateDocument={(updated) => {
-                setDocument(updated);
-                const existing = savedProjects.find((project) => project.document.id === updated.id);
-                if (existing) {
-                  const nextProject = captureSavedProject({
-                    document: updated,
-                    currentStage: 5,
-                    maxUnlockedStage,
-                    sparkText,
-                    parse,
-                    canon,
-                    physics,
-                    takes,
-                    selectedTakeId,
-                    settings,
-                    provenance,
-                  });
-                  commitProjectStore(saveProjectToStore({ schemaVersion: 2, projects: savedProjects }, nextProject).projects);
-                }
-              }}
-              onOpenExport={() => setIsExportOpen(true)}
-              onOpenConnections={() => setIsSettingsOpen(true)}
-            />
-          )}
+          {renderActiveStageContent()}
         </main>
 
         {/* Persistent Docked Right Margin Panel on XL screens */}
@@ -1541,128 +1797,17 @@ export default function App() {
                 handleSaveCurrentScenario();
               }}
               onCloseMobile={() => setIsMobileNavOpen(false)}
+              onSwitchToAdventure={() => {
+                setIsMobileNavOpen(false);
+                handleSetUiMode("adventure_journal");
+              }}
             />
           </div>
         </div>
       )}
 
-      {/* Modals */}
-      <VaultModal
-        isOpen={isVaultOpen}
-        onClose={() => setIsVaultOpen(false)}
-        savedProjects={savedProjects}
-        onLoadProject={handleLoadProject}
-        onDeleteProject={handleDeleteProject}
-        onDuplicateProject={handleDuplicateProject}
-        onRenameProject={handleRenameProject}
-        currentDocumentId={document?.id}
-        preparedGraphs={preparedGraphs}
-        preparingProjectId={preparingGraphId}
-        onPrepareGraph={handlePrepareGraph}
-        onOpenGraph={handleOpenGraph}
-      />
-
-      {activeGraph && isGraphPanelOpen && (
-        <ProjectGraphPanel
-          graph={activeGraph}
-          preview={graphPreview}
-          blueprintPlan={blueprintPlan}
-          blueprintBusy={blueprintBusy}
-          blueprintError={blueprintError}
-          blueprintReloadRequired={blueprintReloadRequired}
-          onPreviewBlueprint={handlePreviewBlueprint}
-          onReloadBlueprint={handleReloadBlueprint}
-          onOpenBlueprint={() => setIsBlueprintOpen(true)}
-          onClose={() => {
-            closeBlueprint();
-            setIsGraphPanelOpen(false);
-            setActiveGraph(null);
-            setGraphPreview(null);
-          }}
-          onRename={handleRenameGraphEntity}
-          onReload={handleReloadGraph}
-          onCompile={handleCompileGraph}
-        />
-      )}
-
-      {isBlueprintOpen && blueprintPlan && <BlueprintStudio plan={blueprintPlan} initialSelection={createBlueprintStudioDraft(blueprintPlan, blueprintSelection)} onSave={handleSaveBlueprint} onCancel={closeBlueprint} startGuided={currentStage === 3} />}
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        selection={settings.modelSelection || null}
-        onSelectionChange={(modelSelection) => setSettings((current) => ({ ...current, modelSelection }))}
-      />
-
-      <CommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        onNavigateStage={(s) => {
-          if (s <= maxUnlockedStage) setCurrentStage(s);
-        }}
-        onOpenVault={() => setIsVaultOpen(true)}
-        onToggleTheme={() => setIsDark(!isDark)}
-        isDark={isDark}
-        onNewScenario={handlePromptNewScenario}
-        onOpenExport={() => setIsExportOpen(true)}
-        hasDocument={!!document}
-      />
-
-      {document && (
-        <ExportModal
-          isOpen={isExportOpen}
-          onClose={() => setIsExportOpen(false)}
-          document={document}
-        />
-      )}
-
-      {/* Onboarding handwritten note overlay */}
-      <OnboardingNote
-        isOpen={isOnboardingOpen}
-        onClose={handleCloseOnboarding}
-      />
-
-      {/* Keyboard shortcuts reference card */}
-      <ShortcutsReferenceCard
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-      />
-
-      {/* New Scenario Confirmation Modal */}
-      <NewScenarioModal
-        isOpen={isNewScenarioModalOpen}
-        onClose={() => setIsNewScenarioModalOpen(false)}
-        onSaveAndStartNew={() => handleStartFreshScenario(true)}
-        onDiscardAndStartNew={() => handleStartFreshScenario(false)}
-        currentTitle={workingTitle}
-      />
-
-      {/* Wax Seal Stamp Animation Overlay */}
-      <WaxSealStamp
-        isActive={isWaxStampActive}
-        onComplete={() => setIsWaxStampActive(false)}
-        scenarioTitle={workingTitle}
-      />
-
-      {storageWarning && (
-        <StorageRecoveryNotice
-          message={storageWarning}
-          onDismiss={() => setStorageWarning(null)}
-        />
-      )}
-
-      {/* Tactile Manuscript Toast Notification */}
-      {toastMessage && (
-        <div
-          id="manuscript-toast-badge"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[var(--vellum-raised)] border border-[var(--ink-soft)] px-4 py-2 rounded shadow-xl flex items-center gap-2.5 animate-fade-in select-none"
-        >
-          <div className="w-2 h-2 rounded-full bg-[var(--rubric)] animate-pulse" />
-          <span className="text-xs font-apparatus text-[var(--ink)] tracking-wide">
-            {toastMessage}
-          </span>
-        </div>
-      )}
+      {/* Shared Root Modals */}
+      {renderSharedModals()}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./ui/adventure/tokens.css";
 
 :root {
   --vellum: #F4EFE4;

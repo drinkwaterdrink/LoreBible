@@ -17,12 +17,15 @@ import {
 } from "../services/connectionsService";
 import { filterAndSortModels, readFavoriteModelIds, toggleFavoriteModel, type ModelSort } from "../lib/modelPresentation";
 import { formatConnectionDiagnostics, runtimeCompatibilityMessage, type RuntimeInfo } from "../lib/runtimeDiagnostics";
+import type { UiMode } from "../ui/adventure/types";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   selection: ModelSelection | null;
   onSelectionChange: (selection: ModelSelection | null) => void;
+  uiMode?: UiMode;
+  onUiModeChange?: (mode: UiMode) => void;
 }
 
 const EMPTY_DRAFT = { id: undefined as string | undefined, name: "", provider: "openrouter" as ProviderId, apiKey: "", customModelIds: [] as string[] };
@@ -55,7 +58,7 @@ export function createModelListResetKey(profileId: string | undefined, sort: Mod
   return [profileId || "", sort, search.trim().toLowerCase(), subscriptionOnly ? "subscription" : "all", ...modelIds].join("\u001f");
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, selection, onSelectionChange }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, selection, onSelectionChange, uiMode, onUiModeChange }) => {
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
   const [models, setModels] = useState<AvailableModel[]>([]);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
@@ -256,6 +259,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
         </header>
         <div data-connections-scroll-root="true" className="flex flex-1 min-h-0 flex-col overflow-hidden md:grid md:grid-cols-[220px_1fr]">
           <aside className="shrink-0 max-h-[24dvh] overflow-y-auto border-b md:max-h-none md:border-b-0 md:border-r border-[var(--ink-soft)] p-3 md:min-h-0">
+            {onUiModeChange && (
+              <div className="mb-3 p-2.5 rounded bg-[var(--vellum-raised)] border border-[var(--ink-soft)] select-none">
+                <div className="text-[10px] font-mono-ui uppercase tracking-wider text-[var(--graphite)] mb-1.5 font-semibold">
+                  Interface Style
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-[11px] font-apparatus">
+                  <button
+                    type="button"
+                    onClick={() => onUiModeChange("adventure_journal")}
+                    className={`px-2 py-1.5 rounded text-center transition-all cursor-pointer ${
+                      uiMode === "adventure_journal"
+                        ? "bg-[var(--gold)] text-white font-semibold shadow-xs"
+                        : "bg-transparent text-[var(--graphite)] hover:text-[var(--ink)] hover:bg-[var(--vellum)]"
+                    }`}
+                  >
+                    Adventure
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onUiModeChange("classic")}
+                    className={`px-2 py-1.5 rounded text-center transition-all cursor-pointer ${
+                      uiMode === "classic"
+                        ? "bg-[var(--gold)] text-white font-semibold shadow-xs"
+                        : "bg-transparent text-[var(--graphite)] hover:text-[var(--ink)] hover:bg-[var(--vellum)]"
+                    }`}
+                  >
+                    Classic
+                  </button>
+                </div>
+              </div>
+            )}
             <button type="button" onClick={() => { setDraft(EMPTY_DRAFT); setModels([]); setStatus(null); }} className="w-full btn-secondary text-[11px] py-2 mb-3 flex items-center justify-center gap-1"><Plus size={13} /> New connection</button>
             <div className="space-y-1">
               {profiles.map((profile) => <button key={profile.id} type="button" onClick={() => chooseProfile(profile)} className={`w-full text-left px-3 py-2 border-l-2 ${profile.id === draft.id ? "border-[var(--rubric)] bg-[var(--vellum-raised)]" : "border-transparent hover:bg-[var(--vellum-raised)]"}`}><span className="block text-xs font-apparatus truncate">{profile.name}</span><span className="block text-[10px] text-[var(--graphite)] uppercase tracking-wider">{profile.provider} · {profile.hasSecret ? "key set" : "no key"}</span></button>)}

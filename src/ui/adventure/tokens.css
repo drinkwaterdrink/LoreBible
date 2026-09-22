@@ -1,0 +1,161 @@
+/* ==========================================================================
+   LoreBible — Adventure Journal Design System (Scoped Tokens)
+   Visual North Star: Dark navy shell + warm cream parchment writing surfaces
+   ========================================================================== */
+
+.adventure-journal-theme {
+  /* Application Shell Surfaces (Midnight Slate / Dark Navy) */
+  --surface-app: oklch(0.14 0.025 255);
+  --surface-sidebar: oklch(0.11 0.02 255);
+  --surface-panel: oklch(0.18 0.03 255);
+  --surface-panel-raised: oklch(0.22 0.035 255);
+  --surface-overlay: rgba(7, 10, 16, 0.82);
+
+  /* Manuscript Writing Surfaces (Warm Parchment / Cream) */
+  --surface-paper: oklch(0.94 0.02 85);
+  --surface-paper-raised: oklch(0.97 0.015 85);
+  --surface-paper-sunken: oklch(0.91 0.025 85);
+
+  /* Typography & Foreground (Dark Shell Context) */
+  --text-primary: oklch(0.93 0.015 85);
+  --text-secondary: oklch(0.72 0.02 255);
+  --text-muted: oklch(0.55 0.02 255);
+
+  /* Typography & Foreground (Paper Manuscript Context) */
+  --text-paper: oklch(0.20 0.02 60);
+  --text-paper-muted: oklch(0.44 0.03 60);
+
+  /* Aesthetic Accents */
+  --accent-gold: oklch(0.76 0.13 85);
+  --accent-gold-hover: oklch(0.82 0.14 85);
+  --accent-ember: oklch(0.60 0.18 35);
+  --accent-sage: oklch(0.68 0.11 145);
+  --accent-mana: oklch(0.65 0.16 295);
+
+  /* Status Indicators */
+  --status-success: oklch(0.70 0.13 145);
+  --status-warning: oklch(0.75 0.14 85);
+  --status-danger: oklch(0.58 0.19 28);
+  --status-active: oklch(0.76 0.13 85);
+
+  /* Borders & Dividers */
+  --border-soft: oklch(0.25 0.02 255);
+  --border-strong: oklch(0.35 0.03 255);
+  --border-gold: oklch(0.70 0.12 85);
+  --border-paper: oklch(0.86 0.03 80);
+
+  /* Shadows */
+  --shadow-parchment: 0 4px 20px -2px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.35);
+
+  /* Base Application Container */
+  background-color: var(--surface-app);
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Pixel / 8-Bit Accent Language
+   ========================================================================== */
+
+.adventure-journal-theme .pixel-border-gold {
+  border: 1px solid var(--border-gold);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.25);
+}
+
+.adventure-journal-theme .pixel-border-soft {
+  border: 1px solid var(--border-soft);
+}
+
+.adventure-journal-theme .pixel-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  display: inline-block;
+}
+
+.adventure-journal-theme .pixel-pip-active {
+  background-color: var(--accent-gold);
+  box-shadow: 0 0 6px var(--accent-gold);
+}
+
+.adventure-journal-theme .pixel-pip-completed {
+  background-color: var(--accent-sage);
+}
+
+.adventure-journal-theme .pixel-pip-locked {
+  background-color: var(--border-strong);
+}
+
+.adventure-journal-theme .pixel-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+
+.adventure-journal-theme .pixel-notch {
+  clip-path: polygon(
+    0 4px,
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px)
+  );
+}
+
+/* Manuscript Parchment Surface Container */
+.adventure-journal-theme .parchment-sheet {
+  background-color: var(--surface-paper);
+  color: var(--text-paper);
+  border: 1px solid var(--border-paper);
+  box-shadow: var(--shadow-parchment);
+}
+
+/* High readability for long-form manuscript content */
+.adventure-journal-theme .parchment-sheet h1,
+.adventure-journal-theme .parchment-sheet h2,
+.adventure-journal-theme .parchment-sheet h3,
+.adventure-journal-theme .parchment-sheet .font-serif-title {
+  font-family: var(--font-manuscript, "Spectral", Georgia, serif);
+  letter-spacing: -0.01em;
+}
+
+.adventure-journal-theme .parchment-sheet p,
+.adventure-journal-theme .parchment-sheet .prose {
+  font-family: var(--font-manuscript, "Spectral", Georgia, serif);
+  line-height: 1.65;
+}
+
+/* ==========================================================================
+   Minimal Print Rule: Authority stays in base print stylesheet
+   ========================================================================== */
+
+@media print {
+  .adventure-journal-theme {
+    background: white !important;
+    color: black !important;
+  }
+
+  .adventure-journal-theme .adventure-rail,
+  .adventure-journal-theme .adventure-nav,
+  .adventure-journal-theme .adventure-header,
+  .adventure-journal-theme .adventure-shelf,
+  .adventure-journal-theme .adventure-sheet,
+  .adventure-journal-theme .adventure-actions {
+    display: none !important;
+  }
+
+  .adventure-journal-theme .parchment-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+  }
+}

@@ -19,6 +19,7 @@ interface SidebarRailProps {
   onNewScenario?: () => void;
   onSaveScenario?: () => void;
   onCloseMobile?: () => void;
+  onSwitchToAdventure?: () => void;
 }
 
 const STAGES: { num: 1 | 2 | 3 | 4 | 5; name: string; subtitle: string }[] = [
@@ -46,6 +47,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
   onNewScenario,
   onSaveScenario,
   onCloseMobile,
+  onSwitchToAdventure,
 }) => {
   return (
     <aside
@@ -231,6 +233,21 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
               <span className="text-[11px] uppercase tracking-wider font-apparatus">Guide Note</span>
             </span>
             <span className="text-[10px] font-hand text-[var(--ink-blue)]">read</span>
+          </button>
+        )}
+
+        {onSwitchToAdventure && (
+          <button
+            type="button"
+            onClick={onSwitchToAdventure}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-[var(--gold)] hover:text-[var(--ink)] hover:bg-[var(--vellum-raised)] transition-colors rounded-[2px] font-semibold"
+            title="Switch to Adventure Journal UI"
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles size={13} className="text-[var(--gold)]" />
+              <span className="text-[11px] uppercase tracking-wider font-apparatus">Adventure UI</span>
+            </span>
+            <span className="font-mono-ui text-[9px] px-1 bg-[var(--gold)]/10 rounded">new</span>
           </button>
         )}
 
