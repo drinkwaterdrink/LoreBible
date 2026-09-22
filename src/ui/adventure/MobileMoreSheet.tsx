@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import type { NavDestination } from "./types";
 import { Hammer, Clock, Archive, Settings, HelpCircle, X } from "lucide-react";
+import { motion } from "motion/react";
 
 interface MobileMoreSheetProps {
   isOpen: boolean;
@@ -38,7 +39,11 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs md:hidden"
       onClick={onClose}
     >
-      <div
+      <motion.div
+        initial={{ y: "100%", opacity: 0.5 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: "100%", opacity: 0 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
         className="w-full bg-[var(--surface-panel)] border-t border-[var(--border-strong)] rounded-t-xl p-4 space-y-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -152,7 +157,7 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
             </button>
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

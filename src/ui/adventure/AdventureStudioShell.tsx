@@ -103,18 +103,9 @@ export const AdventureStudioShell: React.FC<AdventureStudioShellProps> = ({
           workingTitle={workingTitle}
           isSaved={isSaved}
           onOpenCommandPalette={onOpenCommandPalette}
-          onToggleMargin={onToggleMargin}
+          onToggleMargin={activeNav === "write" ? onToggleMargin : undefined}
           isMarginOpen={isMarginOpen}
           marginBadgeCount={marginBadgeCount}
-          contextAction={
-            activeNav === "home"
-              ? {
-                  label: "Continue Writing",
-                  icon: Feather,
-                  onClick: () => setActiveNav("write"),
-                }
-              : undefined
-          }
         />
 
         {/* Mobile Workflow Strip (visible on mobile in Write view) */}
@@ -131,46 +122,38 @@ export const AdventureStudioShell: React.FC<AdventureStudioShellProps> = ({
 
         {/* 3. Main Outlet Viewport with contextual Margin Panel */}
         <div className="flex-1 min-w-0 min-h-0 flex flex-row overflow-hidden relative">
-          <main
-            id="adventure-workspace-outlet"
-            className="flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden pb-16 md:pb-0 relative scroll-smooth"
-          >
-            {activeNav === "home" && (
-              <ProjectHome
-                workingTitle={workingTitle}
-                sparkText={sparkText}
-                currentStage={currentStage}
-                maxUnlockedStage={maxUnlockedStage}
-                savedProjects={savedProjects}
-                generationTelemetry={telemetry}
-                onContinueWriting={() => setActiveNav("write")}
-                onSelectStage={(stage) => {
-                  onSelectStage(stage);
-                  setActiveNav("write");
-                }}
-                onNewScenario={onNewScenario}
-                onOpenVault={onOpenVault}
-                onLoadSavedProject={onLoadSavedProject}
-              />
-            )}
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+            <main
+              id="adventure-workspace-outlet"
+              className="flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden pb-24 md:pb-8 relative scroll-smooth"
+            >
+              {activeNav === "home" && (
+                <ProjectHome
+                  workingTitle={workingTitle}
+                  sparkText={sparkText}
+                  currentStage={currentStage}
+                  maxUnlockedStage={maxUnlockedStage}
+                  savedProjects={savedProjects}
+                  generationTelemetry={telemetry}
+                  isSaved={isSaved}
+                  onContinueWriting={() => setActiveNav("write")}
+                  onSelectStage={(stage) => {
+                    onSelectStage(stage);
+                    setActiveNav("write");
+                  }}
+                  onNewScenario={onNewScenario}
+                  onOpenVault={onOpenVault}
+                  onOpenCommandPalette={onOpenCommandPalette}
+                  onOpenSettings={onOpenSettings}
+                  onLoadSavedProject={onLoadSavedProject}
+                />
+              )}
 
-            {activeNav === "write" && (
-              <div className="w-full h-full flex flex-col justify-between">
-                <div className="flex-1 min-h-0 px-3 sm:px-6 md:px-10 py-4 max-w-6xl mx-auto w-full">
+              {activeNav === "write" && (
+                <div className="px-3 sm:px-6 md:px-8 py-4 max-w-5xl mx-auto w-full">
                   {children}
                 </div>
-
-                {/* Desktop Bottom Journey Strip */}
-                <div className="hidden md:block shrink-0">
-                  <JourneyStrip
-                    currentStage={currentStage}
-                    maxUnlockedStage={maxUnlockedStage}
-                    onSelectStage={onSelectStage}
-                    variant="desktop-bar"
-                  />
-                </div>
-              </div>
-            )}
+              )}
 
             {activeNav === "world" && (
               <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-4">
@@ -217,13 +200,26 @@ export const AdventureStudioShell: React.FC<AdventureStudioShellProps> = ({
             )}
           </main>
 
-          {/* Persistent Docked Margin Panel on XL screens */}
-          {isMarginOpen && marginPanel && (
-            <div className="hidden xl:flex w-72 h-full shrink-0 border-l border-[var(--border-soft)] bg-[var(--surface-panel)] flex-col overflow-hidden z-20">
-              {marginPanel}
+          {/* Desktop Bottom Journey Strip: firmly docked at the base of the center workspace */}
+          {activeNav === "write" && (
+            <div className="hidden md:block shrink-0 border-t border-[var(--border-soft)] z-30 bg-[var(--surface-app)]">
+              <JourneyStrip
+                currentStage={currentStage}
+                maxUnlockedStage={maxUnlockedStage}
+                onSelectStage={onSelectStage}
+                variant="desktop-bar"
+              />
             </div>
           )}
         </div>
+
+        {/* Persistent Docked Margin Panel on XL screens */}
+        {isMarginOpen && marginPanel && (
+          <div className="hidden xl:flex w-72 h-full shrink-0 border-l border-[var(--border-soft)] bg-[var(--surface-panel)] flex-col overflow-hidden z-20">
+            {marginPanel}
+          </div>
+        )}
+      </div>
 
         {/* Global Activity Shelf (Desktop Dock Strip & Mobile Floating Pill) */}
         <ActivityShelf telemetry={telemetry} />

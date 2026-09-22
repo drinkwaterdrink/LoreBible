@@ -48,9 +48,123 @@
   --shadow-parchment: 0 4px 20px -2px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.35);
 
+  /* Bridge legacy variables for stage components & apparatus inside Adventure theme */
+  --vellum: var(--surface-app);
+  --vellum-deep: var(--surface-sidebar);
+  --vellum-raised: var(--surface-panel);
+  --ink: var(--text-primary);
+  --ink-soft: var(--border-soft);
+  --graphite: var(--text-secondary);
+  --gold: var(--accent-gold);
+  --rubric: var(--accent-gold);
+  --sage: var(--accent-sage);
+
   /* Base Application Container */
   background-color: var(--surface-app);
   color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Scoped Button & Control Styles for Adventure Journal Theme
+   ========================================================================== */
+
+.adventure-journal-theme .btn-primary,
+.adventure-journal-theme .btn-rubric {
+  background: var(--accent-gold);
+  color: var(--surface-sidebar);
+  font-family: var(--font-apparatus, sans-serif);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 8px 16px;
+  border-radius: 3px;
+  border: 1px solid var(--accent-gold);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: all 0.15s ease;
+}
+
+.adventure-journal-theme .btn-primary:hover,
+.adventure-journal-theme .btn-rubric:hover {
+  background: var(--accent-gold-hover);
+  border-color: var(--accent-gold-hover);
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.35);
+}
+
+.adventure-journal-theme .btn-secondary {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-family: var(--font-apparatus, sans-serif);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 7px 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.adventure-journal-theme .btn-secondary:hover {
+  background: var(--surface-panel-raised);
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}
+
+.adventure-journal-theme .btn-tertiary {
+  color: var(--accent-gold);
+}
+
+.adventure-journal-theme .input-paper {
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-soft);
+  color: var(--text-primary);
+  border-radius: 3px;
+}
+
+.adventure-journal-theme .input-paper:focus {
+  border-color: var(--accent-gold);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent-gold);
+}
+
+/* Manuscript Textarea & Writing Surface inside Adventure Theme */
+.adventure-journal-theme #spark-textarea {
+  font-family: var(--font-manuscript, "Spectral", Georgia, serif) !important;
+  color: var(--text-primary) !important;
+  font-size: 1.05rem !important;
+  line-height: 1.6 !important;
+}
+
+.adventure-journal-theme #spark-textarea::placeholder {
+  font-family: var(--font-manuscript, "Spectral", Georgia, serif) !important;
+  font-style: italic !important;
+  font-size: 0.95rem !important;
+  color: var(--text-secondary) !important;
+  opacity: 0.55 !important;
+}
+
+.adventure-journal-theme .font-hand {
+  font-family: var(--font-manuscript, "Spectral", Georgia, serif);
+}
+
+.adventure-journal-theme [data-spark-action-footer="true"],
+.adventure-journal-theme [data-divergence-action-footer="true"] {
+  background-color: var(--surface-app) !important;
+  border-color: var(--border-soft) !important;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  .adventure-journal-theme *,
+  .adventure-journal-theme *::before,
+  .adventure-journal-theme *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* ==========================================================================
