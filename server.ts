@@ -1520,16 +1520,51 @@ app.post("/api/forge", async (req, res) => {
             const job = jobs[jobIndex];
             const saved = specialistLedger?.jobs.find(item => item.job.id === job.id);
             if (saved?.status === "complete") {
-              session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `Reusing saved ${bundle.name} specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
+              session.send({
+                type: "progress",
+                task: "forge",
+                phase: "forge_bundle",
+                label: `Reusing saved ${bundle.name} specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`,
+                completedSteps: i,
+                totalSteps: bundles.length,
+                specialistPhase: job.categoryLabel ?? job.key,
+                specialistIndex: jobIndex + 1,
+                specialistTotal: jobs.length,
+                isPreservedSpecialist: true,
+              });
               jobIndex++; continue;
             }
-            session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `${bundle.name} specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
+            session.send({
+              type: "progress",
+              task: "forge",
+              phase: "forge_bundle",
+              label: `${bundle.name} specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`,
+              completedSteps: i,
+              totalSteps: bundles.length,
+              specialistPhase: job.categoryLabel ?? job.key,
+              specialistIndex: jobIndex + 1,
+              specialistTotal: jobs.length,
+              isPreservedSpecialist: false,
+            });
             let owned: Record<string, unknown>;
             const renderedPromptHash=hashForgeSpecialistPrompt(job,context);
             const startedJob = durableAttempt && saved ? await forgeProjectCoordinator.beginJob(durableAttempt, saved.job, durableProvenance!.provider, durableProvenance!.modelId,renderedPromptHash) : null;
             try { owned = await runForgeAttempts({
               signal: requestLifecycle.signal,
-              onEvent: event => session.send({ type: "progress", task: "forge", phase: event.phase === "correction" ? "retrying" : event.phase === "validation" ? "validating" : "forge_bundle", label: `${job.categoryLabel ?? job.key}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum }),
+              onEvent: event => session.send({
+                type: "progress",
+                task: "forge",
+                phase: event.phase === "correction" ? "retrying" : event.phase === "validation" ? "validating" : "forge_bundle",
+                label: `${job.categoryLabel ?? job.key}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`,
+                completedSteps: i,
+                totalSteps: bundles.length,
+                attempt: event.attempt,
+                maxAttempts: event.maximum,
+                specialistPhase: job.categoryLabel ?? job.key,
+                specialistIndex: jobIndex + 1,
+                specialistTotal: jobs.length,
+                isPreservedSpecialist: false,
+              }),
               request: ({ correction, signal }) => {
                 const prompt = compileForgeSpecialistJobPrompt(job, context, correction);
                 let outputMode: "native_schema" | "json_only" | "prompt_contract" | "gemini_sdk_schema" | undefined;

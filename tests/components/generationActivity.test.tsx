@@ -96,3 +96,60 @@ test("generation errors explain preservation and expose Connections", () => {
   expect(html).toContain("Your existing work was preserved.");
   expect(html).toContain("Connections");
 });
+
+test("generation activity displays plain language specialist phase, counts, and preserved work status", () => {
+  const html = renderToString(<GenerationActivity
+    task="forge"
+    progress={{
+      task: "forge",
+      phase: "forge_bundle",
+      label: "Bundle 6 specialist 2 of 5: opening",
+      completedSteps: 5,
+      totalSteps: 6,
+      specialistPhase: "opening",
+      specialistIndex: 2,
+      specialistTotal: 5,
+      isPreservedSpecialist: false,
+    }}
+    startedAt={Date.now() - 1500}
+    usage={{}}
+    reasoning=""
+    reasoningTruncated={false}
+    status="active"
+    onCancel={() => undefined}
+    onClearReasoning={() => undefined}
+  />);
+  expect(html).toContain("Active Specialist Phase:");
+  expect(html).toContain("Playable Opening Scene");
+  expect(html).toContain("Job 2 of 5");
+  expect(html).toContain("1 completed");
+  expect(html).toContain("3 remaining");
+  expect(html).toContain("Pending Work");
+  expect(html).toContain("min-h-[44px]");
+});
+
+test("generation activity parses legacy string label for specialist progress and recognizes preserved work", () => {
+  const html = renderToString(<GenerationActivity
+    task="forge"
+    progress={{
+      task: "forge",
+      phase: "forge_bundle",
+      label: "Reusing saved Bundle 1 specialist 3 of 4: worldPhysics",
+      completedSteps: 0,
+      totalSteps: 6,
+    }}
+    startedAt={Date.now() - 1000}
+    usage={{}}
+    reasoning=""
+    reasoningTruncated={false}
+    status="active"
+    onCancel={() => undefined}
+    onClearReasoning={() => undefined}
+  />);
+  expect(html).toContain("Active Specialist Phase:");
+  expect(html).toContain("World Physics &amp; Limits");
+  expect(html).toContain("Job 3 of 4");
+  expect(html).toContain("2 completed");
+  expect(html).toContain("1 remaining");
+  expect(html).toContain("Preserved Work");
+});
