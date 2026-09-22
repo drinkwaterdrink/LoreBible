@@ -24,7 +24,7 @@ import { parseModelSelection, type GenerationProvenance, type ModelSelection } f
 import { FORGE_BUNDLE_DEFINITIONS } from "./server/generation/forgeSchemas.js";
 import { prepareForgeCandidate } from "./server/generation/forgeCandidate.js";
 import { runForgeAttempts } from "./server/generation/forgeAttemptRunner.js";
-import { createForgeSpecialistPlan, hydrateForgeSpecialistJob, compileForgeSpecialistJobPrompt, validateForgeSpecialistJob, splitForgeSpecialistJob, createForgeReplacementSpec, canUseForgeSpecialistsForBatch, hashForgeSpecialistPrompt, ForgeSpecialistPlanningError } from "./server/generation/forgeSpecialistPlan.js";
+import { createForgeSpecialistPlan, hydrateForgeSpecialistJob, compileForgeSpecialistJobPrompt, validateForgeSpecialistJob, splitForgeSpecialistJob, createForgeReplacementSpec, canUseForgeSpecialistsForBatch, canUsePersistedForgeSpecialistsForBundle, hashForgeSpecialistPrompt, ForgeSpecialistPlanningError } from "./server/generation/forgeSpecialistPlan.js";
 import { mergeSpecialistJobs } from "./src/lib/projectGraph/forgeSpecialistLedger.js";
 import { compileForgePrompt } from "./server/generation/prompts/compileForgePrompt.js";
 import { normalizeForgeSchema } from "./server/generation/schemaContract.js";
@@ -1509,11 +1509,11 @@ app.post("/api/forge", async (req, res) => {
           durableProvenance={provider:metadata?.provider??"environment_gemini",modelId:modelSelection?.modelId??ENV_GEMINI_MODEL??"gemini-environment",route:modelSelection?"openai_compatible":"legacy_environment"};
           durableAttempt=await forgeProjectCoordinator.begin(durableForge,{bundleIndex:i,...durableProvenance});
         }
-        const plannedSpecialists=canUseForgeSpecialistsForBatch(generationBatch.startBundleIndex,generationBatch.completedBundleCount)?forgeSpecialistPlan?.jobs.filter(job=>job.bundleIndex===i)??[]:[];
+        const persistedLedger=(durableForge?.graph.builds.find(item=>item.id===durableAttempt?.buildId) as {specialistLedger?:Awaited<ReturnType<typeof forgeProjectCoordinator.ensureJobs>>}|undefined)?.specialistLedger??null;
+        const plannedSpecialists=canUseForgeSpecialistsForBatch(generationBatch.startBundleIndex,generationBatch.completedBundleCount)&&canUsePersistedForgeSpecialistsForBundle(persistedLedger,i)?forgeSpecialistPlan?.jobs.filter(job=>job.bundleIndex===i)??[]:[];
         if (plannedSpecialists.length && durableAttempt) {
-          const persistedLedger=(durableForge?.graph.builds.find(item=>item.id===durableAttempt!.buildId) as {specialistLedger?:unknown}|undefined)?.specialistLedger;
           let specialistLedger = persistedLedger
-            ? persistedLedger as Awaited<ReturnType<typeof forgeProjectCoordinator.ensureJobs>>
+            ? persistedLedger
             : await forgeProjectCoordinator.ensureJobs(durableAttempt, forgeSpecialistPlan!);
           const jobs = specialistLedger.jobs.filter(item => item.job.bundleIndex===i&&item.status !== "superseded").map(item => hydrateForgeSpecialistJob(item.job));
           for (let jobIndex = 0; jobIndex < jobs.length;) {

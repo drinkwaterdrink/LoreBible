@@ -3,13 +3,14 @@ import { canonicalizeJson } from "./canonicalJson";
 
 export class ForgeSpecialistError extends Error {}
 const arrayKeys = new Set(["locations","factions","npcs","relationshipWeb","knowledgeMap","items","secrets","history", "pressures", "additionalLore"]);
-const keys = new Set([...arrayKeys,"aesthetic","naming"]);
+const keys = new Set([...arrayKeys,"conflict","pressureProtocol","aesthetic","naming"]);
+const optionalActivationKeys = new Set(["relationshipWeb","knowledgeMap"]);
 const requiredFields: Record<string, readonly string[]> = {
   locations:["name","function","mood","whatsWrong"],factions:["name","publicFace","trueAgenda","independentWant","stanceTowardUser"],
   npcs:["name","role","wants","body","voice","notDefault","holds","connection","castTier","independentActivity"],relationshipWeb:["source","target","bond","pressure","relation"],knowledgeMap:["truth","knows","suspects","surfacesWhen"],
   items:["name","whatItDoes","costOrLimit","unfiredGun"],secrets:["name","truth","whoKeepsIt","howKept","discoveryTrigger","whatItChanges"],history:["name","event","era","consequence"], pressures:["name","force","scope","clock"], additionalLore:["categoryId","categoryLabel","name","content"]
 };
-const requiredSingletonFields: Record<string, readonly string[]> = { aesthetic:["colors","sounds","smells","weather","visualMotifs","fashion","touchstones","permanence"], naming:["linguisticBase","commonNames","eliteNames","placeNamePattern","permanence"] };
+const requiredSingletonFields: Record<string, readonly string[]> = { conflict:["central","opposition","stakesBad","stakesAcceptable","clock","moralKnot","theYield","speedBumps","permanence"], aesthetic:["colors","sounds","smells","weather","visualMotifs","fashion","touchstones","permanence"], naming:["linguisticBase","commonNames","eliteNames","placeNamePattern","permanence"] };
 const clone = (ledger: ForgeSpecialistLedgerV1) => structuredClone(ledger);
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
 const find = (ledger: ForgeSpecialistLedgerV1, id: string) => {
@@ -26,6 +27,7 @@ export function validateForgeSpecialistJob(job: ForgeJobV1, inputFingerprint: st
     new Set(job.entryIds).size !== job.entryIds.length || job.entryIds.some(id => typeof id !== "string" || !id)) throw new ForgeSpecialistError("Forge specialist job contract is invalid.");
   if (arrayKeys.has(job.destinations[0]) && !job.entryIds.length) throw new ForgeSpecialistError("Array specialist job needs assigned entry slots.");
   if (!arrayKeys.has(job.destinations[0]) && job.entryIds.length) throw new ForgeSpecialistError("Singleton specialist job cannot own entry slots.");
+  if (job.destinations[0] === "npcs" && !["principal_cast","roster_cast"].includes(job.categoryId ?? "")) throw new ForgeSpecialistError("NPC specialist job needs an owned cast tier category.");
   if (job.destinations[0] === "additionalLore" && (!job.categoryId || !job.categoryLabel)) throw new ForgeSpecialistError("Supplemental specialist job needs exact category identity.");
 }
 
@@ -58,9 +60,13 @@ export function validateOwnedSpecialistSections(job: ForgeJobV1, sections: Recor
   if (!record(sections) || Object.keys(sections).length !== 1 || !Object.hasOwn(sections, key)) throw new ForgeSpecialistError("Forge specialist returned unowned sections.");
   const value = sections[key];
   if (!arrayKeys.has(key)) {
+    if (key === "pressureProtocol") {
+      if (typeof value !== "string") throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+      return;
+    }
     if (!record(value)) throw new ForgeSpecialistError("Forge singleton specialist output is invalid.");
     const fields=requiredSingletonFields[key]??[];
-    if(fields.some(field=>!Object.hasOwn(value,field))||key==="aesthetic"&&(["colors","sounds","smells","visualMotifs","touchstones"].some(field=>!Array.isArray(value[field])))||key==="naming"&&(["commonNames","eliteNames"].some(field=>!Array.isArray(value[field]))))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(fields.some(field=>!Object.hasOwn(value,field))||key==="conflict"&&(!["central","opposition","stakesBad","stakesAcceptable","clock","moralKnot","theYield","permanence"].every(field=>typeof value[field]==="string")||!Array.isArray(value.speedBumps)||value.speedBumps.some(item=>typeof item!=="string"))||key==="aesthetic"&&(["colors","sounds","smells","visualMotifs","touchstones"].some(field=>!Array.isArray(value[field])))||key==="naming"&&(["commonNames","eliteNames"].some(field=>!Array.isArray(value[field]))))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
     return;
   }
   if (!Array.isArray(value) || value.length !== job.entryIds.length) throw new ForgeSpecialistError("Forge specialist entry count does not match assigned slots.");
@@ -69,7 +75,10 @@ export function validateOwnedSpecialistSections(job: ForgeJobV1, sections: Recor
   for (const entry of value) {
     if (!record(entry) || typeof entry.id !== "string" || !assigned.has(entry.id) || seen.has(entry.id)) throw new ForgeSpecialistError("Forge specialist entry IDs do not match assigned slots.");
     seen.add(entry.id);
-    if(!record(entry.fields)||requiredFields[key].some(field=>typeof entry.fields[field]!=="string"||!entry.fields[field].trim())||!Array.isArray(entry.keys)||!entry.keys.length||entry.keys.some(candidate=>typeof candidate!=="string"||!candidate.trim())||typeof entry.permanence!=="string"||typeof entry.locked!=="boolean")throw new ForgeSpecialistError("Forge specialist entry failed its projected schema.");
+    const activationKeysValid=optionalActivationKeys.has(key)?entry.keys===undefined||Array.isArray(entry.keys)&&entry.keys.every(candidate=>typeof candidate==="string"&&Boolean(candidate.trim())):Array.isArray(entry.keys)&&entry.keys.length>0&&entry.keys.every(candidate=>typeof candidate==="string"&&Boolean(candidate.trim()));
+    if(!record(entry.fields)||requiredFields[key].some(field=>typeof entry.fields[field]!=="string"||!entry.fields[field].trim())||!activationKeysValid||typeof entry.permanence!=="string"||typeof entry.locked!=="boolean")throw new ForgeSpecialistError("Forge specialist entry failed its projected schema.");
+    const expectedCastTier=job.categoryId==="principal_cast"?"principal":job.categoryId==="roster_cast"?"roster":null;
+    if(key==="npcs"&&expectedCastTier&&entry.fields.castTier!==expectedCastTier)throw new ForgeSpecialistError(`Forge specialist cast tier must remain ${expectedCastTier}.`);
     if (key === "additionalLore" && (!record(entry.fields) || entry.fields.categoryId !== job.categoryId || entry.fields.categoryLabel !== job.categoryLabel)) throw new ForgeSpecialistError("Forge specialist category identity changed.");
   }
 }
@@ -107,6 +116,7 @@ export function replaceSpecialistJob(ledger: ForgeSpecialistLedgerV1, input: { j
   item.status = "superseded"; item.replacementJobIds = input.children.map(child => child.id);
   attempt.status = "failed"; attempt.failureCode = "INVALID_STRUCTURED_OUTPUT"; attempt.endedAt = input.replacedAt;
   next.jobs.splice(index + 1, 0, ...input.children.map(job => ({ job: structuredClone(job), status: "pending" as const, attempts: [] })));
+  for(const dependent of next.jobs)if(dependent.job.dependencies.includes(item.job.id))dependent.job.dependencies=dependent.job.dependencies.flatMap(id=>id===item.job.id?item.replacementJobIds!:id);
   return next;
 }
 

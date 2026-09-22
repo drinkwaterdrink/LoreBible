@@ -31,6 +31,17 @@ test("a stale job completion after replacement is rejected and children cover ex
   expect(() => replaceSpecialistJob(ledger, { jobId: "job/child-a", attemptId: "attempt/other", children: [{ ...parent, id: "bad", entryIds: ["entry/one", "entry/two"], splitDepth: 2 }], replacedAt: at })).toThrow();
 });
 
+test("splitting a prerequisite rewires pending dependents to both replacement children",()=>{
+  const parent=job("job/cast",["entry/one","entry/two"]);
+  const dependent={...job("job/relationship",["entry/relationship"]),ordinal:3,dependencies:[parent.id]};
+  let ledger=createSpecialistLedger({planHash:"sha256:plan",inputFingerprint:source,jobs:[parent,dependent]});
+  ledger=beginSpecialistJob(ledger,{jobId:parent.id,attemptId:"attempt/cast",provider:"gemini",modelId:"flash",promptHash:parent.promptHash,startedAt:at});
+  const children=[{...parent,id:"job/cast-a",ordinal:1,entryIds:["entry/one"],splitDepth:1},{...parent,id:"job/cast-b",ordinal:2,entryIds:["entry/two"],splitDepth:1}];
+  ledger=replaceSpecialistJob(ledger,{jobId:parent.id,attemptId:"attempt/cast",children,replacedAt:at});
+  expect(ledger.jobs.find(item=>item.job.id===dependent.id)?.job.dependencies).toEqual(children.map(child=>child.id));
+  expect(()=>beginSpecialistJob(ledger,{jobId:dependent.id,attemptId:"too-early",provider:"gemini",modelId:"flash",promptHash:dependent.promptHash,startedAt:at})).toThrow("not ready");
+});
+
 test("the durable command boundary rejects incomplete lore content and duplicate ordering",()=>{
   const first=job("job/one",["entry/one"]);
   expect(()=>createSpecialistLedger({planHash:"sha256:plan",inputFingerprint:source,jobs:[first,{...job("job/two",["entry/two"]),ordinal:first.ordinal}]})).toThrow("ordinals");
@@ -47,4 +58,26 @@ test("the durable ledger accepts and merges an independently completed location 
   const location={id:"entry/location",fields:{name:"Salt Gate",function:"Checkpoint",mood:"Watchful",whatsWrong:"The guards keep two ledgers."},keys:["Salt Gate"],permanence:"P",locked:false};
   ledger=completeSpecialistJob(ledger,{jobId:locationJob.id,attemptId:"attempt/location",commandId:"complete/location",sections:{locations:[location]},completedAt:at});
   expect(mergeSpecialistJobs(ledger,1)).toEqual({locations:[location]});
+});
+
+test("the durable boundary enforces cast tier ownership",()=>{
+  const npcJob={...job("job/principal",["entry/principal"]),bundleIndex:2,kind:"category_entries",destinations:["npcs"],categoryId:"principal_cast",categoryLabel:"Principal Cast",schemaId:"forge.bundle3.npcs/v1",ordinal:12} as unknown as ForgeJobV1;
+  let ledger=createSpecialistLedger({planHash:"sha256:cast",inputFingerprint:source,jobs:[npcJob]});
+  ledger=beginSpecialistJob(ledger,{jobId:npcJob.id,attemptId:"attempt/principal",provider:"test",modelId:"test",promptHash:"sha256:rendered",startedAt:at});
+  const entry={id:"entry/principal",fields:{name:"Mara",role:"Archivist",wants:"Restore records",body:"Ink-stained hands",voice:"Dry",notDefault:"Collects tickets",holds:"Knows the route",connection:"Harbor staff",castTier:"roster",independentActivity:"Repairs ledgers"},keys:["Mara"],permanence:"P",locked:false};
+  expect(()=>completeSpecialistJob(ledger,{jobId:npcJob.id,attemptId:"attempt/principal",commandId:"complete/principal",sections:{npcs:[entry]},completedAt:at})).toThrow("cast tier");
+});
+
+test("the durable job contract requires an owned NPC cast tier category",()=>{
+  const malformed={...job("job/unowned-cast",["entry/cast"]),bundleIndex:2,kind:"category_entries",destinations:["npcs"],categoryId:"other",categoryLabel:"Other",schemaId:"forge.bundle3.npcs/v1",ordinal:13} as unknown as ForgeJobV1;
+  expect(()=>createSpecialistLedger({planHash:"sha256:cast",inputFingerprint:source,jobs:[malformed]})).toThrow("cast tier category");
+});
+
+test("relationship and knowledge specialists accept schema-optional activation keys",()=>{
+  const relationshipJob={...job("job/relationship",["entry/relationship"]),bundleIndex:2,kind:"category_entries",destinations:["relationshipWeb"],categoryId:"relationships",categoryLabel:"Relationships",schemaId:"forge.bundle3.relationshipWeb/v1",ordinal:14} as unknown as ForgeJobV1;
+  let ledger=createSpecialistLedger({planHash:"sha256:relationship",inputFingerprint:source,jobs:[relationshipJob]});
+  ledger=beginSpecialistJob(ledger,{jobId:relationshipJob.id,attemptId:"attempt/relationship",provider:"test",modelId:"test",promptHash:"sha256:rendered",startedAt:at});
+  const entry={id:"entry/relationship",fields:{source:"Mara",target:"Ivo",bond:"Coworkers",pressure:"A missing ledger",relation:"Mara supervises Ivo"},permanence:"P",locked:false};
+  ledger=completeSpecialistJob(ledger,{jobId:relationshipJob.id,attemptId:"attempt/relationship",commandId:"complete/relationship",sections:{relationshipWeb:[entry]},completedAt:at});
+  expect(mergeSpecialistJobs(ledger,2)).toEqual({relationshipWeb:[entry]});
 });

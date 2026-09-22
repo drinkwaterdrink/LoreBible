@@ -6,6 +6,7 @@ export class ForgeSectionValidationError extends ModelGatewayError {
     super(message, "INVALID_STRUCTURED_OUTPUT", 502);
   }
 }
+const OPTIONAL_ACTIVATION_KEYS = new Set(["relationshipWeb", "knowledgeMap"]);
 
 export const FORGE_REQUIRED_FIELDS: Record<string, readonly string[]> = {
   rules: ["name", "rule", "profits", "pays"],
@@ -32,7 +33,9 @@ export function sanitizeForgeSectionEntries(sectionKey: string, entries: unknown
     const fields = record.fields as Record<string, unknown>;
     const missing = (FORGE_REQUIRED_FIELDS[sectionKey] || []).filter((field) => typeof fields[field] !== "string" || !fields[field].trim());
     const keys = record.keys;
-    const invalidKeys = !Array.isArray(keys) || keys.length === 0 || keys.some(key => typeof key !== "string" || !key.trim());
+    const invalidKeys = OPTIONAL_ACTIVATION_KEYS.has(sectionKey)
+      ? keys !== undefined && (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || !key.trim()))
+      : !Array.isArray(keys) || keys.length === 0 || keys.some(key => typeof key !== "string" || !key.trim());
     if (missing.length > 0 || invalidKeys) {
       const reasons = [...missing, ...(invalidKeys ? ["keys"] : [])];
       const issues: SchemaIssue[] = missing.map(field => ({ path: `/${sectionKey}/${idx}/fields/${field}`, code: "schema", expected: "nonblank string", actual: "missing or blank" }));

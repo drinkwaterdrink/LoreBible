@@ -20,6 +20,17 @@ test("Forge relationship entries keep the required relation field and receive st
   expect(result).toEqual([expect.objectContaining({ id: "relationshipWeb-1", locked: false })]);
 });
 
+test("relationship and knowledge entries may omit independent activation keys", () => {
+  const relationship = sanitizeForgeSectionEntries("relationshipWeb", [{
+    fields: { source:"Mara", target:"Ivo", bond:"Professional respect", pressure:"A deadline tests their trust", relation:"Mara relies on Ivo's discretion" },
+  }]);
+  const knowledge = sanitizeForgeSectionEntries("knowledgeMap", [{
+    fields: { truth:"The ferry ledger was altered", knows:"Mara", suspects:"Ivo", surfacesWhen:"The night totals are compared" },
+  }]);
+  expect(relationship[0].keys).toBeUndefined();
+  expect(knowledge[0].keys).toBeUndefined();
+});
+
 test("Forge validation names the missing relationship field instead of hiding it behind a generic error", () => {
   expect(() => sanitizeForgeSectionEntries("relationshipWeb", [{
     fields: {

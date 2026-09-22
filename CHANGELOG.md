@@ -4,6 +4,20 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.68 — 2026-09-21
+
+### Changed
+
+- Forge R2 now executes principal cast, roster cast, relationship, knowledge, item, secret, conflict, and pressure-protocol work as bounded durable specialist jobs. Together with v0.67, all Blueprint-owned lore-entry sections in Bundles 2–5 now use exact application-assigned slots and survive retry/reload independently.
+- Principal and roster specialists must preserve their accepted cast tier. Relationship and knowledge specialists wait for every assigned cast job, preventing references from being written before their identity source exists.
+- When an oversized prerequisite job splits, pending dependents are deterministically rewired to both replacement children. They cannot run until all replacement cast work has completed.
+- Item prompts require a concrete function, cost or limit, and roleplay opportunity. Secret prompts require keepers, concealment, a viable discovery path, and consequences without public leakage or forced player action.
+- Conflict and pressure-protocol specialists complete Bundle 4 without falling back to a giant response. Relationship and knowledge activation keys remain optional consistently across provider schema, correction validation, and durable persistence.
+
+### Validation boundary
+
+- Automated tests cover Bundle 3 dependency order, cast-tier enforcement, blocked premature dependents, dependency rewiring after output-limit splits, Bundle 4 partition ceilings, and isolated secret prompt ownership. Bundle 1 structural core and Bundle 6 opening/instruction sections remain on the existing validated whole-bundle path. No live provider generation or literary-quality certification was performed for this release.
+
 ## v0.67 — 2026-09-21
 
 ### Changed
