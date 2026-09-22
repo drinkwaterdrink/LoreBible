@@ -4,6 +4,21 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.69 — 2026-09-22
+
+### Changed
+
+- Forge R2 now extends bounded durable specialist execution across Bundle 1 (Core Premise, User Role & Boundaries, World Physics, and Status) and Bundle 6 (Procedural Rolls, Opening Scene, Expansion Notes, Anti-Gravity, and Build Notes). All six Forge bundles now run on bounded, durable specialist jobs with strict single-destination contracts.
+- Bundle 1 specialists enforce strict dependency ordering: `core` (priority 0) -> `user` and `worldPhysics` (priority 1 & 2, dependent on `core`) -> `status` (priority 3, dependent on `core`, `user`, and `worldPhysics`). Player agency is strictly preserved with no invented backstory or involuntary actions. WorldPhysics rules enforce semantic names, authority checks, and power ceilings.
+- Bundle 6 specialists enforce dependency ordering: `proceduralRolls` (priority 0) and `opening` (priority 1) -> `expansionNotes`, `antiGravity`, and `buildNotes` (priority 2, 3, 4, dependent on `opening`). Procedural roll tables are relative authoring data with validated non-negative weights; build notes remain descriptive metadata without fake runtime claims; opening situations establish playable first choices without secret leakage.
+- Forge generation UI now displays the active specialist phase in plain language, reports completed vs remaining specialist jobs for the current bundle, and clearly distinguishes preserved work from pending work in both the generation activity strip and the manuscript stage.
+- Mobile and compact viewports have been hardened: all interactive controls enforce a minimum 44px touch target, safe-area inset bottom padding is preserved, text containers prevent horizontal overflow, and layouts gracefully collapse to single-column on narrow screens.
+- Context preflight now checks prompt sizing, output allowance, and dependencies before generation, including job-specific agency reservations and boundary conditions. If essential context exceeds model or context window limits, execution blocks honestly with actionable diagnostics rather than truncating silently or generating fake summaries.
+
+### Validation boundary
+
+- Automated verification covers all 502 tests across 97 files. New deterministic test suites cover Bundle 1 specialists (`tests/generation/forgeBundleOneSpecialists.test.ts`), Bundle 6 specialists (`tests/generation/forgeBundleSixSpecialists.test.ts`), UI specialist states and touch targets (`tests/components/forgeStage.test.tsx`, `tests/components/generationActivity.test.tsx`), and context preflight with overrun prevention (`tests/generation/contextPreflight.test.ts`). No unverified Lumiverse claims or live provider certifications are made.
+
 ## v0.68 — 2026-09-21
 
 ### Changed
