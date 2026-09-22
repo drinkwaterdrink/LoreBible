@@ -3,7 +3,7 @@ import { canonicalizeJson } from "./canonicalJson";
 
 export class ForgeSpecialistError extends Error {}
 const arrayKeys = new Set(["locations","factions","npcs","relationshipWeb","knowledgeMap","items","secrets","history", "pressures", "additionalLore"]);
-const keys = new Set([...arrayKeys,"core","user","worldPhysics","status","conflict","pressureProtocol","aesthetic","naming"]);
+const keys = new Set([...arrayKeys,"core","user","worldPhysics","status","conflict","pressureProtocol","aesthetic","naming","proceduralRolls","opening","expansionNotes","antiGravity","buildNotes"]);
 const optionalActivationKeys = new Set(["relationshipWeb","knowledgeMap"]);
 const requiredFields: Record<string, readonly string[]> = {
   locations:["name","function","mood","whatsWrong"],factions:["name","publicFace","trueAgenda","independentWant","stanceTowardUser"],
@@ -18,6 +18,10 @@ const requiredSingletonFields: Record<string, readonly string[]> = {
   conflict:["central","opposition","stakesBad","stakesAcceptable","clock","moralKnot","theYield","speedBumps","permanence"],
   aesthetic:["colors","sounds","smells","weather","visualMotifs","fashion","touchstones","permanence"],
   naming:["linguisticBase","commonNames","eliteNames","placeNamePattern","permanence"],
+  opening:["firstLocation","firstNpc","firstChoice","style","firstMessage","permanence"],
+  expansionNotes:["explicit","violence","horror","romance","humor","pacing","playerDeath","contentFlags","allCharactersAdult","permanence"],
+  antiGravity:["temptations","permanence"],
+  buildNotes:["permanenceRouting","orderBands","disabledUntilEarnedList","formatMatch","permanence"],
 };
 const clone = (ledger: ForgeSpecialistLedgerV1) => structuredClone(ledger);
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -28,7 +32,7 @@ const find = (ledger: ForgeSpecialistLedgerV1, id: string) => {
 };
 
 export function validateForgeSpecialistJob(job: ForgeJobV1, inputFingerprint: string): void {
-  if (job.version !== 1 || !Number.isSafeInteger(job.bundleIndex) || job.bundleIndex < 0 || job.bundleIndex > 4 || !["category_entries","bundle5_section"].includes(job.kind) || job.destinations.length !== 1 || !keys.has(job.destinations[0]) ||
+  if (job.version !== 1 || !Number.isSafeInteger(job.bundleIndex) || job.bundleIndex < 0 || job.bundleIndex > 5 || !["category_entries","bundle5_section"].includes(job.kind) || job.destinations.length !== 1 || !keys.has(job.destinations[0]) ||
     !job.id || !job.schemaId || job.schemaVersion !== 1 || !job.promptHash || job.inputFingerprint !== inputFingerprint ||
     !Number.isSafeInteger(job.ordinal) || job.ordinal < 0 || !Number.isSafeInteger(job.splitDepth) || job.splitDepth < 0 || job.splitDepth > 2 ||
     !Number.isSafeInteger(job.estimatedOutputTokens) || job.estimatedOutputTokens < 0 || !Array.isArray(job.entryIds) || !Array.isArray(job.dependencies) ||
@@ -72,13 +76,39 @@ export function validateOwnedSpecialistSections(job: ForgeJobV1, sections: Recor
       if (typeof value !== "string") throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
       return;
     }
+    if (key === "proceduralRolls") {
+      if (!Array.isArray(value)) throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+      for (const group of value) {
+        if (!record(group) || typeof group.id !== "string" || typeof group.name !== "string" || !Array.isArray(group.triggerKeys) || typeof group.settings !== "string" || !Array.isArray(group.entries)) {
+          throw new ForgeSpecialistError("Forge procedural roll group failed its projected schema.");
+        }
+        for (const item of group.entries) {
+          if (!record(item) || typeof item.id !== "string" || typeof item.weight !== "number" || item.weight < 0 || typeof item.outcome !== "string" || !item.outcome.trim()) {
+            throw new ForgeSpecialistError("Forge procedural roll entry failed its projected schema.");
+          }
+        }
+      }
+      return;
+    }
     if (!record(value)) throw new ForgeSpecialistError("Forge singleton specialist output is invalid.");
     const fields=requiredSingletonFields[key]??[];
     if(fields.some(field=>!Object.hasOwn(value,field)))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
     if(key==="conflict"&&(!["central","opposition","stakesBad","stakesAcceptable","clock","moralKnot","theYield","permanence"].every(field=>typeof value[field]==="string"&&Boolean(String(value[field]).trim()))||!Array.isArray(value.speedBumps)||value.speedBumps.some(item=>typeof item!=="string"||!item.trim())))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
     if(key==="aesthetic"&&(["colors","sounds","smells","visualMotifs","touchstones"].some(field=>!Array.isArray(value[field]))))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
     if(key==="naming"&&(["commonNames","eliteNames"].some(field=>!Array.isArray(value[field]))))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
-    if(["core","user","status"].includes(key)&&fields.some(field=>typeof value[field]!=="string"||!String(value[field]).trim()))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(["core","user","status","opening"].includes(key)&&fields.some(field=>typeof value[field]!=="string"||!String(value[field]).trim()))throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
+    if(key==="expansionNotes"){
+      if(["explicit","violence","horror","romance","humor","pacing","playerDeath","permanence"].some(f=>typeof value[f]!=="string"||!String(value[f]).trim())||!Array.isArray(value.contentFlags)||typeof value.allCharactersAdult!=="boolean")throw new ForgeSpecialistError("Forge expansionNotes specialist output failed its projected schema.");
+    }
+    if(key==="antiGravity"){
+      if(typeof value.permanence!=="string"||!String(value.permanence).trim()||!Array.isArray(value.temptations))throw new ForgeSpecialistError("Forge antiGravity specialist output failed its projected schema.");
+      for(const item of value.temptations){
+        if(!record(item)||typeof item.temptation!=="string"||!item.temptation.trim()||typeof item.counter!=="string"||!item.counter.trim())throw new ForgeSpecialistError("Forge antiGravity temptation failed its projected schema.");
+      }
+    }
+    if(key==="buildNotes"){
+      if(["permanenceRouting","orderBands","formatMatch","permanence"].some(f=>typeof value[f]!=="string"||!String(value[f]).trim())||!Array.isArray(value.disabledUntilEarnedList))throw new ForgeSpecialistError("Forge buildNotes specialist output failed its projected schema.");
+    }
     if(key==="worldPhysics"){
       if(!Array.isArray(value.rules)||typeof value.authorityCheck!=="string"||!value.authorityCheck.trim()||typeof value.powerCeiling!=="string"||!value.powerCeiling.trim()||!Array.isArray(value.faultLines)||typeof value.permanence!=="string"||!value.permanence.trim())throw new ForgeSpecialistError("Forge singleton specialist output failed its projected schema.");
       for(const rule of value.rules){

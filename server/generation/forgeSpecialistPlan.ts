@@ -13,8 +13,13 @@ import {compileBundleFiveJobPrompt,createBundleFiveJobSpec,splitBundleFiveJob,va
 
 export interface ForgeSpecialistJob {id:string;bundleIndex:number;kind:ForgeJobV1["kind"];key:ForgeJobDestinationV1;categoryId?:string;categoryLabel?:string;purpose?:string;entryIds:string[];schema:JsonSchema;splitDepth:number}
 export class ForgeSpecialistPlanningError extends Error {}
-const ENABLED_BUNDLES=new Set([0,1,2,3,4]);
-const SINGLETONS:[ForgeJobDestinationV1,number][]=[["core",0],["user",0],["worldPhysics",0],["status",0],["conflict",3],["pressureProtocol",3],["aesthetic",4],["naming",4]];
+const ENABLED_BUNDLES=new Set([0,1,2,3,4,5]);
+const SINGLETONS:[ForgeJobDestinationV1,number][]=[
+  ["core",0],["user",0],["worldPhysics",0],["status",0],
+  ["conflict",3],["pressureProtocol",3],
+  ["aesthetic",4],["naming",4],
+  ["proceduralRolls",5],["opening",5],["expansionNotes",5],["antiGravity",5],["buildNotes",5]
+];
 const MISSIONS:Partial<Record<ForgeJobDestinationV1,string>>={
   core:"Use core to express the premise's playable situation, scale, tone, and central forces. Summarize without replacing the user's distinctive premise with a stock setting. State operating conditions, not a predetermined plot or ending.",
   user:"Use user only for the player's explicitly established position and resources. Where an attribute is unspecified, state that it remains player-defined. Never invent durable player backstory, feelings, attraction, or voluntary actions.",
@@ -34,6 +39,11 @@ const MISSIONS:Partial<Record<ForgeJobDestinationV1,string>>={
   additionalLore:"Write focused runtime-useful concepts for the exact assigned category. Preserve category identity and do not regenerate entities owned elsewhere.",
   aesthetic:"Write one focused sensory and visual guide consistent with the accepted setting and tonal breadth.",
   naming:"Write one guide to the established naming register. Suggested names are examples, not established people or biographies.",
+  proceduralRolls:"Write procedural roll tables as authoring and inspiration data. Tables provide relative weights and triggerKeys for dynamic events without making unsupported runtime claims.",
+  opening:"Write a playable opening situation that establishes the starting scene, the first active choice, and the initial pressure without prescribing player feelings or voluntary actions. Do not leak secrets or resolve mysteries prematurely.",
+  expansionNotes:"Write expansion notes defining content boundaries, tone, pacing, rating limits, and safety boundaries for long-term roleplay.",
+  antiGravity:"Write anti-gravity counter-temptations to resist stock roleplay tropes, unearned intimacy, and setting erosion, keeping the world grounded.",
+  buildNotes:"Write build notes as structural metadata regarding permanence routing, order bands, and format expectations. Build notes are descriptive metadata, not fake runtime enforcement.",
 };
 
 function projectedSchema(bundleIndex:number,key:ForgeJobDestinationV1):JsonSchema{
@@ -50,6 +60,7 @@ export function validateForgeSpecialistJob(job:ForgeSpecialistJob,value:unknown)
   const output=structuredClone(value)as Record<string,unknown>;if(Object.keys(output).length!==1||!Object.hasOwn(output,job.key))throw new ForgeValidationError(`Specialist ${job.id} returned an unowned section.`);
   if(job.entryIds.length){const entries=output[job.key]as Array<Record<string,unknown>>;if(entries.length!==job.entryIds.length)throw new ForgeValidationError(`Specialist ${job.id} returned ${entries.length} of ${job.entryIds.length} assigned entries.`);if(new Set(entries.map(entry=>entry.id)).size!==entries.length||entries.some(entry=>!job.entryIds.includes(String(entry.id))))throw new ForgeValidationError(`Specialist ${job.id} changed or duplicated assigned entry IDs.`);if(job.key==="additionalLore"&&entries.some(entry=>{const fields=entry.fields as Record<string,unknown>;return fields.categoryId!==job.categoryId||fields.categoryLabel!==job.categoryLabel;}))throw new ForgeValidationError(`Specialist ${job.id} changed its assigned category.`);const castTier=job.categoryId==="principal_cast"?"principal":job.categoryId==="roster_cast"?"roster":null;if(job.key==="npcs"&&castTier&&entries.some(entry=>(entry.fields as Record<string,unknown>)?.castTier!==castTier))throw new ForgeValidationError(`Specialist ${job.id} changed its assigned ${castTier} cast tier.`);output[job.key]=sanitizeForgeSectionEntries(job.key,entries);}
   if(job.key==="worldPhysics"&&output.worldPhysics&&typeof output.worldPhysics==="object"){const wp=output.worldPhysics as Record<string,unknown>;if(Array.isArray(wp.rules))wp.rules=sanitizeForgeSectionEntries("rules",wp.rules);}
+  if(job.key==="proceduralRolls"&&output.proceduralRolls&&Array.isArray(output.proceduralRolls)){for(const group of output.proceduralRolls as Array<Record<string,unknown>>){if(Array.isArray(group.entries)){for(const entry of group.entries as Array<Record<string,unknown>>){if(typeof entry.weight==="number"&&entry.weight<0)throw new ForgeValidationError(`Specialist ${job.id} returned negative roll weight.`);}}}}
   return output;
 }
 export function splitForgeSpecialistJob(job:ForgeSpecialistJob):[ForgeSpecialistJob,ForgeSpecialistJob]|null{if(job.kind==="bundle5_section"){const children=splitBundleFiveJob(job as BundleFiveJob);return children?.map(child=>({...child,bundleIndex:4,kind:"bundle5_section" as const})) as [ForgeSpecialistJob,ForgeSpecialistJob]|null;}if(job.entryIds.length<2||job.splitDepth>=2)return null;const midpoint=Math.ceil(job.entryIds.length/2);const splitDepth=job.splitDepth+1;return[{...job,id:`${job.id}:a`,entryIds:job.entryIds.slice(0,midpoint),splitDepth},{...job,id:`${job.id}:b`,entryIds:job.entryIds.slice(midpoint),splitDepth}];}
@@ -79,9 +90,10 @@ export function createForgeSpecialistPlan(selection:BlueprintSelectionV1,complet
   const userId=`forge-job:${sha256Hex(`${draft.planHash}\0user`).slice(0,24)}`;
   const physicsId=`forge-job:${sha256Hex(`${draft.planHash}\0worldPhysics`).slice(0,24)}`;
   const statusId=`forge-job:${sha256Hex(`${draft.planHash}\0status`).slice(0,24)}`;
+  const openingId=`forge-job:${sha256Hex(`${draft.planHash}\0opening`).slice(0,24)}`;
   for(const[key,bundleIndex]of SINGLETONS){
-    const id=key==="core"?coreId:key==="user"?userId:key==="worldPhysics"?physicsId:key==="status"?statusId:`forge-job:${sha256Hex(`${draft.planHash}\0${key}`).slice(0,24)}`;
-    const dependencies=key==="user"||key==="worldPhysics"?[coreId]:key==="status"?[coreId,userId,physicsId]:[];
+    const id=key==="core"?coreId:key==="user"?userId:key==="worldPhysics"?physicsId:key==="status"?statusId:key==="opening"?openingId:`forge-job:${sha256Hex(`${draft.planHash}\0${key}`).slice(0,24)}`;
+    const dependencies=key==="user"||key==="worldPhysics"?[coreId]:key==="status"?[coreId,userId,physicsId]:key==="expansionNotes"||key==="antiGravity"||key==="buildNotes"?[openingId]:[];
     inputs.push({id,bundleIndex,key,categoryId:undefined,categoryLabel:undefined,purpose:undefined,entryIds:[],dependencies,estimatedOutputTokens:800,sourceOrdinal:0});
   }
   const priority=(key:ForgeJobDestinationV1)=>{
@@ -91,6 +103,11 @@ export function createForgeSpecialistPlan(selection:BlueprintSelectionV1,complet
     if(key==="status")return 3;
     if(key==="npcs")return 0;
     if(key==="relationshipWeb"||key==="knowledgeMap")return 1;
+    if(key==="proceduralRolls")return 0;
+    if(key==="opening")return 1;
+    if(key==="expansionNotes")return 2;
+    if(key==="antiGravity")return 3;
+    if(key==="buildNotes")return 4;
     return 0;
   };
   inputs.sort((a,b)=>a.bundleIndex-b.bundleIndex||priority(a.key)-priority(b.key)||a.key.localeCompare(b.key)||a.sourceOrdinal-b.sourceOrdinal||a.id.localeCompare(b.id));
