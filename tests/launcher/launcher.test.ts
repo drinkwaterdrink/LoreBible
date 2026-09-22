@@ -85,3 +85,14 @@ test("test reset recognizes older healthy LoreBible servers without requiring ne
   expect(restart).toContain("$health.version");
   expect(restart).not.toContain("$health.capabilities.selectedModelGenerationTest -ne $true");
 });
+
+test("primary launcher resets existing listeners on port 3000 and targets Test-3-UI-Overhaul branch", async () => {
+  const launcher = await readFile(join(root, "scripts", "Start-LoreBible.ps1"), "utf8");
+  const installer = await readFile(join(root, "scripts", "Install-LoreBibleShortcut.ps1"), "utf8");
+
+  expect(launcher).toContain("Stop-ExistingLoreBible");
+  expect(launcher).toContain("Stop-Process");
+  expect(launcher).toContain("Test-3-UI-Overhaul");
+  expect(installer).toContain("Lore Bible (Test-3-UI-Overhaul).lnk");
+});
+
