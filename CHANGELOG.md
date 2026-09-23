@@ -4,6 +4,25 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.70 — 2026-09-22
+
+### Changed
+
+- Complete Adventure Journal UI/UX Overhaul:
+  - **Stage 1 (Spark):** Dedicated parchment writing surface, live stats, chapter title plate, docked tool tray, and safe draft reset.
+  - **Stage 2 (Divergence):** 4-quadrant exploration board with real take pitches, tone badges, and single-angle steer/push dialogs.
+  - **Stage 3 (Blueprint):** Data-driven Build Matrix reflecting authoritative categories, progressive disclosure Rules & Physics, and canonical save/preparation flow before Forge.
+  - **Stage 4 (Forge Command Center):** 6-bundle pipeline matrix, live specialist telemetry, truthful split-job parent de-duplication, truthful `[ Stop generation ]` action, and celebratory `WORLD FORGED` state.
+  - **Stage 5 (Refine Codex):** 4 rich presentation modes (Manuscript scroll, World compendium, Social Fabric cast bonds with interactive SVG graph modal, and Proofreader QA studio), mobile contents drawer, and floating contextual entry action dock.
+- Headless `useRefineController` extracted into `src/hooks/useRefineController.ts`, sharing history, undo/redo, stale async mutation guarding, and consistency auditing across both Classic and Adventure modes.
+- Mobile UX enhancements: replaced tall multi-line stepper in Write mode with a compact 1-line stage indicator and tap-to-expand bottom sheet, restoring vertical manuscript viewport space.
+- Version visibility: `v0.70` badge prominently rendered in the global `WorkspaceHeader`, mobile `More` sheet, and `ProjectHome` footer across all screen sizes.
+- Fixed checkpoint recovery bug in `deriveAdventureForgeView`: draft scenario documents with empty placeholder arrays no longer falsely mark queued/interrupted bundles as completed.
+
+### Validation boundary
+
+- Automated verification covers all 548 tests across 107 files. New deterministic test suites cover Adventure Spark, Divergence, Blueprint, Forge Command Center, Refine Workspace, and Refine Controller. Full typecheck (`tsc --noEmit`) and Vite production bundle pass with zero errors.
+
 ## v0.69 — 2026-09-22
 
 ### Changed

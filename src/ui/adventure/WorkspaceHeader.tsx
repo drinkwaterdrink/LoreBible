@@ -1,5 +1,6 @@
 import React from "react";
 import { Command, Feather } from "lucide-react";
+import { APP_VERSION } from "../../version";
 
 interface WorkspaceHeaderProps {
   workingTitle?: string;
@@ -40,6 +41,12 @@ export const WorkspaceHeader: React.FC<WorkspaceHeaderProps> = ({
           <h2 className="text-xs sm:text-sm font-semibold text-[var(--text-primary)] font-apparatus truncate">
             {displayTitle}
           </h2>
+          <span
+            className="font-mono-ui text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface-panel)] border border-[var(--border-soft)] text-[var(--accent-gold)] font-medium shrink-0"
+            aria-label={`LoreBible version ${APP_VERSION}`}
+          >
+            v{APP_VERSION}
+          </span>
         </div>
 
         {/* Truthful Saved State Indicator */}

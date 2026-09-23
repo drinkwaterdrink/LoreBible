@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { JourneyStrip } from "./JourneyStrip";
 import { motion } from "motion/react";
+import { APP_VERSION } from "../../version";
+
 
 export interface ProjectHomeProps {
   workingTitle?: string;
@@ -343,6 +345,20 @@ export const ProjectHome: React.FC<ProjectHomeProps> = ({
             )}
           </div>
         </section>
+
+        {/* Brand & Version Footer */}
+        <footer className="pt-4 border-t border-[var(--border-soft)] flex items-center justify-between text-[11px] font-mono-ui text-[var(--text-muted)]">
+          <span className="flex items-center gap-1.5">
+            <span className="text-[var(--accent-gold)]">§</span>
+            <span>LoreBible Adventure Journal</span>
+          </span>
+          <span
+            className="px-2 py-0.5 rounded bg-[var(--surface-panel)] border border-[var(--border-soft)] text-[var(--accent-gold)] font-medium"
+            aria-label={`LoreBible version ${APP_VERSION}`}
+          >
+            v{APP_VERSION}
+          </span>
+        </footer>
       </div>
     </div>
   );

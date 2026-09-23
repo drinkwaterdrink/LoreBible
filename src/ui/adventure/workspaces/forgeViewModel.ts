@@ -139,6 +139,40 @@ export function resolveEffectiveJobs<T extends { id: string; splitDepth?: number
 }
 
 /**
+ * Helper to check if a section value contains real authored/generated content,
+ * rather than empty arrays or blank placeholder objects from draft creation.
+ */
+export function hasSectionContent(key: string, val: unknown): boolean {
+  if (val === undefined || val === null) return false;
+  if (Array.isArray(val)) return val.length > 0;
+  if (typeof val === "object") {
+    if (key === "worldPhysics") {
+      const obj = val as Record<string, unknown>;
+      return (Array.isArray(obj.rules) && obj.rules.length > 0) || Boolean(obj.authorityCheck) || Boolean(obj.powerCeiling);
+    }
+    if (key === "status") {
+      const obj = val as Record<string, unknown>;
+      return typeof obj.content === "string" && obj.content.trim().length > 0;
+    }
+    if (key === "conflict") {
+      const obj = val as Record<string, unknown>;
+      return typeof obj.central === "string" && obj.central.trim().length > 0;
+    }
+    if (key === "opening") {
+      const obj = val as Record<string, unknown>;
+      return typeof obj.firstMessage === "string" && obj.firstMessage.trim().length > 0;
+    }
+    return Object.values(val as Record<string, unknown>).some((v) => {
+      if (typeof v === "string") return v.trim().length > 0;
+      if (Array.isArray(v)) return v.length > 0;
+      return Boolean(v);
+    });
+  }
+  if (typeof val === "string") return val.trim().length > 0;
+  return false;
+}
+
+/**
  * Pure adapter deriving the Adventure Forge Command Center view state.
  * Never fabricates progress, token counts, or fake ETAs.
  */
@@ -156,43 +190,76 @@ export function deriveAdventureForgeView(input: AdventureForgeInput): AdventureF
   let totalEntries = 0;
 
   const bundles: ForgeBundleView[] = CANONICAL_FORGE_BUNDLES.map((def) => {
-    // Check if sections belonging to this bundle have been received
-    const hasAnySection = def.sectionKeys.some((k) => streamed[k] !== undefined || (doc && (doc as any)[k] !== undefined));
+    // Check if sections belonging to this bundle have real generated content
+    const hasStreamedSections = def.sectionKeys.some(
+      (k) => streamed[k] !== undefined && hasSectionContent(k, streamed[k])
+    );
+    const hasDocSections = def.sectionKeys.some((k) => {
+      if (!doc) return false;
+      const val = (doc as unknown as Record<string, unknown>)[k];
+      if (def.index === 1) {
+        return (
+          hasSectionContent("worldPhysics", doc.worldPhysics) ||
+          hasSectionContent("status", doc.status) ||
+          Boolean(streamed.core)
+        );
+      }
+      return hasSectionContent(k, val);
+    });
+    const hasRealContent = hasStreamedSections || hasDocSections;
     const isStepMarkedDone = completedSteps >= def.index;
-    const isBundleCompleted = isStepMarkedDone || hasAnySection;
+    const isBundleCompleted = isStepMarkedDone || (completedSteps === 0 && hasRealContent);
 
     // Count entries
     let bundleEntryCount = 0;
     for (const key of def.sectionKeys) {
-      const val = streamed[key] ?? (doc ? (doc as any)[key] : undefined);
+      const val = streamed[key] ?? (doc ? (doc as unknown as Record<string, unknown>)[key] : undefined);
       if (Array.isArray(val)) {
         bundleEntryCount += val.length;
-      } else if (val && typeof val === "object" && Object.keys(val).length > 0) {
+      } else if (hasSectionContent(key, val)) {
         bundleEntryCount += 1;
       }
     }
-    totalEntries += bundleEntryCount;
 
     let status: BundleStatus = "pending";
-    if (isBundleCompleted && (!isForging || completedSteps >= def.index)) {
-      status = "completed";
-      completedCount++;
-    } else if (isForging) {
-      if (completedSteps + 1 === def.index || (completedSteps === 0 && def.index === 1)) {
+    if (isForging) {
+      if (isStepMarkedDone) {
+        status = "completed";
+        completedCount++;
+      } else if (completedSteps + 1 === def.index || (completedSteps === 0 && def.index === 1)) {
         status = "in_progress";
       } else {
         status = "pending";
       }
     } else if (forgeError || input.hasCheckpoint) {
-      if (!isBundleCompleted && def.index === completedSteps + 1) {
+      if (isStepMarkedDone || (completedSteps > 0 && def.index <= completedSteps)) {
+        status = "completed";
+        completedCount++;
+      } else if (def.index === completedSteps + 1) {
         status = "interrupted";
       } else {
-        status = isBundleCompleted ? "completed" : "pending";
+        status = "pending";
       }
+    } else if (completedSteps > 0) {
+      if (def.index <= completedSteps) {
+        status = "completed";
+        completedCount++;
+      } else {
+        status = "pending";
+      }
+    } else if (hasRealContent) {
+      status = "completed";
+      completedCount++;
+    } else {
+      status = "pending";
+    }
+
+    if (status === "completed" || status === "in_progress") {
+      totalEntries += bundleEntryCount;
     }
 
     // A bundle is preserved if it is completed and stored
-    const isPreserved = isBundleCompleted;
+    const isPreserved = status === "completed";
 
     // Preview summary text if available
     let previewSummary: string | undefined;

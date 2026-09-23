@@ -2,6 +2,8 @@ import React, { useEffect } from "react";
 import type { NavDestination } from "./types";
 import { Hammer, Clock, Archive, Settings, HelpCircle, X } from "lucide-react";
 import { motion } from "motion/react";
+import { APP_VERSION } from "../../version";
+
 
 interface MobileMoreSheetProps {
   isOpen: boolean;
@@ -156,6 +158,20 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
               </div>
             </button>
           )}
+        </div>
+
+        {/* Footer info & version */}
+        <div className="pt-2 border-t border-[var(--border-soft)] flex items-center justify-between text-[11px] font-mono-ui text-[var(--text-muted)]">
+          <span className="flex items-center gap-1.5">
+            <span className="text-[var(--accent-gold)]">§</span>
+            <span>LoreBible Adventure</span>
+          </span>
+          <span
+            className="px-1.5 py-0.5 rounded bg-[var(--surface-app)] border border-[var(--border-soft)] text-[var(--accent-gold)] font-semibold"
+            aria-label={`LoreBible version ${APP_VERSION}`}
+          >
+            v{APP_VERSION}
+          </span>
         </div>
       </motion.div>
     </div>

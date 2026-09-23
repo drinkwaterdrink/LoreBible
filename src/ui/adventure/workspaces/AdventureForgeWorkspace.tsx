@@ -34,6 +34,7 @@ export interface AdventureForgeWorkspaceProps {
   onContinueForge?: () => void;
   boundedSpecialists?: boolean;
   activeSpecialistPhase?: string;
+  onOpenConnections?: () => void;
   specialistProgress?: {
     currentJob: number;
     totalJobs: number;
@@ -47,6 +48,7 @@ export const AdventureForgeWorkspace: React.FC<AdventureForgeWorkspaceProps> = (
     onProceedToRefine,
     onRetryForge,
     onContinueForge,
+    onOpenConnections,
     generationActivity,
   } = props;
 
@@ -159,14 +161,25 @@ export const AdventureForgeWorkspace: React.FC<AdventureForgeWorkspaceProps> = (
           aria-label="Forge Interruption"
           className="p-4 rounded-[4px] bg-rose-950/40 border border-rose-800/70 space-y-2 text-rose-200"
         >
-          <div className="flex items-center gap-2 font-apparatus text-xs font-semibold uppercase tracking-wider text-rose-300">
-            <AlertTriangle size={14} className="text-rose-400" />
-            <span>Forge Interruption Recorded</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-apparatus text-xs font-semibold uppercase tracking-wider text-rose-300">
+              <AlertTriangle size={14} className="text-rose-400" />
+              <span>Forge Interruption Recorded</span>
+            </div>
+            {onOpenConnections && (
+              <button
+                type="button"
+                onClick={onOpenConnections}
+                className="text-[11px] font-mono-ui text-rose-300 hover:text-rose-100 underline cursor-pointer"
+              >
+                Check Model / Connections →
+              </button>
+            )}
           </div>
           <p className="text-xs font-manuscript text-rose-100">
             {viewModel.errorMessage || "The provider stream was interrupted. Completed bundles have been safely preserved."}
           </p>
-          <div className="pt-2 flex items-center gap-3">
+          <div className="pt-2 flex flex-wrap items-center gap-3">
             {onRetryForge && (
               <button
                 type="button"
@@ -175,6 +188,15 @@ export const AdventureForgeWorkspace: React.FC<AdventureForgeWorkspaceProps> = (
               >
                 <RotateCcw size={12} />
                 <span>Resume from last preserved bundle</span>
+              </button>
+            )}
+            {onOpenConnections && (
+              <button
+                type="button"
+                onClick={onOpenConnections}
+                className="px-3 py-1.5 text-xs font-mono-ui text-rose-200 bg-rose-950/60 hover:bg-rose-900/60 rounded border border-rose-800/60 transition-colors cursor-pointer"
+              >
+                API Settings &amp; Keys
               </button>
             )}
           </div>

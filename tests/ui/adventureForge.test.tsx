@@ -248,3 +248,69 @@ test("AdventureForgeWorkspace renders WORLD FORGED celebration state with Refine
   expect(html).toContain("Review Manuscript in Refine");
 });
 
+test("deriveAdventureForgeView accurately reports 1 bundle completed and bundle 2 interrupted when draft document has empty arrays for all sections", () => {
+  const draftDoc: any = {
+    id: "doc-123",
+    core: { title: "The Domestic Limbo", pitch: "Stranded in the wood-paneled basement" },
+    user: { rolePosition: "{{user}}" },
+    worldPhysics: { rules: [{ fields: { name: "Thermal Rule" } }] },
+    status: { content: "Cold and weary" },
+    locations: [],
+    factions: [],
+    npcs: [],
+    relationshipWeb: [],
+    knowledgeMap: [],
+    items: [],
+    secrets: [],
+    history: [],
+    pressures: [],
+    opening: {},
+  };
+
+  const model = deriveAdventureForgeView({
+    isForging: false,
+    workingTitle: "The Domestic Limbo",
+    hasCheckpoint: true,
+    forgeError: "LoreBible could not complete this Forge attempt.",
+    document: draftDoc,
+    streamedSections: {
+      core: draftDoc.core,
+      user: draftDoc.user,
+      worldPhysics: draftDoc.worldPhysics,
+      status: draftDoc.status,
+    },
+    generationActivity: {
+      status: "error",
+      task: "forge",
+      progress: {
+        task: "forge",
+        phase: "error",
+        completedSteps: 1,
+        totalSteps: 6,
+        label: "LoreBible could not complete this Forge attempt.",
+      },
+    } as any,
+  });
+
+  expect(model.hasError).toBe(true);
+  expect(model.errorMessage).toBe("LoreBible could not complete this Forge attempt.");
+  expect(model.completedBundleCount).toBe(1);
+  expect(model.totalBundleCount).toBe(6);
+  expect(model.isCompleted).toBe(false);
+
+  // Bundle 1 is completed
+  expect(model.bundles[0].status).toBe("completed");
+  expect(model.bundles[0].isPreserved).toBe(true);
+
+  // Bundle 2 is interrupted (the exact point of failure)
+  expect(model.bundles[1].status).toBe("interrupted");
+  expect(model.bundles[1].isPreserved).toBe(false);
+
+  // Bundles 3-6 are queued / pending
+  expect(model.bundles[2].status).toBe("pending");
+  expect(model.bundles[3].status).toBe("pending");
+  expect(model.bundles[4].status).toBe("pending");
+  expect(model.bundles[5].status).toBe("pending");
+});
+
+

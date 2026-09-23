@@ -1456,6 +1456,7 @@ export default function App() {
             && (forgeActivity.progress?.completedSteps ?? 0) < (forgeActivity.progress?.totalSteps ?? 6)}
           onContinueForge={() => void handleStartForge(true)}
           boundedSpecialists={Boolean(blueprintSelection)}
+          onOpenConnections={() => setIsSettingsOpen(true)}
           generationActivity={forgeActivity.status !== "idle" ? { ...forgeActivity, task: "forge", onCancel: handleCancelForge, onClearReasoning: () => setForgeActivity((state) => ({ ...state, reasoning: "", reasoningTruncated: false })), onOpenConnections: () => setIsSettingsOpen(true) } : undefined}
         />
       )}
