@@ -70,6 +70,7 @@ import { AdventureStudioShell } from "./ui/adventure/AdventureStudioShell";
 import type { UiMode } from "./ui/adventure/types";
 import { getStoredUiMode, setStoredUiMode } from "./ui/adventure/uiMode";
 import { selectActiveGenerationTelemetry } from "./ui/adventure/activityAdapter";
+import { AdventureForgeWorkspace } from "./ui/adventure/workspaces/AdventureForgeWorkspace";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -1441,7 +1442,7 @@ export default function App() {
       )}
 
       {currentStage === 4 && (
-        <ForgeStage
+        <AdventureForgeWorkspace
           buildLogs={buildLogs}
           streamedSections={streamedSections}
           isForging={isForging}
