@@ -81,3 +81,21 @@ test("relationship and knowledge specialists accept schema-optional activation k
   ledger=completeSpecialistJob(ledger,{jobId:relationshipJob.id,attemptId:"attempt/relationship",commandId:"complete/relationship",sections:{relationshipWeb:[entry]},completedAt:at});
   expect(mergeSpecialistJobs(ledger,2)).toEqual({relationshipWeb:[entry]});
 });
+
+test("the durable ledger accepts Bundle 1 structural singleton jobs",()=>{
+  const coreJob={...job("job/core",[]),bundleIndex:0,kind:"category_entries",destinations:["core"],schemaId:"forge.bundle1.core/v1",ordinal:20} as unknown as ForgeJobV1;
+  let ledger=createSpecialistLedger({planHash:"sha256:bundle1",inputFingerprint:source,jobs:[coreJob]});
+  ledger=beginSpecialistJob(ledger,{jobId:coreJob.id,attemptId:"attempt/core",provider:"test",modelId:"test",promptHash:"sha256:rendered",startedAt:at});
+  const core={title:"The Closed Ferry",pitch:"A harbor town waits for a disputed crossing.",genreTone:"Grounded mystery",eraScale:"Present-day town",theRule:"Crossings require a signed ledger.",theCost:"Delay isolates the island.",theSituation:"The night ledger is missing.",thePressure:"Friday's charter vote approaches.",theQuestion:"Who benefits from the closure?",permanence:"P"};
+  ledger=completeSpecialistJob(ledger,{jobId:coreJob.id,attemptId:"attempt/core",commandId:"complete/core",sections:{core},completedAt:at});
+  expect(mergeSpecialistJobs(ledger,0)).toEqual({core});
+});
+
+test("the durable ledger accepts a slotless Bundle 6 procedural array",()=>{
+  const proceduralJob={...job("job/procedural",[]),bundleIndex:5,kind:"category_entries",destinations:["proceduralRolls"],schemaId:"forge.bundle6.proceduralRolls/v1",ordinal:21} as unknown as ForgeJobV1;
+  let ledger=createSpecialistLedger({planHash:"sha256:bundle6",inputFingerprint:source,jobs:[proceduralJob]});
+  ledger=beginSpecialistJob(ledger,{jobId:proceduralJob.id,attemptId:"attempt/procedural",provider:"test",modelId:"test",promptHash:"sha256:rendered",startedAt:at});
+  const proceduralRolls=[{id:"weather",name:"Harbor weather",triggerKeys:["harbor weather"],settings:"Use when conditions matter.",entries:[{id:"rain",weight:1,outcome:"A cold rain limits visibility."}]}];
+  ledger=completeSpecialistJob(ledger,{jobId:proceduralJob.id,attemptId:"attempt/procedural",commandId:"complete/procedural",sections:{proceduralRolls},completedAt:at});
+  expect(mergeSpecialistJobs(ledger,5)).toEqual({proceduralRolls});
+});

@@ -1,6 +1,6 @@
 # Forge R2–R4 continuation contracts and implementation handoff
 
-Status: partially implemented. R1 passed; pure R2 allocation and bounded job drafts exist. v0.68 executes and durably saves every Blueprint-owned lore-entry section in Bundles 2–5, including exact cast-tier ownership, cast-before-relationship/knowledge dependencies, retry reuse, bundle-scoped lifecycle handling, and split-safe dependency rewiring. Existing v0.66 Bundle 5 ledgers remain resumable. Bundle 1 structural core and Bundle 6 opening/instructions remain on the validated whole-bundle path; their safe treatment, context preflight, R3 Prompt Studio, and R4 raw-idea routing remain planned. This continuation makes downstream choices explicit; it is not authorization to combine all slices into one unreviewed change.
+Status: partially implemented. R1 passed. v0.69 completes R2's bounded durable specialist ownership across all six logical bundles, including Bundle 1 structural singletons, Blueprint-owned lore entries, exact cast-tier ownership, cast-before-relationship/knowledge dependencies, retry reuse, bundle-scoped lifecycle handling, split-safe dependency rewiring, and Bundle 6 opening/instruction singletons. Existing v0.66–v0.68 ledgers remain resumable and use the whole-bundle fallback where they lack safe singleton jobs. Context preflight, R3 Prompt Studio, and R4 raw-idea routing remain planned. This continuation makes downstream choices explicit; it is not authorization to combine all slices into one unreviewed change.
 
 Read the [design](../specs/2026-09-20-forge-overhaul-and-prompt-studio.md) and [prompt source](../specs/2026-09-20-forge-production-prompt-pack.md). Verify actual repository state again. Preserve R1 function names and responsibilities rather than inventing parallel validation/prompt systems.
 
@@ -120,10 +120,10 @@ Aggregate coverage gap: generate at most one targeted repair plan for genuinely 
 
 - [ ] Pure allocation: exact IDs, custom labels, contradictory ranges, omitted items, fixed cast tiers, singleton exclusions, deterministic tie breaks.
 - [ ] Six/three-entry ceiling and output estimate policy; no total scope reduction.
-- [x] Job schema owns exactly its destinations; supplemental job accepts one category only. (Implemented for all specialist-owned destinations in Bundles 2–5.)
+- [x] Job schema owns exactly its destinations; supplemental job accepts one category only. (Implemented across all six logical bundles.)
 - [x] Restart after failed second job reuses first; late stale completion rejected. (Cancellation between durable save and client event still needs a route-level fault-injection test.)
 - [ ] Legacy four completed bundles retained; model switch reuses; source change invalidates with preserved history.
-- [x] Retry/split ceilings; partitioned child IDs cover exactly parent slots; no duplicated content/events. (Implemented for currently enabled specialists.)
+- [x] Retry/split ceilings; partitioned child IDs cover exactly parent slots; no duplicated content/events. (Implemented for all enabled specialists; singleton jobs retry without fake entry splitting.)
 - [ ] Aggregate validation before checkpoint; repository conflict preserves prior graph.
 - [ ] Targeted suites, full tests/typecheck/build/diff check; checkpoint R2 separately.
 

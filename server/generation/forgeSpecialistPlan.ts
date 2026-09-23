@@ -13,9 +13,13 @@ import {compileBundleFiveJobPrompt,createBundleFiveJobSpec,splitBundleFiveJob,va
 
 export interface ForgeSpecialistJob {id:string;bundleIndex:number;kind:ForgeJobV1["kind"];key:ForgeJobDestinationV1;categoryId?:string;categoryLabel?:string;purpose?:string;entryIds:string[];schema:JsonSchema;splitDepth:number}
 export class ForgeSpecialistPlanningError extends Error {}
-const ENABLED_BUNDLES=new Set([1,2,3,4]);
-const SINGLETONS:[ForgeJobDestinationV1,number][]=[["conflict",3],["pressureProtocol",3],["aesthetic",4],["naming",4]];
+const ENABLED_BUNDLES=new Set([0,1,2,3,4,5]);
+const SINGLETONS:[ForgeJobDestinationV1,number][]=[["core",0],["user",0],["worldPhysics",0],["status",0],["conflict",3],["pressureProtocol",3],["aesthetic",4],["naming",4],["proceduralRolls",5],["opening",5],["expansionNotes",5],["antiGravity",5],["buildNotes",5]];
 const MISSIONS:Partial<Record<ForgeJobDestinationV1,string>>={
+  core:"Define the playable premise, scale, tone, durable operating situation, costs, pressure, and central question without predetermining the plot or ending. Preserve the user's distinctive premise rather than replacing it with a stock setting.",
+  user:"Record only the player's explicitly established position, starting resources, wants, fears, and hooks. Leave unspecified biography, profession, family, personality, feelings, attraction, consent, abilities, destiny, prior relationships, and voluntary actions player-defined. Do not concretize an unresolved player variable.",
+  worldPhysics:"Write durable constraints that materially affect decisions, including ordinary or social rules when appropriate. Explain limits and consequences without inventing supernatural, violent, or genre mechanics merely because the schema can hold them.",
+  status:"Write only the initial snapshot. Route current location, active attempts, remaining deadlines, and opening-only circumstances here, not into permanent identity or durable rules. Preserve supplied routing values and do not invent exporter behavior.",
   locations:"Write playable, concrete locations with a distinct function, mood, and specific pressure or problem. Do not invent people merely to fill a location.",
   factions:"Write autonomous organizations with public face, real agenda, independent activity, and a premise-supported stance toward the player. Do not make every faction revolve around {{user}}.",
   npcs:"Write only the assigned cast tier. Give each person a distinct role, want, embodiment, voice, contradiction, knowledge boundary, social connection, and independent activity. Do not invent player intimacy or make every want involve {{user}}.",
@@ -30,6 +34,11 @@ const MISSIONS:Partial<Record<ForgeJobDestinationV1,string>>={
   additionalLore:"Write focused runtime-useful concepts for the exact assigned category. Preserve category identity and do not regenerate entities owned elsewhere.",
   aesthetic:"Write one focused sensory and visual guide consistent with the accepted setting and tonal breadth.",
   naming:"Write one guide to the established naming register. Suggested names are examples, not established people or biographies.",
+  proceduralRolls:"Write optional, premise-supported procedural tools only where useful. Outcomes must remain distinct and canon-compatible, cannot choose the player's emotions or decisions, and do not claim verified runtime integration.",
+  opening:"Write a concrete playable opening using established people and places. Portray the environment and NPC actions while leaving {{user}}'s speech, thoughts, feelings, consent, and voluntary response open. Do not leak hidden truth, force a menu choice, or turn opening-only state into evergreen canon.",
+  expansionNotes:"Preserve accepted tone, content boundaries, pacing, and explicit settings without silently resolving contradictions. Do not claim every character is an adult unless the accepted source establishes that fact.",
+  antiGravity:"Write concise safeguards against premise-specific protagonist gravity, omniscient NPC knowledge, unearned trust, repetitive narration, and forced outcomes. Do not substitute a generic prohibition list for the actual risks.",
+  buildNotes:"Record honest authoring metadata for permanence routing, order bands, earned-secret limitations, and format matching. Do not claim a state engine, activation simulation, import test, or Lumiverse capability that has not been verified.",
 };
 
 function projectedSchema(bundleIndex:number,key:ForgeJobDestinationV1):JsonSchema{
@@ -44,6 +53,7 @@ export function validateForgeSpecialistJob(job:ForgeSpecialistJob,value:unknown)
   if(job.kind==="bundle5_section")return validateBundleFiveJob(job as BundleFiveJob,value);
   const issues=validateSchemaValue(value,job.schema);if(issues.length)throw new ForgeValidationError(`Specialist ${job.id} failed schema validation.`,issues);
   const output=structuredClone(value)as Record<string,unknown>;if(Object.keys(output).length!==1||!Object.hasOwn(output,job.key))throw new ForgeValidationError(`Specialist ${job.id} returned an unowned section.`);
+  if(job.key==="worldPhysics"){const physics=output.worldPhysics as Record<string,unknown>;output.worldPhysics={...physics,rules:sanitizeForgeSectionEntries("rules",physics.rules as unknown[])};}
   if(job.entryIds.length){const entries=output[job.key]as Array<Record<string,unknown>>;if(entries.length!==job.entryIds.length)throw new ForgeValidationError(`Specialist ${job.id} returned ${entries.length} of ${job.entryIds.length} assigned entries.`);if(new Set(entries.map(entry=>entry.id)).size!==entries.length||entries.some(entry=>!job.entryIds.includes(String(entry.id))))throw new ForgeValidationError(`Specialist ${job.id} changed or duplicated assigned entry IDs.`);if(job.key==="additionalLore"&&entries.some(entry=>{const fields=entry.fields as Record<string,unknown>;return fields.categoryId!==job.categoryId||fields.categoryLabel!==job.categoryLabel;}))throw new ForgeValidationError(`Specialist ${job.id} changed its assigned category.`);const castTier=job.categoryId==="principal_cast"?"principal":job.categoryId==="roster_cast"?"roster":null;if(job.key==="npcs"&&castTier&&entries.some(entry=>(entry.fields as Record<string,unknown>)?.castTier!==castTier))throw new ForgeValidationError(`Specialist ${job.id} changed its assigned ${castTier} cast tier.`);output[job.key]=sanitizeForgeSectionEntries(job.key,entries);}
   return output;
 }
@@ -71,7 +81,8 @@ export function createForgeSpecialistPlan(selection:BlueprintSelectionV1,complet
   const categories=new Map(allocation.value.categories.map(category=>[category.categoryId,category]));
   const inputs=draft.jobs.filter(job=>ENABLED_BUNDLES.has(job.bundleIndex)).map(job=>{const category=categories.get(job.categoryId)!;return{id:job.id,bundleIndex:job.bundleIndex,key:job.destinations[0] as ForgeJobDestinationV1,categoryId:job.categoryId,categoryLabel:category.categoryLabel,purpose:category.purpose,entryIds:job.entryIds,dependencies:job.dependencies,estimatedOutputTokens:job.estimatedOutputTokens,sourceOrdinal:job.ordinal};});
   for(const[key,bundleIndex]of SINGLETONS)inputs.push({id:`forge-job:${sha256Hex(`${draft.planHash}\0${key}`).slice(0,24)}`,bundleIndex,key,categoryId:undefined,categoryLabel:undefined,purpose:undefined,entryIds:[],dependencies:[],estimatedOutputTokens:800,sourceOrdinal:0});
-  const priority=(key:ForgeJobDestinationV1)=>key==="npcs"?0:key==="relationshipWeb"||key==="knowledgeMap"?1:0;
+  const ordered:ForgeJobDestinationV1[]=["core","user","worldPhysics","status","locations","factions","npcs","knowledgeMap","relationshipWeb","items","secrets","conflict","pressureProtocol","history","aesthetic","naming","pressures","additionalLore","proceduralRolls","opening","expansionNotes","antiGravity","buildNotes"];
+  const priority=(key:ForgeJobDestinationV1)=>ordered.indexOf(key);
   inputs.sort((a,b)=>a.bundleIndex-b.bundleIndex||priority(a.key)-priority(b.key)||a.key.localeCompare(b.key)||a.sourceOrdinal-b.sourceOrdinal||a.id.localeCompare(b.id));
   const jobs=inputs.map((input,ordinal)=>spec({...input,ordinal},inputFingerprint));
   return{planHash:`sha256:${sha256Hex(canonicalizeJson({version:1,draftPlanHash:draft.planHash,jobs}))}`,jobs};

@@ -4,6 +4,19 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.69 — 2026-09-22
+
+### Changed
+
+- Forge R2 now gives every Bundle 1 and Bundle 6 schema-owned section its own bounded durable specialist. Core premise, player position, world physics, initial status, procedural tools, opening, expansion settings, anti-gravity safeguards, and build notes can survive retry/reload independently instead of requiring another full-bundle response.
+- Specialist prompts now state section-specific creative and safety obligations: player biography and agency remain open unless established, opening-only state stays out of evergreen canon, openings cannot leak hidden truths, and build notes cannot claim unsupported runtime or Lumiverse behavior.
+- Bundle 1 world rules receive the same nonblank content and retrieval-key validation as whole-bundle Forge. Bundle 6 procedural arrays remain one slotless schema-owned section rather than being misrepresented as lore-entry inventory.
+- New plans use deterministic Bundle 1–6 specialist ordering. Existing v0.68 ledgers remain resumable; when an older ledger has no safe Bundle 1 or Bundle 6 jobs, those bundles retain the validated whole-bundle fallback instead of being silently rewritten.
+
+### Validation boundary
+
+- Automated coverage verifies Bundle 1 and Bundle 6 planning, prompt obligations, projected schemas, durable singleton persistence, slotless procedural persistence, nested world-rule validation, and the existing Bundle 2–5 recovery behavior. Atomic single-request generation remains unchanged. No live provider generation, literary-quality certification, or Lumiverse runtime test was performed for this release.
+
 ## v0.68 — 2026-09-21
 
 ### Changed

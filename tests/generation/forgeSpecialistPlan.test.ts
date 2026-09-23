@@ -25,7 +25,7 @@ test("one deterministic plan owns bounded Bundle 2 and Bundle 5 category jobs",(
 test("location specialists validate exact slots and split only their unfinished ownership",()=>{
   const selection=structuredClone(blueprintSelectionFixture);
   selection.categories=[{...selection.categories[0],id:"locations",label:"Locations",purpose:"Playable places",status:"required",detail:"standard",targetRange:{min:2,ideal:2,max:2}}];selection.lorebookRange={min:2,ideal:2,max:2};
-  const spec=createForgeSpecialistPlan(selection,{},"source context","sha256:source").jobs[0];
+  const spec=createForgeSpecialistPlan(selection,{},"source context","sha256:source").jobs.find(job=>job.destinations[0]==="locations")!;
   const job=hydrateForgeSpecialistJob(spec);
   const entry=(id:string)=>({id,fields:{name:"Salt Gate",function:"Checkpoint",mood:"Watchful",whatsWrong:"Two ledgers disagree."},keys:["Salt Gate"],permanence:"P",locked:false});
   expect(()=>validateForgeSpecialistJob(job,{locations:[entry("wrong"),entry(spec.entryIds[1])]})).toThrow("changed or duplicated");
@@ -43,14 +43,15 @@ test("a location specialist receives only its owned schema and slots",()=>{
   selection.categories=[{...selection.categories[0],id:"locations",label:"Locations",purpose:"Playable places",status:"required",detail:"standard",targetRange:{min:1,ideal:1,max:1}}];
   selection.lorebookRange={min:1,ideal:1,max:1};
   const plan=createForgeSpecialistPlan(selection,{},"source context","sha256:source");
-  const job=hydrateForgeSpecialistJob(plan.jobs[0]);
+  const locationSpec=plan.jobs.find(job=>job.destinations[0]==="locations")!;
+  const job=hydrateForgeSpecialistJob(locationSpec);
   const prompt=compileForgeSpecialistJobPrompt(job,"source context",null);
   expect(job.key).toBe("locations");
-  expect(prompt.userPrompt).toContain(plan.jobs[0].entryIds[0]);
+  expect(prompt.userPrompt).toContain(locationSpec.entryIds[0]);
   expect(prompt.userPrompt).toContain('"locations"');
   expect(prompt.userPrompt).not.toContain('"factions"');
   expect(prompt.userPrompt).not.toContain('"history"');
-  expect(hashForgeSpecialistPrompt(job,"source context")).not.toBe(plan.jobs[0].promptHash);
+  expect(hashForgeSpecialistPrompt(job,"source context")).not.toBe(locationSpec.promptHash);
 });
 
 test("specialists never replace a combined single-request generation batch",()=>{
@@ -123,4 +124,34 @@ test("a v0.67 ledger falls back instead of pretending missing Bundle 3 specialis
   expect(canUsePersistedForgeSpecialistsForBundle(oldLedger,2)).toBe(false);
   expect(canUsePersistedForgeSpecialistsForBundle(oldLedger,1)).toBe(true);
   expect(canUsePersistedForgeSpecialistsForBundle(null,2)).toBe(true);
+});
+
+test("Bundle 1 uses isolated foundation, rules, and initial-state specialists",()=>{
+  const selection=structuredClone(blueprintSelectionFixture);
+  selection.categories=[{...selection.categories[0],id:"locations",label:"Locations",purpose:"Playable places",status:"required",detail:"standard",targetRange:{min:1,ideal:1,max:1}}];selection.lorebookRange={min:1,ideal:1,max:1};
+  const plan=createForgeSpecialistPlan(selection,{},"source context","sha256:source");
+  const jobs=plan.jobs.filter(job=>job.bundleIndex===0);
+  expect(jobs.map(job=>job.destinations[0])).toEqual(["core","user","worldPhysics","status"]);
+  expect(jobs.every(job=>job.entryIds.length===0)).toBe(true);
+  const status=hydrateForgeSpecialistJob(jobs.find(job=>job.destinations[0]==="status")!);
+  const prompt=compileForgeSpecialistJobPrompt(status,"source context",null).userPrompt;
+  expect(prompt).toContain("initial snapshot");
+  expect(prompt).toContain("not into permanent identity");
+  expect(validateForgeSpecialistJob(status,{status:{content:"The ferry is closed tonight.",settings:"Initial scene only",permanence:"I"}})).toHaveProperty("status");
+  expect(()=>validateForgeSpecialistJob(status,{status:{content:"The ferry is closed tonight."}})).toThrow("schema validation");
+  const physics=hydrateForgeSpecialistJob(jobs.find(job=>job.destinations[0]==="worldPhysics")!);
+  expect(()=>validateForgeSpecialistJob(physics,{worldPhysics:{rules:[{id:"rule/one",fields:{name:"",rule:"Signed ledgers control crossings.",profits:"Harbor clerks",pays:"Island residents"},keys:[],permanence:"P",locked:false}],authorityCheck:"Records are compared.",powerCeiling:"Civil authority only.",faultLines:["Two offices keep separate books."],permanence:"P"}})).toThrow("missing required content");
+});
+
+test("Bundle 6 isolates procedural, opening, and build-guidance sections",()=>{
+  const selection=structuredClone(blueprintSelectionFixture);
+  selection.categories=[{...selection.categories[0],id:"locations",label:"Locations",purpose:"Playable places",status:"required",detail:"standard",targetRange:{min:1,ideal:1,max:1}}];selection.lorebookRange={min:1,ideal:1,max:1};
+  const plan=createForgeSpecialistPlan(selection,{},"source context","sha256:source");
+  const jobs=plan.jobs.filter(job=>job.bundleIndex===5);
+  expect(jobs.map(job=>job.destinations[0])).toEqual(["proceduralRolls","opening","expansionNotes","antiGravity","buildNotes"]);
+  const opening=hydrateForgeSpecialistJob(jobs.find(job=>job.destinations[0]==="opening")!);
+  const prompt=compileForgeSpecialistJobPrompt(opening,"source context",null).userPrompt;
+  expect(prompt).toContain("leaving {{user}}'s speech, thoughts, feelings, consent, and voluntary response open");
+  expect(prompt).toContain("Do not leak hidden truth");
+  expect(validateForgeSpecialistJob(opening,{opening:{firstLocation:"Salt Gate",firstNpc:"Mara",firstChoice:"Ask about the stopped ferry",style:"Quiet social tension",firstMessage:"Rain ticks against the locked ferry office while Mara studies the tide chart.",permanence:"I"}})).toHaveProperty("opening");
 });
