@@ -1,29 +1,20 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState } from "react";
 import {
-  ConsistencyFinding,
   Entry,
   LoreBibleDocument,
-  RippleNotice,
-  VariantSlip,
   GenerationSettings,
 } from "../types";
 import { TableOfContents } from "./refine/TableOfContents";
 import { MarginInspector } from "./refine/MarginInspector";
 import { InlineEditableField } from "./refine/InlineEditableField";
 import { ProofreaderHeader } from "./refine/ProofreaderMarkup";
-import {
-  auditConsistencyApi,
-  fetchVariantsApi,
-  pushEntryApi,
-  regenerateSectionApi,
-  rerollEntryApi,
-} from "../services/geminiService";
 import { Download, Undo2, Redo2, BookOpen, Network, Gauge, Dice5, FileSearch, AlignJustify } from "lucide-react";
 import { RelationshipWeb } from "./visual/RelationshipWeb";
 import { PressureMap } from "./visual/PressureMap";
 import { ProceduralRollsEditor } from "./refine/ProceduralRollsEditor";
 import { TestBenchEditor } from "./refine/TestBenchEditor";
 import { GenerationFailureNotice } from "./GenerationFailureNotice";
+import { useRefineController } from "../hooks/useRefineController";
 
 interface RefineStageProps {
   document: LoreBibleDocument;
@@ -40,7 +31,6 @@ export const RefineStage: React.FC<RefineStageProps> = ({
   settings,
   onOpenConnections,
 }) => {
-  const [operationError, setOperationError] = useState<string | null>(null);
   // Center Sheet View Tab: Manuscript vs Relationship Web vs Pressure Map vs Procedural Rolls vs Test Bench
   const [centerTab, setCenterTab] = useState<
     "manuscript" | "relationshipWeb" | "pressureMap" | "proceduralRolls" | "testBench"
@@ -65,532 +55,65 @@ export const RefineStage: React.FC<RefineStageProps> = ({
     });
   };
 
-  // 1. History Stack for full Cmd/Ctrl-Z Undo / Redo
-  const [history, setHistory] = useState<LoreBibleDocument[]>([document]);
-  const [historyIndex, setHistoryIndex] = useState(0);
+  const {
+    currentDoc,
+    canUndo,
+    canRedo,
+    handleUndo,
+    handleRedo,
+    pushDocMutation,
 
-  // Sync incoming doc if it changes externally
-  useEffect(() => {
-    if (document.id !== history[historyIndex]?.id) {
-      setHistory([document]);
-      setHistoryIndex(0);
-    }
-  }, [document.id]);
+    activeSectionId,
+    setActiveSectionId,
+    selectedEntryId,
+    setSelectedEntryId,
+    selectedSectionKey,
+    setSelectedSectionKey,
+    currentSelectedEntry,
 
-  const currentDoc = history[historyIndex] || document;
+    findings,
+    isAuditing,
+    handleRunAudit,
+    handleApplyFindingFix,
+    handleDismissFinding,
+    handleClearAllFindings,
+    findingsForSelected,
 
-  const pushDocMutation = useCallback(
-    (newDoc: LoreBibleDocument) => {
-      const nextDoc: LoreBibleDocument = {
-        ...newDoc,
-        updatedAt: new Date().toISOString(),
-      };
-      setHistory((prev) => {
-        const truncated = prev.slice(0, historyIndex + 1);
-        return [...truncated, nextDoc];
-      });
-      setHistoryIndex((prev) => prev + 1);
-      onUpdateDocument(nextDoc);
-    },
-    [historyIndex, onUpdateDocument]
-  );
+    rippleNotice,
+    handleRegenerateRippleReferences,
 
-  const handleUndo = useCallback(() => {
-    if (historyIndex > 0) {
-      const prevDoc = history[historyIndex - 1];
-      setHistoryIndex(historyIndex - 1);
-      onUpdateDocument(prevDoc);
-    }
-  }, [historyIndex, history, onUpdateDocument]);
+    isRerollingEntry,
+    handleRerollEntry,
+    variants,
+    isLoadingVariants,
+    handleFetchVariants,
+    handlePickVariant,
+    clearVariants,
+    isPushingEntry,
+    handlePushEntry,
+    handleToggleLock,
+    handleSaveMarginNote,
+    handleDuplicateEntry,
+    handleDeleteEntry,
 
-  const handleRedo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const nextDoc = history[historyIndex + 1];
-      setHistoryIndex(historyIndex + 1);
-      onUpdateDocument(nextDoc);
-    }
-  }, [historyIndex, history, onUpdateDocument]);
+    regeneratingSection,
+    handleRegenerateSection,
+    handleUpdateEntryField,
+    handleUpdateCoreField,
+    handleUpdateUserField,
 
-  // Keyboard shortcut listener for Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z / Cmd+Y
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
-      if (isCmdOrCtrl && e.key.toLowerCase() === "z") {
-        if (e.shiftKey) {
-          e.preventDefault();
-          handleRedo();
-        } else {
-          e.preventDefault();
-          handleUndo();
-        }
-      } else if (isCmdOrCtrl && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        handleRedo();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleUndo, handleRedo]);
+    operationError,
+    setOperationError,
 
-  // 2. Active Section / Selection Tracking
-  const [activeSectionId, setActiveSectionId] = useState<string>("core");
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
-  const [selectedSectionKey, setSelectedSectionKey] = useState<string | null>(null);
-
-  // 3. Consistency Pass State
-  const [findings, setFindings] = useState<ConsistencyFinding[]>([]);
-  const [isAuditing, setIsAuditing] = useState(false);
-
-  // Run initial lightweight audit on load
-  useEffect(() => {
-    let isMounted = true;
-    auditConsistencyApi(document)
-      .then((res) => {
-        if (isMounted) setFindings(res);
-      })
-      .catch((err) => console.warn("Initial consistency check deferred:", err));
-    return () => {
-      isMounted = false;
-    };
-  }, [document.id]);
-
-  const handleRunAudit = async () => {
-    setIsAuditing(true);
-    try {
-      const res = await auditConsistencyApi(currentDoc);
-      setFindings(res);
-    } catch (err) {
-      console.error("Audit error:", err);
-    } finally {
-      setIsAuditing(false);
-    }
-  };
-
-  const handleApplyFindingFix = (finding: ConsistencyFinding) => {
-    let updated = { ...currentDoc };
-
-    if (finding.sectionKey === "worldPhysics" && finding.fieldKey) {
-      updated = {
-        ...updated,
-        worldPhysics: {
-          ...updated.worldPhysics,
-          [finding.fieldKey]: finding.suggestedFix,
-        },
-      };
-    } else if (finding.entryId && (updated as any)[finding.sectionKey]) {
-      const list: Entry[] = (updated as any)[finding.sectionKey] || [];
-      const modifiedList = list.map((e) => {
-        if (e.id === finding.entryId) {
-          if (finding.fieldKey) {
-            const currentVal = e.fields[finding.fieldKey] || "";
-            const newVal = currentVal.replace(finding.offendingText, finding.suggestedFix);
-            return {
-              ...e,
-              fields: {
-                ...e.fields,
-                [finding.fieldKey]: newVal || finding.suggestedFix,
-              },
-            };
-          } else if (finding.type === "weak_key") {
-            const newKeys = e.keys.map((k) =>
-              k.toLowerCase() === finding.offendingText.toLowerCase() ? finding.suggestedFix : k
-            );
-            return { ...e, keys: newKeys };
-          }
-        }
-        return e;
-      });
-      (updated as any)[finding.sectionKey] = modifiedList;
-    }
-
-    pushDocMutation(updated);
-    setFindings((prev) =>
-      prev.map((f) => (f.id === finding.id ? { ...f, applied: true } : f))
-    );
-  };
-
-  const handleDismissFinding = (findingId: string) => {
-    setFindings((prev) =>
-      prev.map((f) => (f.id === findingId ? { ...f, dismissed: true } : f))
-    );
-  };
-
-  const handleClearAllFindings = () => {
-    setFindings((prev) => prev.map((f) => ({ ...f, dismissed: true })));
-  };
-
-  // 4. Ripple System: check cross-references when an entry changes
-  const [rippleNotice, setRippleNotice] = useState<RippleNotice | null>(null);
-
-  const checkRipplesForName = (name: string, sourceEntryId: string) => {
-    if (!name || name.length < 3) return;
-    const sectionsToCheck = [
-      { key: "locations", title: "Location Seeds" },
-      { key: "factions", title: "Faction Seeds" },
-      { key: "npcs", title: "NPC Cast Seeds" },
-      { key: "relationshipWeb", title: "Relationship Web" },
-      { key: "knowledgeMap", title: "Knowledge Map" },
-      { key: "items", title: "Item Seeds" },
-      { key: "secrets", title: "Secret Seeds" },
-      { key: "pressures", title: "Pressures & Clocks" },
-    ];
-
-    const refs: { sectionKey: string; sectionTitle: string; entryId: string; entryName: string }[] = [];
-
-    for (const sec of sectionsToCheck) {
-      const list: Entry[] = (currentDoc as any)[sec.key] || [];
-      for (const item of list) {
-        if (item.id === sourceEntryId) continue;
-        const allText = Object.values(item.fields).join(" ");
-        if (allText.toLowerCase().includes(name.toLowerCase())) {
-          refs.push({
-            sectionKey: sec.key,
-            sectionTitle: sec.title,
-            entryId: item.id,
-            entryName: item.fields.name || item.fields.truth || item.fields.title || item.id,
-          });
-        }
-      }
-    }
-
-    if (refs.length > 0) {
-      setRippleNotice({
-        sourceName: name,
-        sourceEntryId,
-        references: refs,
-      });
-    } else {
-      setRippleNotice(null);
-    }
-  };
-
-  const handleRegenerateRippleReferences = async (notice: RippleNotice) => {
-    let updated = { ...currentDoc };
-    for (const ref of notice.references) {
-      try {
-        const fresh = await rerollEntryApi(
-          updated,
-          ref.sectionKey,
-          ref.entryId,
-          `Align with updated details of ${notice.sourceName}`,
-          settings,
-        );
-        const list: Entry[] = (updated as any)[ref.sectionKey] || [];
-        (updated as any)[ref.sectionKey] = list.map((e) => (e.id === ref.entryId ? fresh : e));
-      } catch (err) {
-        console.warn(`Ripple reroll failed for ${ref.entryName}:`, err);
-      }
-    }
-    pushDocMutation(updated);
-    setRippleNotice(null);
-  };
-
-  // 5. Entry Operations (Reroll, Lock, Variants, Push, Note, Delete, Duplicate)
-  const [isRerollingEntry, setIsRerollingEntry] = useState(false);
-  const [variants, setVariants] = useState<VariantSlip[] | null>(null);
-  const [isLoadingVariants, setIsLoadingVariants] = useState(false);
-  const [isPushingEntry, setIsPushingEntry] = useState(false);
-
-  const handleToggleLock = (sectionKey: string, entryId: string) => {
-    const list: Entry[] = (currentDoc as any)[sectionKey] || [];
-    const updated = list.map((e) =>
-      e.id === entryId ? { ...e, locked: !e.locked } : e
-    );
-    pushDocMutation({ ...currentDoc, [sectionKey]: updated });
-  };
-
-  const handleRerollEntry = async (sectionKey: string, entryId: string, instruction?: string) => {
-    setIsRerollingEntry(true);
-    setOperationError(null);
-    try {
-      const updatedEntry = await rerollEntryApi(currentDoc, sectionKey, entryId, instruction, settings);
-      const list: Entry[] = (currentDoc as any)[sectionKey] || [];
-      const updatedList = list.map((e) => (e.id === entryId ? updatedEntry : e));
-      pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
-
-      // Check ripples
-      const name = updatedEntry.fields.name || updatedEntry.fields.truth;
-      if (name) checkRipplesForName(name, entryId);
-    } catch (err: any) {
-      console.error("Reroll entry error:", err);
-      setOperationError(err?.message || "The entry could not be regenerated.");
-    } finally {
-      setIsRerollingEntry(false);
-    }
-  };
-
-  const handleFetchVariants = async (sectionKey: string, entryId: string) => {
-    setIsLoadingVariants(true);
-    setOperationError(null);
-    try {
-      const slips = await fetchVariantsApi(currentDoc, sectionKey, entryId, settings);
-      setVariants(slips);
-    } catch (err: any) {
-      console.error("Variants error:", err);
-      setOperationError(err?.message || "Variants could not be generated.");
-    } finally {
-      setIsLoadingVariants(false);
-    }
-  };
-
-  const handlePickVariant = (sectionKey: string, entryId: string, variant: VariantSlip) => {
-    const list: Entry[] = (currentDoc as any)[sectionKey] || [];
-    const target = list.find((e) => e.id === entryId);
-    const updatedEntry: Entry = {
-      ...variant.entry,
-      id: entryId,
-      locked: target?.locked || false,
-      note: target?.note,
-    };
-    const updatedList = list.map((e) => (e.id === entryId ? updatedEntry : e));
-    pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
-    setVariants(null);
-
-    const name = updatedEntry.fields.name || updatedEntry.fields.truth;
-    if (name) checkRipplesForName(name, entryId);
-  };
-
-  const handlePushEntry = async (sectionKey: string, entryId: string, instruction: string) => {
-    setIsPushingEntry(true);
-    setOperationError(null);
-    try {
-      const updatedEntry = await pushEntryApi(currentDoc, sectionKey, entryId, instruction, settings);
-      const list: Entry[] = (currentDoc as any)[sectionKey] || [];
-      const updatedList = list.map((e) => (e.id === entryId ? updatedEntry : e));
-      pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
-
-      const name = updatedEntry.fields.name || updatedEntry.fields.truth;
-      if (name) checkRipplesForName(name, entryId);
-    } catch (err: any) {
-      console.error("Push entry error:", err);
-      setOperationError(err?.message || "The entry could not be revised.");
-    } finally {
-      setIsPushingEntry(false);
-    }
-  };
-
-  const handleSaveMarginNote = (
-    sectionKey: string,
-    entryId: string,
-    noteText: string,
-    useAsInstruction: boolean
-  ) => {
-    const list: Entry[] = (currentDoc as any)[sectionKey] || [];
-    const updatedList = list.map((e) =>
-      e.id === entryId ? { ...e, note: noteText.trim() || undefined } : e
-    );
-    pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
-
-    if (useAsInstruction && noteText.trim()) {
-      handleRerollEntry(sectionKey, entryId, noteText.trim());
-    }
-  };
-
-  const handleDuplicateEntry = (sectionKey: string, entryId: string) => {
-    const list: Entry[] = (currentDoc as any)[sectionKey] || [];
-    const target = list.find((e) => e.id === entryId);
-    if (!target) return;
-
-    const dup: Entry = {
-      ...target,
-      id: `${sectionKey}-${Date.now()}`,
-      fields: {
-        ...target.fields,
-        name: target.fields.name ? `${target.fields.name} (Copy)` : target.fields.truth,
-      },
-      locked: false,
-    };
-
-    const targetIdx = list.findIndex((e) => e.id === entryId);
-    const updatedList = [...list];
-    updatedList.splice(targetIdx + 1, 0, dup);
-    pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
-  };
-
-  const handleDeleteEntry = (sectionKey: string, entryId: string) => {
-    const list: Entry[] = (currentDoc as any)[sectionKey] || [];
-    const updatedList = list.filter((e) => e.id !== entryId);
-    pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
-    if (selectedEntryId === entryId) {
-      setSelectedEntryId(null);
-      setSelectedSectionKey(null);
-    }
-  };
-
-  // Flat list of all entries for arrow key stepping
-  const allEntriesList = React.useMemo(() => {
-    const sections: { key: string; entries: Entry[] }[] = [
-      { key: "factions", entries: currentDoc.factions || [] },
-      { key: "locations", entries: currentDoc.locations || [] },
-      { key: "npcs", entries: currentDoc.npcs || [] },
-      { key: "items", entries: currentDoc.items || [] },
-      { key: "secrets", entries: currentDoc.secrets || [] },
-      { key: "rulesOfEngagement", entries: currentDoc.rulesOfEngagement || [] },
-      { key: "sensoryPalette", entries: currentDoc.sensoryPalette || [] },
-      { key: "openLoops", entries: currentDoc.openLoops || [] },
-    ];
-    const list: { sectionKey: string; entry: Entry }[] = [];
-    for (const s of sections) {
-      for (const e of s.entries) {
-        list.push({ sectionKey: s.key, entry: e });
-      }
-    }
-    return list;
-  }, [currentDoc]);
-
-  // Live word and token statistics
-  const liveStats = React.useMemo(() => {
-    let text = `${currentDoc.core.title} ${currentDoc.core.logline} ${currentDoc.core.synopsis} ${currentDoc.core.userRole} ${currentDoc.core.openingCrawl} `;
-    text += `${currentDoc.worldPhysics.strangenessRationale} ${currentDoc.worldPhysics.mundanityAnchors} `;
-    text += `${currentDoc.opening.firstMessage} ${currentDoc.opening.firstChoice} `;
-    for (const item of allEntriesList) {
-      text += Object.values(item.entry.fields || {}).join(" ") + " ";
-      if (item.entry.keys) text += item.entry.keys.join(" ") + " ";
-      if (item.entry.note) text += item.entry.note + " ";
-    }
-    const words = text.trim().split(/\s+/).filter(Boolean).length;
-    const tokens = Math.round(words * 1.33);
-    return { words, tokens };
-  }, [currentDoc, allEntriesList]);
-
-  // Relative formatted save time
-  const lastSavedFormatted = React.useMemo(() => {
-    if (!currentDoc.updatedAt) return "moments ago";
-    try {
-      const diffSec = Math.round(
-        (Date.now() - new Date(currentDoc.updatedAt).getTime()) / 1000
-      );
-      if (diffSec < 10) return "just now";
-      if (diffSec < 60) return `${diffSec}s ago`;
-      const diffMin = Math.floor(diffSec / 60);
-      if (diffMin < 60) return `${diffMin}m ago`;
-      return "earlier";
-    } catch {
-      return "recently";
-    }
-  }, [currentDoc.updatedAt]);
-
-  // Entry action hotkeys: R (reroll), L (lock), Escape (deselect), ArrowDown/Up (step)
-  useEffect(() => {
-    const handleEntryHotkeys = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isEditing =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable;
-
-      if (isEditing || e.metaKey || e.ctrlKey || e.altKey) return;
-
-      if ((e.key === "r" || e.key === "R") && selectedEntryId && selectedSectionKey) {
-        e.preventDefault();
-        handleRerollEntry(selectedSectionKey, selectedEntryId);
-      } else if ((e.key === "l" || e.key === "L") && selectedEntryId && selectedSectionKey) {
-        e.preventDefault();
-        handleToggleLock(selectedSectionKey, selectedEntryId);
-      } else if (e.key === "Escape") {
-        if (selectedEntryId) {
-          setSelectedEntryId(null);
-          setSelectedSectionKey(null);
-        }
-      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        if (allEntriesList.length > 0) {
-          e.preventDefault();
-          const currentIndex = allEntriesList.findIndex(
-            (item) => item.entry.id === selectedEntryId
-          );
-          if (currentIndex === -1) {
-            setSelectedEntryId(allEntriesList[0].entry.id);
-            setSelectedSectionKey(allEntriesList[0].sectionKey);
-          } else {
-            const nextIndex =
-              e.key === "ArrowDown"
-                ? (currentIndex + 1) % allEntriesList.length
-                : (currentIndex - 1 + allEntriesList.length) % allEntriesList.length;
-            setSelectedEntryId(allEntriesList[nextIndex].entry.id);
-            setSelectedSectionKey(allEntriesList[nextIndex].sectionKey);
-          }
-        }
-      }
-    };
-    window.addEventListener("keydown", handleEntryHotkeys);
-    return () => window.removeEventListener("keydown", handleEntryHotkeys);
-  }, [selectedEntryId, selectedSectionKey, allEntriesList, handleRerollEntry, handleToggleLock]);
-
-  // 6. Section-level regeneration and adding entries
-  const [regeneratingSection, setRegeneratingSection] = useState<string | null>(null);
-
-  const handleRegenerateSection = async (sectionKey: string, addCount?: number) => {
-    setRegeneratingSection(sectionKey);
-    setOperationError(null);
-    try {
-      const nextEntries = await regenerateSectionApi(currentDoc, sectionKey, addCount, settings);
-      pushDocMutation({ ...currentDoc, [sectionKey]: nextEntries });
-    } catch (err: any) {
-      console.error(`Section regen failed for ${sectionKey}:`, err);
-      setOperationError(err?.message || "The section could not be regenerated.");
-    } finally {
-      setRegeneratingSection(null);
-    }
-  };
-
-  // Inline field editing helpers
-  const handleUpdateEntryField = (
-    sectionKey: string,
-    entryId: string,
-    fieldKey: string,
-    val: string
-  ) => {
-    const list: Entry[] = (currentDoc as any)[sectionKey] || [];
-    const updatedList = list.map((e) => {
-      if (e.id === entryId) {
-        return {
-          ...e,
-          fields: {
-            ...e.fields,
-            [fieldKey]: val,
-          },
-        };
-      }
-      return e;
-    });
-    pushDocMutation({ ...currentDoc, [sectionKey]: updatedList });
-
-    if (fieldKey === "name" || fieldKey === "truth") {
-      checkRipplesForName(val, entryId);
-    }
-  };
-
-  const handleUpdateCoreField = (fieldKey: string, val: string) => {
-    pushDocMutation({
-      ...currentDoc,
-      core: {
-        ...currentDoc.core,
-        [fieldKey]: val,
-      },
-    });
-  };
-
-  const handleUpdateUserField = (fieldKey: string, val: string) => {
-    pushDocMutation({
-      ...currentDoc,
-      user: {
-        ...currentDoc.user,
-        [fieldKey]: val,
-      },
-    });
-  };
-
-  // Selected Entry object
-  const currentSelectedEntry: Entry | null =
-    selectedSectionKey && selectedEntryId
-      ? ((currentDoc as any)[selectedSectionKey] as Entry[])?.find(
-          (e) => e.id === selectedEntryId
-        ) || null
-      : null;
-
-  const findingsForSelected = findings.filter(
-    (f) => f.entryId === selectedEntryId && !f.applied && !f.dismissed
-  );
+    allEntriesList,
+    liveStats,
+    lastSavedFormatted,
+  } = useRefineController({
+    document,
+    onUpdateDocument,
+    settings,
+    enableKeyboardShortcuts: true,
+  });
 
   // Scroll to section when chosen in TOC or switch to interactive view tabs
   const handleScrollToSection = (sectionId: string) => {
@@ -701,7 +224,7 @@ export const RefineStage: React.FC<RefineStageProps> = ({
             <button
               type="button"
               onClick={handleUndo}
-              disabled={historyIndex <= 0}
+              disabled={!canUndo}
               title="Undo (Cmd/Ctrl + Z)"
               className="px-2.5 py-1 text-xs text-[var(--ink)] hover:bg-[var(--vellum)] border-r border-[var(--ink-soft)] disabled:opacity-30 cursor-pointer transition-colors"
             >
@@ -710,7 +233,7 @@ export const RefineStage: React.FC<RefineStageProps> = ({
             <button
               type="button"
               onClick={handleRedo}
-              disabled={historyIndex >= history.length - 1}
+              disabled={!canRedo}
               title="Redo (Cmd/Ctrl + Shift + Z)"
               className="px-2.5 py-1 text-xs text-[var(--ink)] hover:bg-[var(--vellum)] disabled:opacity-30 cursor-pointer transition-colors"
             >
@@ -1776,7 +1299,7 @@ export const RefineStage: React.FC<RefineStageProps> = ({
             variants={variants}
             isLoadingVariants={isLoadingVariants}
             onPickVariant={handlePickVariant}
-            onDismissVariants={() => setVariants(null)}
+            onDismissVariants={clearVariants}
             onPushEntry={handlePushEntry}
             isPushingEntry={isPushingEntry}
             onSaveMarginNote={handleSaveMarginNote}
