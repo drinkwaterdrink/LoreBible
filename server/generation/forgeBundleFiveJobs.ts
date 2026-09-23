@@ -9,6 +9,7 @@ import { validateSchemaValue } from "./schemaContract.js";
 import { FORGE_PROTOCOL, FORGE_SHARED_CONSTITUTION, FORGE_CRAFT, FORGE_CORRECTION } from "./prompts/forgeDefaults.js";
 import { renderSchemaContract } from "./schemaContract.js";
 import { sanitizeForgeSectionEntries } from "./forgeValidation.js";
+import { FORGE_CREATIVE_DEFAULTS } from "../../src/lib/prompts/registry.js";
 
 export type BundleFiveKey = "history" | "aesthetic" | "naming" | "pressures" | "additionalLore";
 export interface BundleFiveJob {
@@ -119,17 +120,9 @@ export function validateBundleFiveJob(job: BundleFiveJob, value: unknown): Recor
   return output as Record<BundleFiveKey, unknown>;
 }
 
-const MISSIONS: Record<BundleFiveKey, string> = {
-  history: "Write concrete past events and their continuing consequences. Name each event or subject specifically. Do not invent player history or promote an implication into canon.",
-  aesthetic: "Write one sensory and visual guide consistent with the setting and tonal breadth. This is one object, not a list of lore entries.",
-  naming: "Write one guide to the established naming register. Suggested names are not established people or biographies.",
-  pressures: "Write independent forces operating in the world, with scope and consequence. Current events are not eternal rules; do not dictate future scenes.",
-  additionalLore: "Write focused runtime-useful concepts for the exact assigned category. Follow its purpose. Preserve categoryId and categoryLabel exactly. Do not regenerate cast, locations or relationships assigned elsewhere.",
-};
-
 export function compileBundleFiveJobPrompt(job: BundleFiveJob, context: string, correction: string | null) {
   const manifest = { jobId: job.id, ownedSection: job.key, categoryId: job.categoryId, categoryLabel: job.categoryLabel, purpose: job.purpose, entryIds: job.entryIds };
-  const assignment = `BOUNDED SPECIALIST JOB\nGenerate only the owned section and entry IDs in JOB_MANIFEST. Other entries in context are reference-only. Do not fill project-wide deficits. Use each assigned ID exactly once. The application validates and merges jobs.\n\nMISSION\n${MISSIONS[job.key]}\n\nJOB_MANIFEST\n${JSON.stringify(manifest, null, 2)}\n\nSOURCE_CONTEXT\n${context}\n\nOUTPUT_SCHEMA\n${renderSchemaContract(job.schema)}`;
+  const assignment = `BOUNDED SPECIALIST JOB\nGenerate only the owned section and entry IDs in JOB_MANIFEST. Other entries in context are reference-only. Do not fill project-wide deficits. Use each assigned ID exactly once. The application validates and merges jobs.\n\nMISSION\n${FORGE_CREATIVE_DEFAULTS[job.key]}\n\nJOB_MANIFEST\n${JSON.stringify(manifest, null, 2)}\n\nSOURCE_CONTEXT\n${context}\n\nOUTPUT_SCHEMA\n${renderSchemaContract(job.schema)}`;
   return {
     systemInstruction: `${FORGE_PROTOCOL}\n\n${FORGE_SHARED_CONSTITUTION}\n\n${FORGE_CRAFT}`,
     userPrompt: correction ? `${assignment}\n\n${FORGE_CORRECTION}\n${correction}` : assignment,

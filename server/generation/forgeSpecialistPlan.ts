@@ -10,36 +10,12 @@ import {validateSchemaValue} from "./schemaContract.js";
 import {sanitizeForgeSectionEntries} from "./forgeValidation.js";
 import {ForgeValidationError} from "./forgeCandidate.js";
 import {compileBundleFiveJobPrompt,createBundleFiveJobSpec,splitBundleFiveJob,validateBundleFiveJob,type BundleFiveJob} from "./forgeBundleFiveJobs.js";
+import {FORGE_CREATIVE_DEFAULTS} from "../../src/lib/prompts/registry.js";
 
 export interface ForgeSpecialistJob {id:string;bundleIndex:number;kind:ForgeJobV1["kind"];key:ForgeJobDestinationV1;categoryId?:string;categoryLabel?:string;purpose?:string;entryIds:string[];schema:JsonSchema;splitDepth:number}
 export class ForgeSpecialistPlanningError extends Error {}
 const ENABLED_BUNDLES=new Set([0,1,2,3,4,5]);
 const SINGLETONS:[ForgeJobDestinationV1,number][]=[["core",0],["user",0],["worldPhysics",0],["status",0],["conflict",3],["pressureProtocol",3],["aesthetic",4],["naming",4],["proceduralRolls",5],["opening",5],["expansionNotes",5],["antiGravity",5],["buildNotes",5]];
-const MISSIONS:Partial<Record<ForgeJobDestinationV1,string>>={
-  core:"Define the playable premise, scale, tone, durable operating situation, costs, pressure, and central question without predetermining the plot or ending. Preserve the user's distinctive premise rather than replacing it with a stock setting.",
-  user:"Record only the player's explicitly established position, starting resources, wants, fears, and hooks. Leave unspecified biography, profession, family, personality, feelings, attraction, consent, abilities, destiny, prior relationships, and voluntary actions player-defined. Do not concretize an unresolved player variable.",
-  worldPhysics:"Write durable constraints that materially affect decisions, including ordinary or social rules when appropriate. Explain limits and consequences without inventing supernatural, violent, or genre mechanics merely because the schema can hold them.",
-  status:"Write only the initial snapshot. Route current location, active attempts, remaining deadlines, and opening-only circumstances here, not into permanent identity or durable rules. Preserve supplied routing values and do not invent exporter behavior.",
-  locations:"Write playable, concrete locations with a distinct function, mood, and specific pressure or problem. Do not invent people merely to fill a location.",
-  factions:"Write autonomous organizations with public face, real agenda, independent activity, and a premise-supported stance toward the player. Do not make every faction revolve around {{user}}.",
-  npcs:"Write only the assigned cast tier. Give each person a distinct role, want, embodiment, voice, contradiction, knowledge boundary, social connection, and independent activity. Do not invent player intimacy or make every want involve {{user}}.",
-  relationshipWeb:"Connect only established supplied entities. Preserve direction and distinguish the public bond from its specific pressure. Include benign cooperation where appropriate; do not invent an endpoint.",
-  knowledgeMap:"Separate truth from who knows, suspects, or may discover it. Preserve secret and agency boundaries. Use a concrete discovery condition without prescribing the player's future action.",
-  items:"Write specific usable objects with a clear function, cost or limit, and an unresolved roleplay opportunity. Do not turn every item into a magical relic or repeat facts owned by locations and people.",
-  secrets:"Write private truths with explicit keepers, concealment, a viable discovery path, and consequences. Do not leak the truth into public fields, disable earned-only discoveries, or prescribe the player's future action.",
-  conflict:"Write one coherent conflict architecture: its central tension, opposition, bad and acceptable stakes, temporal clock, moral knot, potential yield, and concrete speed bumps. Define pressures rather than a guaranteed plot, and never prescribe the player's actions.",
-  pressureProtocol:"Write one concise runtime guide for escalating, releasing, and recombining established pressures. Keep it procedural rather than encyclopedic, preserve player agency, and do not treat possible future events as settled canon.",
-  history:"Write concrete past events and their continuing consequences. Do not turn implications into accepted player history.",
-  pressures:"Write independent forces operating in the world, with scope, cost, affected parties, and temporal limits. Do not dictate future scenes or player decisions.",
-  additionalLore:"Write focused runtime-useful concepts for the exact assigned category. Preserve category identity and do not regenerate entities owned elsewhere.",
-  aesthetic:"Write one focused sensory and visual guide consistent with the accepted setting and tonal breadth.",
-  naming:"Write one guide to the established naming register. Suggested names are examples, not established people or biographies.",
-  proceduralRolls:"Write optional, premise-supported procedural tools only where useful. Outcomes must remain distinct and canon-compatible, cannot choose the player's emotions or decisions, and do not claim verified runtime integration.",
-  opening:"Write a concrete playable opening using established people and places. Portray the environment and NPC actions while leaving {{user}}'s speech, thoughts, feelings, consent, and voluntary response open. Do not leak hidden truth, force a menu choice, or turn opening-only state into evergreen canon.",
-  expansionNotes:"Preserve accepted tone, content boundaries, pacing, and explicit settings without silently resolving contradictions. Do not claim every character is an adult unless the accepted source establishes that fact.",
-  antiGravity:"Write concise safeguards against premise-specific protagonist gravity, omniscient NPC knowledge, unearned trust, repetitive narration, and forced outcomes. Do not substitute a generic prohibition list for the actual risks.",
-  buildNotes:"Record honest authoring metadata for permanence routing, order bands, earned-secret limitations, and format matching. Do not claim a state engine, activation simulation, import test, or Lumiverse capability that has not been verified.",
-};
 
 function projectedSchema(bundleIndex:number,key:ForgeJobDestinationV1):JsonSchema{
   const property=FORGE_BUNDLE_DEFINITIONS[bundleIndex]?.schema.properties?.[key];
@@ -66,7 +42,7 @@ export function createForgeReplacementSpec(child:ForgeSpecialistJob,parent:Forge
 export function compileForgeSpecialistJobPrompt(job:ForgeSpecialistJob,context:string,correction:string|null){
   if(job.kind==="bundle5_section")return compileBundleFiveJobPrompt(job as BundleFiveJob,context,correction);
   const manifest={jobId:job.id,logicalBundle:job.bundleIndex+1,ownedSection:job.key,categoryId:job.categoryId,categoryLabel:job.categoryLabel,purpose:job.purpose,castTier:job.categoryId==="principal_cast"?"principal":job.categoryId==="roster_cast"?"roster":undefined,entryIds:job.entryIds};
-  const assignment=`BOUNDED SPECIALIST JOB\nGenerate only the owned section and entry IDs in JOB_MANIFEST. Other entries in context are reference-only. Do not fill project-wide deficits. Use each assigned ID exactly once.\n\nMISSION\n${MISSIONS[job.key]??"Write only the assigned runtime content."}\n\nJOB_MANIFEST\n${JSON.stringify(manifest,null,2)}\n\nSOURCE_CONTEXT\n${context}\n\nOUTPUT_SCHEMA\n${renderSchemaContract(job.schema)}`;
+  const assignment=`BOUNDED SPECIALIST JOB\nGenerate only the owned section and entry IDs in JOB_MANIFEST. Other entries in context are reference-only. Do not fill project-wide deficits. Use each assigned ID exactly once.\n\nMISSION\n${FORGE_CREATIVE_DEFAULTS[job.key]??"Write only the assigned runtime content."}\n\nJOB_MANIFEST\n${JSON.stringify(manifest,null,2)}\n\nSOURCE_CONTEXT\n${context}\n\nOUTPUT_SCHEMA\n${renderSchemaContract(job.schema)}`;
   return{systemInstruction:`${FORGE_PROTOCOL}\n\n${FORGE_SHARED_CONSTITUTION}\n\n${FORGE_CRAFT}`,userPrompt:correction?`${assignment}\n\n${FORGE_CORRECTION}\n${correction}`:assignment};
 }
 export function hashForgeSpecialistPrompt(job:ForgeSpecialistJob,context:string):string{return`sha256:${sha256Hex(canonicalizeJson(compileForgeSpecialistJobPrompt(job,context,null)))}`;}

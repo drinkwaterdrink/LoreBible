@@ -34,6 +34,8 @@ import { createProfileStore, resolveDefaultProfileStorePath, type ProfileStore }
 import { registerConnectionRoutes } from "./server/routes/connections.js";
 import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerPremiseSuggestionRoutes } from "./server/routes/premiseSuggestions.js";
+import { registerPromptRoutes } from "./server/routes/prompts.js";
+import { createPromptProfileStore, resolveDefaultPromptProfileStorePath } from "./server/prompts/promptProfileStore.js";
 import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./server/projects/projectRepository.js";
 import { createModelGateway, ModelGatewayError, StructuredOutputTruncatedError, type ModelGateway } from "./server/model/gateway.js";
 import { parseStructuredOutput } from "./server/model/structuredOutput.js";
@@ -83,6 +85,7 @@ try {
 }
 
 registerPremiseSuggestionRoutes(app, { gateway: modelGateway });
+registerPromptRoutes(app, { store: createPromptProfileStore(resolveDefaultPromptProfileStorePath()) });
 
 function resolveRequestedModelSelection(value: unknown): ModelSelection | null {
   if (value == null) return null;

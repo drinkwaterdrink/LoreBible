@@ -17,6 +17,7 @@ import {
 } from "../services/connectionsService";
 import { filterAndSortModels, readFavoriteModelIds, toggleFavoriteModel, type ModelSort } from "../lib/modelPresentation";
 import { formatConnectionDiagnostics, runtimeCompatibilityMessage, type RuntimeInfo } from "../lib/runtimeDiagnostics";
+import { PromptStudio } from "./PromptStudio";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -71,6 +72,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
   const [favoriteModelIds, setFavoriteModelIds] = useState<string[]>(() => typeof localStorage === "undefined" ? [] : readFavoriteModelIds(localStorage.getItem(FAVORITES_KEY)));
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null);
   const [runtimeInfoLoaded, setRuntimeInfoLoaded] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<"connections" | "prompts">("connections");
   const catalogRequests = useRef(createCatalogRequestTracker());
   const modelListRef = useRef<HTMLDivElement | null>(null);
 
@@ -254,7 +256,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
           <div className="flex items-center gap-2"><KeyRound size={16} className="text-[var(--rubric)]" /><div><h2 className="font-apparatus text-sm tracking-widest uppercase">Connections & Models</h2><p className="text-[11px] text-[var(--graphite)] mt-0.5">Provider keys stay encrypted on this Windows desktop.</p></div></div>
           <button type="button" onClick={onClose} className="p-1 text-[var(--graphite)] hover:text-[var(--ink)]"><X size={16} /></button>
         </header>
-        <div data-connections-scroll-root="true" className="flex flex-1 min-h-0 flex-col overflow-hidden md:grid md:grid-cols-[220px_1fr]">
+        <nav className="grid shrink-0 grid-cols-2 border-b border-[var(--ink-soft)]" aria-label="Settings sections"><button type="button" onClick={() => setSettingsSection("connections")} className={`min-h-11 text-[10px] uppercase tracking-widest ${settingsSection === "connections" ? "bg-[var(--rubric)] text-white" : "hover:bg-[var(--vellum-raised)]"}`}>Connections &amp; Models</button><button type="button" onClick={() => setSettingsSection("prompts")} className={`min-h-11 text-[10px] uppercase tracking-widest ${settingsSection === "prompts" ? "bg-[var(--rubric)] text-white" : "hover:bg-[var(--vellum-raised)]"}`}>Creative Prompts</button></nav>
+        {settingsSection === "connections" ? <div data-connections-scroll-root="true" className="flex flex-1 min-h-0 flex-col overflow-hidden md:grid md:grid-cols-[220px_1fr]">
           <aside className="shrink-0 max-h-[24dvh] overflow-y-auto border-b md:max-h-none md:border-b-0 md:border-r border-[var(--ink-soft)] p-3 md:min-h-0">
             <button type="button" onClick={() => { setDraft(EMPTY_DRAFT); setModels([]); setStatus(null); }} className="w-full btn-secondary text-[11px] py-2 mb-3 flex items-center justify-center gap-1"><Plus size={13} /> New connection</button>
             <div className="space-y-1">
@@ -294,7 +297,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               {isCompleteModelSelection(selection) && <p className="mt-2 text-[10px] font-mono-ui text-[var(--graphite)] truncate">Selected: {selection.modelId}</p>}
             </div>
           </div>
-        </div>
+        </div> : <PromptStudio />}
       </section>
     </div>
   );

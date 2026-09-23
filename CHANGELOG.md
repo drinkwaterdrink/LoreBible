@@ -4,6 +4,19 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.71 — 2026-09-23
+
+### Added
+
+- Settings now includes a mobile-safe Creative Prompts section for creating and revising application-wide prompt profiles. Each Forge feature shows its shipped creative default, allowed literal macros, and a separate read-only summary of the server-owned requirements that an edit cannot replace.
+- Forge specialist missions now come from one browser-safe versioned prompt registry instead of a private second copy. Stable feature IDs cover every current Forge specialist responsibility.
+- Prompt profiles persist outside the repository in a dedicated versioned authoring store with atomic replacement, a recoverable backup, strict feature/size/schema validation, and optimistic revision conflicts.
+- The prompt profile API supports catalog/profile listing, creation, revision-checked updates, and revision-checked deletion without placing prompt text in the credential store.
+
+### Validation boundary
+
+- Saved profiles are deliberately not applied to generation in this release. The UI says so explicitly: project selection, precedence resolution, immutable resolved-prompt snapshots, replay hashes, import/export, compile preview, and isolated generation tests remain the next R3 work. Automated coverage verifies registry separation, strict parsing, macro preservation, persistence/restart, backup, conflict handling, route behavior, and the Settings surface; it does not certify creative quality or live provider behavior.
+
 ## v0.70 — 2026-09-22
 
 ### Added

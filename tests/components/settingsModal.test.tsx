@@ -23,6 +23,7 @@ test("connections dialog renders with no saved model selection", () => {
   );
 
   expect(html).toContain("Connections &amp; Models");
+  expect(html).toContain("Creative Prompts");
   expect(html).toContain("No saved providers yet.");
   expect(html).toContain("data-connections-scroll-root=\"true\"");
   expect(html).toContain("Advanced model settings");
