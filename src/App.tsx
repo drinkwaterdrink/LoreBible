@@ -71,6 +71,7 @@ import type { UiMode } from "./ui/adventure/types";
 import { getStoredUiMode, setStoredUiMode } from "./ui/adventure/uiMode";
 import { selectActiveGenerationTelemetry } from "./ui/adventure/activityAdapter";
 import { AdventureForgeWorkspace } from "./ui/adventure/workspaces/AdventureForgeWorkspace";
+import { AdventureRefineWorkspace } from "./ui/adventure/workspaces/AdventureRefineWorkspace";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -1460,7 +1461,7 @@ export default function App() {
       )}
 
       {currentStage === 5 && document && (
-        <RefineStage
+        <AdventureRefineWorkspace
           document={document}
           settings={settings}
           onUpdateDocument={(updated) => {

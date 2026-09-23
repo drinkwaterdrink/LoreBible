@@ -8,7 +8,7 @@ import { JourneyStrip } from "./JourneyStrip";
 import { ProjectHome } from "./ProjectHome";
 import { QuickActionsSheet } from "./QuickActionsSheet";
 import { ActivityShelf } from "./ActivityShelf";
-import { Globe, Clock, Hammer, ArrowLeft, Feather } from "lucide-react";
+import { Globe, Clock, Hammer, ArrowLeft, Feather, ChevronDown, X } from "lucide-react";
 
 interface AdventureStudioShellProps {
   currentStage: LegacyStageId;
@@ -61,6 +61,24 @@ export const AdventureStudioShell: React.FC<AdventureStudioShellProps> = ({
 }) => {
   const [activeNav, setActiveNav] = useState<NavDestination>("write");
   const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
+  const [isJourneySheetOpen, setIsJourneySheetOpen] = useState(false);
+
+  const getStageName = (stage: LegacyStageId) => {
+    switch (stage) {
+      case 1:
+        return "Spark";
+      case 2:
+        return "Divergence";
+      case 3:
+        return "Blueprint";
+      case 4:
+        return "The Forge";
+      case 5:
+        return "Refine Studio";
+      default:
+        return `Stage ${stage}`;
+    }
+  };
 
   const handleSelectNav = (dest: NavDestination) => {
     if (dest === "library") {
@@ -108,15 +126,24 @@ export const AdventureStudioShell: React.FC<AdventureStudioShellProps> = ({
           marginBadgeCount={marginBadgeCount}
         />
 
-        {/* Mobile Workflow Strip (visible on mobile in Write view) */}
+        {/* Mobile Compact Stage Identity & Journey Drawer Trigger */}
         {activeNav === "write" && (
-          <div className="md:hidden border-b border-[var(--border-soft)] bg-[var(--surface-panel)]/80 px-2 py-1">
-            <JourneyStrip
-              currentStage={currentStage}
-              maxUnlockedStage={maxUnlockedStage}
-              onSelectStage={onSelectStage}
-              variant="mobile-strip"
-            />
+          <div className="md:hidden border-b border-[var(--border-soft)] bg-[var(--surface-panel)]/90 px-3 py-1.5 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setIsJourneySheetOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-apparatus text-[var(--text-primary)] hover:text-[var(--accent-gold)] cursor-pointer"
+            >
+              <span className="font-mono font-bold text-[10px] text-[var(--accent-gold)]">
+                Stage {currentStage} of 5
+              </span>
+              <span className="text-[var(--text-muted)]">·</span>
+              <span className="font-semibold">{getStageName(currentStage)}</span>
+              <ChevronDown size={13} className="text-[var(--text-muted)] ml-0.5" />
+            </button>
+            <span className="text-[10px] font-mono text-[var(--text-muted)]">
+              {currentStage === 5 ? "Manuscript Complete" : `Max Stage ${maxUnlockedStage}`}
+            </span>
           </div>
         )}
 
@@ -251,6 +278,50 @@ export const AdventureStudioShell: React.FC<AdventureStudioShellProps> = ({
         currentStage={currentStage}
         maxUnlockedStage={maxUnlockedStage}
       />
+
+      {/* 6. Mobile Journey Sheet Modal */}
+      {isJourneySheetOpen && (
+        <div
+          role="dialog"
+          aria-label="Adventure Journey"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end md:hidden animate-fade-in"
+          onClick={() => setIsJourneySheetOpen(false)}
+        >
+          <div
+            className="bg-[var(--surface-panel-raised)] border-t border-[var(--border-soft)] rounded-t-xl p-4 space-y-3 max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border-soft)] pb-2">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent-gold)] font-bold">
+                  Adventure Journey
+                </span>
+                <h3 className="text-sm font-serif-title font-semibold text-[var(--text-primary)]">
+                  5 Fabrication Stages
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsJourneySheetOpen(false)}
+                className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded cursor-pointer"
+                aria-label="Close Journey Sheet"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <JourneyStrip
+              currentStage={currentStage}
+              maxUnlockedStage={maxUnlockedStage}
+              onSelectStage={(s) => {
+                onSelectStage(s);
+                setIsJourneySheetOpen(false);
+              }}
+              variant="mobile-strip"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
