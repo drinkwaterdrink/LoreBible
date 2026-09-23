@@ -62,6 +62,7 @@ import { createBlueprintPlanningContext } from "./lib/blueprint/planningContext"
 import { abortBlueprintRequest, findBlueprintSourceProject, findPreparedGraphForDocument, getBlueprintFailure, shouldClearBlueprintPlan, shouldOpenProjectGraphPanel } from "./lib/blueprint/previewLifecycle";
 import { commitBlueprintStudioDraft, createBlueprintStudioDraft } from "./lib/blueprint/studioLifecycle";
 import { updateBlueprintField, withEverydayLifeDetail } from "./lib/blueprint/selection";
+import { createForgePreflight } from "./lib/forgePreflight";
 
 const DEFAULT_SETTINGS: GenerationSettings = {
   quality: "Deep Craft",
@@ -255,6 +256,12 @@ export default function App() {
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const chosenTake = takes.find((t) => t.id === selectedTakeId);
+  const forgePreflight = blueprintSelection ? createForgePreflight({
+    selection: blueprintSelection,
+    modelId: settings.modelSelection?.modelId ?? null,
+    sourceCharacters: JSON.stringify({ sparkText, parse, canon, physics, chosenTake, blueprintSelection }).length,
+    executionMode: forgeExecutionMode,
+  }) : null;
   const activeDivergenceBoardIndex = Math.max(0, divergenceBoards.findIndex((board) => board.id === activeDivergenceBoardId));
   const workingTitle =
     document?.core?.title ||
@@ -1398,6 +1405,7 @@ export default function App() {
               blueprintBusy={blueprintBusy}
               blueprintError={blueprintError}
               onOpenBlueprint={() => void handleOpenWorkflowBlueprint()}
+              forgePreflight={forgePreflight}
             />
           )}
 

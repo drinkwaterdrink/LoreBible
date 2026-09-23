@@ -3,6 +3,7 @@ import { PhysicsConfig } from "../types";
 import { LINGUISTIC_BASES } from "../lib/wordBanks";
 import { Sliders, ArrowRight, BookOpen, Skull, Flame } from "lucide-react";
 import type { BlueprintSelectionV1, ForgeExecutionPreference } from "../contracts/blueprintSelection";
+import type { ForgePreflightReport } from "../lib/forgePreflight";
 
 export const STANDARD_GENRES = [
   "Drama & Psychological Realism",
@@ -38,6 +39,7 @@ interface PhysicsStageProps {
   blueprintBusy?: boolean;
   blueprintError?: string | null;
   onOpenBlueprint?: () => void;
+  forgePreflight?: ForgePreflightReport | null;
 }
 
 export const PhysicsStage: React.FC<PhysicsStageProps> = ({
@@ -52,7 +54,9 @@ export const PhysicsStage: React.FC<PhysicsStageProps> = ({
   blueprintBusy = false,
   blueprintError = null,
   onOpenBlueprint,
+  forgePreflight = null,
 }) => {
+  const forgeBlocked = Boolean(forgePreflight?.findings.some(finding => finding.severity === "blocker"));
   const update = <K extends keyof PhysicsConfig>(field: K, val: PhysicsConfig[K]) => {
     onChangePhysics({
       ...physics,
@@ -720,6 +724,27 @@ export const PhysicsStage: React.FC<PhysicsStageProps> = ({
         </div>
       </div>
 
+      {forgePreflight && (
+        <section aria-label="Forge request preflight" className="manuscript-sheet p-4 sm:p-6 space-y-4 border-l-2 border-l-[var(--ink-blue)]">
+          <div className="scribe-header">
+            <span>Forge request preflight</span>
+            <span className="text-[10px] font-mono-ui">Estimate · not provider certification</span>
+          </div>
+          <p className="text-xs text-[var(--graphite)] font-manuscript leading-relaxed">
+            Review the expected request shape before generation. Library size and runtime activation remain separate; neither means the complete lorebook enters one prompt.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-manuscript">
+            <div className="border border-[var(--ink-soft)] p-3 min-w-0"><span className="block text-[10px] font-apparatus uppercase text-[var(--graphite)]">Selected model</span><strong className="block mt-1 break-words">{forgePreflight.modelId ?? "No model selected"}</strong></div>
+            <div className="border border-[var(--ink-soft)] p-3"><span className="block text-[10px] font-apparatus uppercase text-[var(--graphite)]">Estimated requests</span><strong className="block mt-1">{forgePreflight.requestCount.toLocaleString("en-US")}</strong></div>
+            <div className="border border-[var(--ink-soft)] p-3"><span className="block text-[10px] font-apparatus uppercase text-[var(--graphite)]">Approximate source context</span><strong className="block mt-1">{forgePreflight.sourceContextTokens.toLocaleString("en-US")} tokens</strong></div>
+            <div className="border border-[var(--ink-soft)] p-3"><span className="block text-[10px] font-apparatus uppercase text-[var(--graphite)]">Largest expected output</span><strong className="block mt-1">{forgePreflight.largestExpectedOutputTokens.toLocaleString("en-US")} tokens</strong></div>
+          </div>
+          <div className="space-y-2">
+            {forgePreflight.findings.map(finding => <p key={finding.code} role={finding.severity === "blocker" ? "alert" : undefined} className={`border p-3 text-xs font-manuscript ${finding.severity === "blocker" || finding.severity === "major" ? "border-[var(--rubric)] text-[var(--rubric)]" : "border-[var(--ink-soft)] text-[var(--graphite)]"}`}>{finding.message}</p>)}
+          </div>
+        </section>
+      )}
+
       {/* Action Footer */}
       <div className="flex items-center justify-between pt-4 border-t border-[var(--ink-soft)]">
         <span className="text-xs text-[var(--graphite)] font-manuscript">
@@ -729,9 +754,10 @@ export const PhysicsStage: React.FC<PhysicsStageProps> = ({
           id="proceed-to-forge-btn"
           type="button"
           onClick={onProceed}
-          className="btn-primary flex items-center gap-2"
+          disabled={forgeBlocked}
+          className="btn-primary flex items-center gap-2 disabled:opacity-50"
         >
-          <span>Begin The Forge</span>
+          <span>{forgeBlocked ? "Resolve preflight blockers" : "Begin The Forge"}</span>
           <ArrowRight size={13} />
         </button>
       </div>

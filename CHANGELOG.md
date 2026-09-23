@@ -4,6 +4,19 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.70 — 2026-09-22
+
+### Added
+
+- Stage 3 now shows a mobile-safe Forge request preflight before generation. It reports the selected model, approximate source-context size, estimated request count, and largest expected output from the accepted Blueprint and execution mode.
+- The preflight keeps total lore library size separate from runtime activation budget and labels every token figure as an estimate rather than provider or Lumiverse certification.
+- Single Request mode receives a major warning when the combined estimated output exceeds LoreBible's current 16,000-token Forge request allowance, with Continuous mode identified as the safer resumable choice.
+- Missing model selection is a visible blocker and disables “Begin The Forge.” Unknown provider/model capacity remains a non-blocking evidence note because the current connection contract does not verify a reliable context/output limit.
+
+### Validation boundary
+
+- Automated coverage verifies independent budgets, source-size estimation, bounded specialist estimates, oversized Single Request warnings, unknown-capacity disclosure, and blocker behavior in Stage 3. These are planning estimates; no live provider capacity probe, generation timing benchmark, or creative-quality certification was performed.
+
 ## v0.69 — 2026-09-22
 
 ### Changed
