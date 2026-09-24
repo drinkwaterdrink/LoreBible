@@ -19,3 +19,10 @@ test("snapshot hashes change when effective creative instructions change", () =>
   const two = resolvePromptSnapshot({ profile: { schemaVersion: 1, id: "profile/a", name: "A", revision: 2, overrides: [{ featureId: "forge.core", baseVersion: 1, text: "Second", revision: 2 }] } });
   expect(two.hash).not.toBe(one.hash);
 });
+
+test("a project override takes precedence without mutating the selected application profile", () => {
+  const profile = { schemaVersion: 1 as const, id: "profile/a", name: "A", revision: 1, overrides: [{ featureId: "forge.core", baseVersion: 1, text: "Application direction", revision: 1 }] };
+  const snapshot = resolvePromptSnapshot({ profile, projectOverrides: [{ featureId: "forge.core", baseVersion: 1, text: "Project-only direction", revision: 1 }] });
+  expect(snapshot.resolvedCreativeText["forge.core"]).toBe("Project-only direction");
+  expect(profile.overrides[0].text).toBe("Application direction");
+});

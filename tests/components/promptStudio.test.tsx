@@ -25,3 +25,10 @@ test("profile saves increment only prompt overrides whose text changed", () => {
   expect(buildPromptOverrides([feature], { "forge.core": "Changed edit" }, profile)).toEqual([{ featureId: "forge.core", baseVersion: 1, text: "Changed edit", revision: 4 }]);
   expect(buildPromptOverrides([feature], { "forge.core": feature.defaultText }, profile)).toEqual([]);
 });
+
+test("Prompt Studio exposes a project-only override without confusing it with the application profile", () => {
+  const html = renderToString(<PromptStudioView features={[feature]} profiles={[]} selectedProfileId={null} selectedFeatureId="forge.core" draftName="New profile" draftText={feature.defaultText} busy={false} error={null} status={null} projectOverrideText="Project direction" onProjectOverrideChange={() => undefined} onSelectProfile={() => undefined} onSelectFeature={() => undefined} onNameChange={() => undefined} onTextChange={() => undefined} onNew={() => undefined} onSave={() => undefined} onReset={() => undefined} />);
+  expect(html).toContain("This project override");
+  expect(html).toContain("Project direction");
+  expect(html).toContain("Clear project override");
+});

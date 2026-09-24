@@ -28,14 +28,19 @@ function parseOverride(value: unknown): PromptOverrideV1 {
   if (source.text.length > PROMPT_TEXT_MAX_CHARS) throw new TypeError("Prompt override text must be 24,000 characters or fewer.");
   return { featureId: source.featureId, baseVersion: positiveInteger(source.baseVersion, "baseVersion"), text: source.text, revision: positiveInteger(source.revision, "revision") };
 }
+export function parsePromptOverridesV1(value: unknown): PromptOverrideV1[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new TypeError("Prompt overrides must be an array.");
+  const overrides = value.map(parseOverride);
+  if (new Set(overrides.map((item) => item.featureId)).size !== overrides.length) throw new TypeError("Each prompt feature may appear only once.");
+  return overrides;
+}
 
 export function parsePromptProfileDraftV1(value: unknown): PromptProfileDraftV1 {
   const source = record(value, "Prompt profile draft");
   exact(source, ["name", "overrides"], "prompt profile draft");
   if (typeof source.name !== "string" || !source.name.trim()) throw new TypeError("Prompt profile name is required.");
-  if (!Array.isArray(source.overrides)) throw new TypeError("Prompt profile overrides must be an array.");
-  const overrides = source.overrides.map(parseOverride);
-  if (new Set(overrides.map((item) => item.featureId)).size !== overrides.length) throw new TypeError("Each prompt feature may appear only once.");
+  const overrides = parsePromptOverridesV1(source.overrides);
   return { name: source.name.trim(), overrides };
 }
 

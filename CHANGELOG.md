@@ -4,6 +4,18 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.73 — 2026-09-24
+
+### Added
+
+- Creative Prompts now exposes an optional feature-level “This project override” beneath the application-profile editor. It is saved only with the current project and can be cleared independently without changing the shared profile.
+- Effective Forge prompt precedence is now shipped default → selected application profile → explicit project override. Project overrides are strictly parsed through the same registered-feature, size, duplicate, and plain-data safeguards as profile overrides.
+- Project overrides participate in the immutable Forge snapshot and its SHA-256 hash, so retries remain reproducible and changing a project override cannot rewrite an existing checkpoint.
+
+### Validation boundary
+
+- Automated coverage verifies precedence, project isolation at the persisted workspace boundary, UI separation, strict parsing, and snapshot behavior. Profile import/export, visual diff, compiled request preview, and isolated provider test generation remain the next R3 tooling slice.
+
 ## v0.72 — 2026-09-23
 
 ### Added

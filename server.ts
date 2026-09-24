@@ -37,6 +37,7 @@ import { registerPremiseSuggestionRoutes } from "./server/routes/premiseSuggesti
 import { registerPromptRoutes } from "./server/routes/prompts.js";
 import { createPromptProfileStore, resolveDefaultPromptProfileStorePath } from "./server/prompts/promptProfileStore.js";
 import { resolvePromptSnapshot } from "./src/lib/prompts/resolve.js";
+import { parsePromptOverridesV1 } from "./src/contracts/prompts.js";
 import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./server/projects/projectRepository.js";
 import { createModelGateway, ModelGatewayError, StructuredOutputTruncatedError, type ModelGateway } from "./server/model/gateway.js";
 import { parseStructuredOutput } from "./server/model/structuredOutput.js";
@@ -1453,7 +1454,7 @@ app.post("/api/forge", async (req, res) => {
     const profileId = typeof settings?.promptProfileId === "string" && settings.promptProfileId.trim() ? settings.promptProfileId : null;
     const profile = profileId ? (await promptProfileStore.list()).find((item) => item.id === profileId) : null;
     if (profileId && !profile) throw new Error("The selected creative prompt profile no longer exists. Choose another profile in Settings.");
-    promptSnapshot = resolvePromptSnapshot({ profile: profile ?? null });
+    promptSnapshot = resolvePromptSnapshot({ profile: profile ?? null, projectOverrides: parsePromptOverridesV1(settings?.promptOverrides) });
   } catch (error) {
     sendEvent("error", { code: "INVALID_PROMPT_PROFILE", message: error instanceof Error ? error.message : "Creative prompt profile could not be resolved." });
     return;

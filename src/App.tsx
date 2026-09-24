@@ -1602,6 +1602,8 @@ export default function App() {
         onSelectionChange={(modelSelection) => setSettings((current) => ({ ...current, modelSelection }))}
         promptProfileId={settings.promptProfileId ?? null}
         onPromptProfileChange={(promptProfileId) => setSettings((current) => ({ ...current, promptProfileId }))}
+        promptOverrides={settings.promptOverrides ?? []}
+        onPromptOverridesChange={(promptOverrides) => setSettings((current) => ({ ...current, promptOverrides }))}
       />
 
       <CommandPalette

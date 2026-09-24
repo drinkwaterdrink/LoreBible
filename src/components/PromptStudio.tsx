@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, Loader2, RotateCcw, Save } from "lucide-react";
-import type { PromptProfileV1 } from "../contracts/prompts";
+import type { PromptOverrideV1, PromptProfileV1 } from "../contracts/prompts";
 import type { PromptRegistryEntry } from "../lib/prompts/registry";
 import { createPromptProfile, listPromptCatalog, updatePromptProfile } from "../services/promptsService";
 
@@ -10,6 +10,7 @@ interface ViewProps {
   onSelectProfile(id: string | null): void; onSelectFeature(id: string): void; onNameChange(value: string): void; onTextChange(value: string): void;
   onNew(): void; onSave(): void; onReset(): void;
   activeProfileId?: string | null; onActivateProfile?(id: string | null): void;
+  projectOverrideText?: string; onProjectOverrideChange?(value: string | null): void;
 }
 export function buildPromptOverrides(features: readonly PromptRegistryEntry[], values: Readonly<Record<string, string>>, profile: PromptProfileV1 | null) {
   return features.flatMap((feature) => {
@@ -36,6 +37,7 @@ export function PromptStudioView(props: ViewProps) {
       <div className="space-y-1">{props.features.map((item) => <button key={item.id} type="button" onClick={() => props.onSelectFeature(item.id)} className={`w-full min-h-10 border-l-2 px-3 py-2 text-left text-xs ${item.id === feature?.id ? "border-[var(--rubric)] bg-[var(--vellum-raised)]" : "border-transparent hover:bg-[var(--vellum-raised)]"}`}>{item.label}<span className="block text-[9px] text-[var(--graphite)]">v{item.defaultVersion} · {item.id}</span></button>)}</div>
       {feature && <div className="min-w-0"><h3 className="font-apparatus text-sm">{feature.label}</h3><p className="mt-1 text-[11px] text-[var(--graphite)]">{feature.purpose}</p><p className="mt-2 text-[10px] text-[var(--graphite)]">Allowed literal variables: {feature.allowedVariables.join(", ")}</p>
         <textarea aria-label={`${feature.label} creative prompt`} value={props.draftText} onChange={(event) => props.onTextChange(event.target.value)} maxLength={24_000} className="mt-3 min-h-56 w-full input-paper font-mono-ui text-xs leading-relaxed" />
+        {props.onProjectOverrideChange && <div className="mt-4 border border-[var(--gold)]/40 p-3"><h4 className="text-[10px] font-apparatus uppercase tracking-widest">This project override</h4><p className="mt-1 text-[11px] text-[var(--graphite)]">Optional final layer for this project only. It overrides the selected application profile for this feature.</p><textarea aria-label={`${feature.label} project override`} value={props.projectOverrideText ?? ""} onChange={(event) => props.onProjectOverrideChange!(event.target.value)} maxLength={24_000} placeholder="Leave blank to inherit the application profile." className="mt-2 min-h-32 w-full input-paper font-mono-ui text-xs leading-relaxed"/><button type="button" onClick={() => props.onProjectOverrideChange!(null)} disabled={!props.projectOverrideText} className="btn-secondary mt-2 min-h-10 px-4 text-[10px] uppercase tracking-wider">Clear project override</button></div>}
         <div className="mt-3 border border-[var(--ink-soft)] p-3"><h4 className="text-[10px] font-apparatus uppercase tracking-widest">Protected requirements</h4><ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] text-[var(--graphite)]">{feature.protectedRequirements.map((requirement) => <li key={requirement}>{requirement}</li>)}</ul></div>
         <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={props.onSave} disabled={props.busy} className="btn-primary min-h-10 px-4 text-[10px] uppercase tracking-wider flex items-center gap-2">{props.busy ? <Loader2 size={13} className="animate-spin"/> : <Save size={13}/>}Save profile</button><button type="button" onClick={props.onReset} disabled={props.busy} className="btn-secondary min-h-10 px-4 text-[10px] uppercase tracking-wider flex items-center gap-2"><RotateCcw size={13}/>Use shipped default</button></div>
       </div>}
@@ -43,16 +45,18 @@ export function PromptStudioView(props: ViewProps) {
   </div>;
 }
 
-export function PromptStudio(props: { activeProfileId?: string | null; onActiveProfileChange?(id: string | null): void } = {}) {
+export function PromptStudio(props: { activeProfileId?: string | null; onActiveProfileChange?(id: string | null): void; projectOverrides?: PromptOverrideV1[]; onProjectOverridesChange?(overrides: PromptOverrideV1[]): void } = {}) {
   const [features, setFeatures] = useState<PromptRegistryEntry[]>([]); const [profiles, setProfiles] = useState<PromptProfileV1[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null); const [featureId, setFeatureId] = useState(""); const [name, setName] = useState("My creative profile");
   const [overrides, setOverrides] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [status, setStatus] = useState<string | null>(null);
   const profile = profiles.find((item) => item.id === profileId) || null; const feature = features.find((item) => item.id === featureId) || features[0];
   const text = feature ? overrides[feature.id] ?? feature.defaultText : "";
+  const projectOverride=feature?props.projectOverrides?.find(item=>item.featureId===feature.id):undefined;
+  const changeProjectOverride=(value:string|null)=>{if(!feature||!props.onProjectOverridesChange)return;const remaining=(props.projectOverrides??[]).filter(item=>item.featureId!==feature.id);if(value?.trim())remaining.push({featureId:feature.id,baseVersion:feature.defaultVersion,text:value,revision:(projectOverride?.revision??0)+1});props.onProjectOverridesChange(remaining);};
   useEffect(() => { void listPromptCatalog().then((catalog) => { setFeatures(catalog.features); setProfiles(catalog.profiles); setFeatureId(catalog.features[0]?.id || ""); }).catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load Prompt Studio.")); }, []);
   const selectProfile = (id: string | null) => { const selected = profiles.find((item) => item.id === id); setProfileId(id); setName(selected?.name || "My creative profile"); setOverrides(Object.fromEntries(selected?.overrides.map((item) => [item.featureId, item.text]) || [])); setStatus(null); setError(null); };
   const draftOverrides = useMemo(() => buildPromptOverrides(features, overrides, profile), [features, overrides, profile]);
   const save = async () => { setBusy(true); setError(null); setStatus(null); try { const saved = profile ? await updatePromptProfile(profile.id, { name, overrides: draftOverrides }, profile.revision) : await createPromptProfile({ name, overrides: draftOverrides }); setProfiles((current) => current.some((item) => item.id === saved.id) ? current.map((item) => item.id === saved.id ? saved : item) : [...current, saved]); setProfileId(saved.id); setStatus("Profile saved. Activate it below when you want this project to use it."); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save prompt profile."); } finally { setBusy(false); } };
   if (!features.length && !error) return <div className="flex min-h-48 items-center justify-center text-xs text-[var(--graphite)]"><Loader2 size={14} className="mr-2 animate-spin"/>Loading creative prompts…</div>;
-  return <PromptStudioView features={features} profiles={profiles} selectedProfileId={profileId} selectedFeatureId={feature?.id || ""} draftName={name} draftText={text} busy={busy} error={error} status={status} activeProfileId={props.activeProfileId} onActivateProfile={props.onActiveProfileChange} onSelectProfile={selectProfile} onSelectFeature={setFeatureId} onNameChange={setName} onTextChange={(value) => feature && setOverrides((current) => ({ ...current, [feature.id]: value }))} onNew={() => selectProfile(null)} onSave={() => void save()} onReset={() => feature && setOverrides((current) => { const next = { ...current }; delete next[feature.id]; return next; })} />;
+  return <PromptStudioView features={features} profiles={profiles} selectedProfileId={profileId} selectedFeatureId={feature?.id || ""} draftName={name} draftText={text} busy={busy} error={error} status={status} activeProfileId={props.activeProfileId} onActivateProfile={props.onActiveProfileChange} projectOverrideText={projectOverride?.text??""} onProjectOverrideChange={props.onProjectOverridesChange?changeProjectOverride:undefined} onSelectProfile={selectProfile} onSelectFeature={setFeatureId} onNameChange={setName} onTextChange={(value) => feature && setOverrides((current) => ({ ...current, [feature.id]: value }))} onNew={() => selectProfile(null)} onSave={() => void save()} onReset={() => feature && setOverrides((current) => { const next = { ...current }; delete next[feature.id]; return next; })} />;
 }

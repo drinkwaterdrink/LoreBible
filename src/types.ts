@@ -4,6 +4,7 @@
 
 import type { ModelSelection, GenerationProvenance } from './contracts/generation';
 import type { SparkDNA } from './contracts/spark';
+import type { PromptOverrideV1 } from './contracts/prompts';
 
 export type { ModelSelection, GenerationProvenance } from './contracts/generation';
 export type { CanonicalSparkDNA, SparkDNA } from './contracts/spark';
@@ -114,6 +115,8 @@ export interface GenerationSettings {
   modelSelection?: ModelSelection;
   /** Saved creative prompt profile selected for this project. */
   promptProfileId?: string | null;
+  /** Feature-level creative directions private to this project. */
+  promptOverrides?: PromptOverrideV1[];
 }
 
 export interface GenerationApiError {

@@ -40,7 +40,7 @@ const draft: SavedWorkspaceDraftV2 = {
     selectedTakeId: "take-current",
   },
   generation: {
-    settings: { quality: "Balanced", divergenceMode: "Faithful", authorFlavor: { mode: "Off", strength: "Sprinkle", autoBehavior: "Compatible" }, modelSelection: { profileId: "profile-1", modelId: "model-1" } },
+    settings: { quality: "Balanced", divergenceMode: "Faithful", authorFlavor: { mode: "Off", strength: "Sprinkle", autoBehavior: "Compatible" }, modelSelection: { profileId: "profile-1", modelId: "model-1" }, promptProfileId: "prompt-profile-1", promptOverrides: [{ featureId: "forge.core", baseVersion: 1, text: "Project-only direction", revision: 1 }] },
     modelSelection: { profileId: "profile-1", modelId: "model-1" },
     provenance: [],
   },
@@ -54,6 +54,7 @@ test("active workspace round-trips stage, settings, and take history without sec
   expect(restored.draft).toEqual(draft);
   expect(restored.draft?.workflow.takes[0].versions).toHaveLength(2);
   expect(restored.draft?.generation.settings.modelSelection).toEqual({ profileId: "profile-1", modelId: "model-1" });
+  expect(restored.draft?.generation.settings.promptOverrides?.[0].text).toBe("Project-only direction");
   expect(storage.getItem(WORKSPACE_DRAFT_KEY)).not.toContain("apiKey");
   expect(storage.getItem(WORKSPACE_DRAFT_KEY)).not.toContain("secretCiphertext");
 });
