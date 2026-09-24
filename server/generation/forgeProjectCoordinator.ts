@@ -6,9 +6,10 @@ import type{ProjectGraphCommand}from"../../src/lib/projectGraph/commands.js";
 import type{ProjectRepository}from"../projects/projectRepository.js";
 import{FORGE_BUNDLE_KEYS,type ForgeExecutionMode}from"./forgeResume.js";
 import type{BlueprintSelectionV1}from"../../src/contracts/blueprintSelection.js";
+import type{ResolvedPromptSnapshotV1}from"../../src/contracts/prompts.js";
 
 export interface ForgeCreativeSource{sparkText:unknown;parse:unknown;canon:unknown;physics:unknown;chosenTake:unknown;blueprintSelection?:BlueprintSelectionV1}
-export interface PreparedForgeProject{projectId:string;buildId:string;sourceRevision:number;inputFingerprint:string;graph:ProjectGraphV1;resumeSections:Record<string,unknown>;nextBundleIndex:number;complete:boolean}
+export interface PreparedForgeProject{projectId:string;buildId:string;sourceRevision:number;inputFingerprint:string;promptSnapshot:ResolvedPromptSnapshotV1;graph:ProjectGraphV1;resumeSections:Record<string,unknown>;nextBundleIndex:number;complete:boolean}
 export interface ActiveForgeAttempt extends PreparedForgeProject{bundleIndex:number;attemptId:string}
 interface Dependencies{now?:()=>string;id?:(kind:"build"|"attempt"|"command")=>string}
 
@@ -17,14 +18,15 @@ export function createForgeInputFingerprint(source:ForgeCreativeSource){return`s
 export function createForgeProjectCoordinator(repository:ProjectRepository,deps:Dependencies={}){
   const now=deps.now??(()=>new Date().toISOString());const id=deps.id??((kind)=>`${kind}/${randomUUID()}`);
   async function apply(projectId:string,command:ProjectGraphCommand,commandId=id("command")){const graph=await repository.load(projectId);if(!graph)throw new Error("Prepared Project Graph was not found.");return(await repository.apply(projectId,{commandId,expectedRevision:graph.project.revision!,issuedAt:now(),command})).graph;}
-  function context(graph:ProjectGraphV1,build:ForgeBuildRecordV1):PreparedForgeProject{const resumed=resumeForgeBuild(build,build.inputFingerprint,build.sourceRevision);return{projectId:graph.project.id,buildId:build.id,sourceRevision:build.sourceRevision,inputFingerprint:build.inputFingerprint,graph,resumeSections:resumed.sections,nextBundleIndex:resumed.nextBundleIndex,complete:resumed.complete};}
+  function context(graph:ProjectGraphV1,build:ForgeBuildRecordV1):PreparedForgeProject{const resumed=resumeForgeBuild(build,build.inputFingerprint,build.sourceRevision);if(!build.promptSnapshot)throw new Error("Forge prompt snapshot is missing.");return{projectId:graph.project.id,buildId:build.id,sourceRevision:build.sourceRevision,inputFingerprint:build.inputFingerprint,promptSnapshot:structuredClone(build.promptSnapshot),graph,resumeSections:resumed.sections,nextBundleIndex:resumed.nextBundleIndex,complete:resumed.complete};}
   function find(graph:ProjectGraphV1,fingerprint:string){return[...graph.builds].reverse().find((item)=>item.kind==="forge"&&(item as ForgeBuildRecordV1).inputFingerprint===fingerprint)as ForgeBuildRecordV1|undefined;}
   function ledger(graph:ProjectGraphV1,buildId:string):ForgeSpecialistLedgerV1{const result=(graph.builds.find(item=>item.id===buildId)as ForgeBuildRecordV1|undefined)?.specialistLedger;if(!result)throw new Error("Forge specialist ledger was not saved.");return result;}
   async function jobCommand(active:ActiveForgeAttempt,command:ProjectGraphCommand){const graph=await apply(active.projectId,command);return ledger(graph,active.buildId);}
   return{
-    async prepare(projectId:string,source:ForgeCreativeSource,executionMode:ForgeExecutionMode){const fingerprint=createForgeInputFingerprint(source);let graph=await repository.load(projectId);if(!graph)throw new Error("Prepared Project Graph was not found.");let build=find(graph,fingerprint);
+    async prepare(projectId:string,source:ForgeCreativeSource,executionMode:ForgeExecutionMode,promptSnapshot:ResolvedPromptSnapshotV1){const fingerprint=createForgeInputFingerprint(source);let graph=await repository.load(projectId);if(!graph)throw new Error("Prepared Project Graph was not found.");let build=find(graph,fingerprint);
       if(build&&build.lastTransitionRevision!==graph.project.revision)build=undefined;
-      if(!build){const buildId=id("build");graph=await apply(projectId,{type:"forge.initialize",buildId,inputFingerprint:fingerprint,executionMode});build=graph.builds.find((item)=>item.id===buildId)as ForgeBuildRecordV1;}
+      if(!build){const buildId=id("build");graph=await apply(projectId,{type:"forge.initialize",buildId,inputFingerprint:fingerprint,executionMode,promptSnapshot});build=graph.builds.find((item)=>item.id===buildId)as ForgeBuildRecordV1;}
+      else if(!build.promptSnapshot){graph=await apply(projectId,{type:"forge.prompt.snapshot",buildId:build.id,promptSnapshot,inputFingerprint:build.inputFingerprint,sourceRevision:build.sourceRevision});build=graph.builds.find((item)=>item.id===build!.id)as ForgeBuildRecordV1;}
       if(build.status==="active"){const batch=build.batches.find((item)=>item.status==="active");const attempt=batch?.attempts.find((item)=>item.status==="active");if(batch&&attempt){graph=await apply(projectId,{type:"forge.batch.fail",buildId:build.id,bundleIndex:batch.index,attemptId:attempt.id,code:"CLIENT_DISCONNECTED",message:"Interrupted before completion.",inputFingerprint:build.inputFingerprint,sourceRevision:build.sourceRevision});build=graph.builds.find((item)=>item.id===build!.id)as ForgeBuildRecordV1;}}
       return context(graph,build);
     },

@@ -3,11 +3,13 @@ import { canonicalizeJson } from "./canonicalJson";
 import { beginForgeBatch, cancelForgeBatch, completeForgeBatch, completeForgeRange, createForgeBuild, failForgeBatch, ForgeBuildError } from "./forgeBuilds";
 import { parseProjectGraph } from "./validation";
 import { beginSpecialistJob, completeSpecialistJob, createSpecialistLedger, replaceSpecialistJob, stopSpecialistJob, ForgeSpecialistError } from "./forgeSpecialistLedger";
+import type { ResolvedPromptSnapshotV1 } from "../../contracts/prompts";
 
 export type ProjectGraphCommand =
   | { type:"entity.rename"; entityId:string; name:string }
   | { type:"canon.update"; factId:string; value:unknown; status?:CanonStatus; visibility?:Visibility; temporalClass?:TemporalClass }
-  | { type:"forge.initialize"; buildId:string; inputFingerprint:string; executionMode:"continuous"|"step_by_step"|"single_request" }
+  | { type:"forge.initialize"; buildId:string; inputFingerprint:string; executionMode:"continuous"|"step_by_step"|"single_request"; promptSnapshot?:ResolvedPromptSnapshotV1 }
+  | { type:"forge.prompt.snapshot"; buildId:string; promptSnapshot:ResolvedPromptSnapshotV1; inputFingerprint:string; sourceRevision:number }
   | { type:"forge.batch.begin"; buildId:string; bundleIndex:number; attemptId:string; provider:string; modelId:string; route:string; inputFingerprint:string; sourceRevision:number }
   | { type:"forge.batch.complete"; buildId:string; bundleIndex:number; attemptId:string; sections:Record<string,unknown>; inputFingerprint:string; sourceRevision:number }
   | { type:"forge.range.complete"; buildId:string; startBundleIndex:number; endBundleIndexExclusive:number; attemptIds:string[]; sections:Record<string,unknown>; provider:string; modelId:string; route:string; inputFingerprint:string; sourceRevision:number }
@@ -90,7 +92,9 @@ export function applyProjectGraphCommand(input:ProjectGraphV1,envelope:ProjectGr
     Object.assign(fact,next); changedIds.push(fact.id); automaticChanges.push({targetId:fact.id,path:`canon.${fact.id}`,classification:"automatic_structural_edit",reason:"Explicit canon fact fields were updated without changing identity or provenance."});
   } else if(envelope.command.type==="forge.initialize"){
     const command=envelope.command;if(graph.builds.some(item=>item.id===command.buildId))throw new ProjectGraphCommandError("Build ID already exists.","invalid_command");
-    const build=forgeTransition(()=>createForgeBuild({id:command.buildId,sourceRevision:revision,inputFingerprint:command.inputFingerprint,executionMode:command.executionMode,createdAt:envelope.issuedAt}));graph.builds.push(build);changedIds.push(build.id);automaticChanges.push({targetId:build.id,path:`builds.${build.id}`,classification:"automatic_structural_edit",reason:"Durable Forge build and six pending bundle records were initialized."});
+    const build=forgeTransition(()=>createForgeBuild({id:command.buildId,sourceRevision:revision,inputFingerprint:command.inputFingerprint,executionMode:command.executionMode,createdAt:envelope.issuedAt,promptSnapshot:command.promptSnapshot}));graph.builds.push(build);changedIds.push(build.id);automaticChanges.push({targetId:build.id,path:`builds.${build.id}`,classification:"automatic_structural_edit",reason:"Durable Forge build and six pending bundle records were initialized."});
+  } else if(envelope.command.type==="forge.prompt.snapshot"){
+    const command=envelope.command;const index=graph.builds.findIndex(item=>item.id===command.buildId);const build=forgeBuild(graph,command.buildId);verifyForgeTransition(build,command,revision);if(build.promptSnapshot)throw new ProjectGraphCommandError("Forge prompt snapshot already exists.","invalid_command");const next=structuredClone(build);next.promptSnapshot=structuredClone(command.promptSnapshot);next.legacyPromptCompletedBundleCount=next.checkpoint.completedBundleCount;next.lastTransitionRevision=revision+1;next.updatedAt=envelope.issuedAt;graph.builds[index]=next;changedIds.push(build.id);automaticChanges.push({targetId:build.id,path:`builds.${build.id}.promptSnapshot`,classification:"automatic_structural_edit",reason:"Remaining Forge work received an immutable prompt snapshot; earlier completed bundles retain legacy prompt provenance."});
   } else if(envelope.command.type==="forge.batch.begin"){
     const command=envelope.command;const index=graph.builds.findIndex(item=>item.id===command.buildId);const build=forgeBuild(graph,command.buildId);verifyForgeTransition(build,command,revision);const next=forgeTransition(()=>beginForgeBatch(build,{bundleIndex:command.bundleIndex,attemptId:command.attemptId,provider:command.provider,modelId:command.modelId,route:command.route,startedAt:envelope.issuedAt}));next.lastTransitionRevision=revision+1;graph.builds[index]=next;changedIds.push(build.id);automaticChanges.push({targetId:build.id,path:`builds.${build.id}.batches.${command.bundleIndex}`,classification:"automatic_structural_edit",reason:"Forge provider attempt began without altering completed bundle content."});
   } else if(envelope.command.type==="forge.batch.complete"){

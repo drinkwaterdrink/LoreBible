@@ -66,9 +66,11 @@ export const PROMPT_REGISTRY: readonly PromptRegistryEntry[] = Object.freeze(
 );
 
 const BY_ID = new Map(PROMPT_REGISTRY.map((entry) => [entry.id, entry]));
+const ID_BY_DESTINATION = new Map((Object.keys(FORGE_CREATIVE_DEFAULTS) as ForgeJobDestinationV1[]).map((key, index) => [key, PROMPT_REGISTRY[index].id]));
 export function getPromptRegistryEntry(id: string): PromptRegistryEntry {
   const entry = BY_ID.get(id);
   if (!entry) throw new Error(`Unknown prompt feature: ${id}.`);
   return entry;
 }
 export function isPromptFeatureId(id: string): boolean { return BY_ID.has(id); }
+export function getForgePromptFeatureId(destination: ForgeJobDestinationV1): string { return ID_BY_DESTINATION.get(destination)!; }

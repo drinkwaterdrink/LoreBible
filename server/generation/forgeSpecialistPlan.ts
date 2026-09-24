@@ -10,7 +10,8 @@ import {validateSchemaValue} from "./schemaContract.js";
 import {sanitizeForgeSectionEntries} from "./forgeValidation.js";
 import {ForgeValidationError} from "./forgeCandidate.js";
 import {compileBundleFiveJobPrompt,createBundleFiveJobSpec,splitBundleFiveJob,validateBundleFiveJob,type BundleFiveJob} from "./forgeBundleFiveJobs.js";
-import {FORGE_CREATIVE_DEFAULTS} from "../../src/lib/prompts/registry.js";
+import {FORGE_CREATIVE_DEFAULTS,getForgePromptFeatureId} from "../../src/lib/prompts/registry.js";
+import type {ResolvedPromptSnapshotV1} from "../../src/contracts/prompts.js";
 
 export interface ForgeSpecialistJob {id:string;bundleIndex:number;kind:ForgeJobV1["kind"];key:ForgeJobDestinationV1;categoryId?:string;categoryLabel?:string;purpose?:string;entryIds:string[];schema:JsonSchema;splitDepth:number}
 export class ForgeSpecialistPlanningError extends Error {}
@@ -39,13 +40,14 @@ export function createForgeReplacementSpec(child:ForgeSpecialistJob,parent:Forge
   const promptHash=`sha256:${sha256Hex(canonicalizeJson(compileForgeSpecialistJobPrompt(child,"[DYNAMIC_SOURCE_CONTEXT]",null)))}`;
   return{...parent,id:child.id,ordinal,entryIds:[...child.entryIds],promptHash,splitDepth:child.splitDepth};
 }
-export function compileForgeSpecialistJobPrompt(job:ForgeSpecialistJob,context:string,correction:string|null){
-  if(job.kind==="bundle5_section")return compileBundleFiveJobPrompt(job as BundleFiveJob,context,correction);
+export function compileForgeSpecialistJobPrompt(job:ForgeSpecialistJob,context:string,correction:string|null,promptSnapshot?:ResolvedPromptSnapshotV1){
+  if(job.kind==="bundle5_section")return compileBundleFiveJobPrompt(job as BundleFiveJob,context,correction,promptSnapshot?.resolvedCreativeText[getForgePromptFeatureId(job.key)]);
   const manifest={jobId:job.id,logicalBundle:job.bundleIndex+1,ownedSection:job.key,categoryId:job.categoryId,categoryLabel:job.categoryLabel,purpose:job.purpose,castTier:job.categoryId==="principal_cast"?"principal":job.categoryId==="roster_cast"?"roster":undefined,entryIds:job.entryIds};
-  const assignment=`BOUNDED SPECIALIST JOB\nGenerate only the owned section and entry IDs in JOB_MANIFEST. Other entries in context are reference-only. Do not fill project-wide deficits. Use each assigned ID exactly once.\n\nMISSION\n${FORGE_CREATIVE_DEFAULTS[job.key]??"Write only the assigned runtime content."}\n\nJOB_MANIFEST\n${JSON.stringify(manifest,null,2)}\n\nSOURCE_CONTEXT\n${context}\n\nOUTPUT_SCHEMA\n${renderSchemaContract(job.schema)}`;
+  const mission=promptSnapshot?.resolvedCreativeText[getForgePromptFeatureId(job.key)]??FORGE_CREATIVE_DEFAULTS[job.key]??"Write only the assigned runtime content.";
+  const assignment=`BOUNDED SPECIALIST JOB\nGenerate only the owned section and entry IDs in JOB_MANIFEST. Other entries in context are reference-only. Do not fill project-wide deficits. Use each assigned ID exactly once.\n\nMISSION\n${mission}\n\nJOB_MANIFEST\n${JSON.stringify(manifest,null,2)}\n\nSOURCE_CONTEXT\n${context}\n\nOUTPUT_SCHEMA\n${renderSchemaContract(job.schema)}`;
   return{systemInstruction:`${FORGE_PROTOCOL}\n\n${FORGE_SHARED_CONSTITUTION}\n\n${FORGE_CRAFT}`,userPrompt:correction?`${assignment}\n\n${FORGE_CORRECTION}\n${correction}`:assignment};
 }
-export function hashForgeSpecialistPrompt(job:ForgeSpecialistJob,context:string):string{return`sha256:${sha256Hex(canonicalizeJson(compileForgeSpecialistJobPrompt(job,context,null)))}`;}
+export function hashForgeSpecialistPrompt(job:ForgeSpecialistJob,context:string,promptSnapshot?:ResolvedPromptSnapshotV1):string{return`sha256:${sha256Hex(canonicalizeJson(compileForgeSpecialistJobPrompt(job,context,null,promptSnapshot)))}`;}
 function spec(input:{id:string;bundleIndex:number;key:ForgeJobDestinationV1;categoryId?:string;categoryLabel?:string;purpose?:string;entryIds:string[];dependencies:string[];estimatedOutputTokens:number;ordinal:number},inputFingerprint:string):ForgeJobV1{
   const shell:ForgeSpecialistJob={id:input.id,bundleIndex:input.bundleIndex,kind:"category_entries",key:input.key,categoryId:input.categoryId,categoryLabel:input.categoryLabel,purpose:input.purpose,entryIds:input.entryIds,schema:projectedSchema(input.bundleIndex,input.key),splitDepth:0};
   return{version:1,id:input.id,bundleIndex:input.bundleIndex,ordinal:input.ordinal,kind:"category_entries",destinations:[input.key],categoryId:input.categoryId,categoryLabel:input.categoryLabel,purpose:input.purpose,entryIds:[...input.entryIds],dependencies:[...input.dependencies],schemaId:`forge.bundle${input.bundleIndex+1}.${input.key}/v1`,schemaVersion:1,promptHash:`sha256:${sha256Hex(canonicalizeJson(compileForgeSpecialistJobPrompt(shell,"[DYNAMIC_SOURCE_CONTEXT]",null)))}`,inputFingerprint,estimatedOutputTokens:input.estimatedOutputTokens,splitDepth:0};

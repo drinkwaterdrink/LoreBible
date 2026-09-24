@@ -1,3 +1,5 @@
+import type { ResolvedPromptSnapshotV1 } from "./prompts";
+
 export const PROJECT_GRAPH_SCHEMA = "lorebible.project-graph/v1" as const;
 
 export const USER_AGENCY_RESERVATIONS = [
@@ -49,6 +51,10 @@ export interface ForgeBuildRecordV1 extends BuildRecord {
   /** Optional while reading v0.53-v0.54 saved builds; every new completion populates this collection. */
   categoryRecords?: ForgeCategoryRecordV1[];
   specialistLedger?: ForgeSpecialistLedgerV1;
+  /** Immutable effective creative instructions used by this build. Older builds may omit it. */
+  promptSnapshot?: ResolvedPromptSnapshotV1;
+  /** Number of already accepted bundles whose exact creative prompt predates snapshot provenance. */
+  legacyPromptCompletedBundleCount?: number;
   checkpoint: { completedBundleCount: number; sections: Record<string, unknown> };
 }
 export interface ValidationFinding { id: string; severity: "blocker" | "major" | "minor" | "info"; code: string; path: string; message: string; evidence?: unknown; }

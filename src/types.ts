@@ -112,6 +112,8 @@ export interface GenerationSettings {
   authorFlavor: AuthorFlavorConfig;
   timeoutSeconds?: number;
   modelSelection?: ModelSelection;
+  /** Saved creative prompt profile selected for this project. */
+  promptProfileId?: string | null;
 }
 
 export interface GenerationApiError {

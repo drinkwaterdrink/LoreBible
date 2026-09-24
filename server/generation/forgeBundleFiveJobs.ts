@@ -120,9 +120,9 @@ export function validateBundleFiveJob(job: BundleFiveJob, value: unknown): Recor
   return output as Record<BundleFiveKey, unknown>;
 }
 
-export function compileBundleFiveJobPrompt(job: BundleFiveJob, context: string, correction: string | null) {
+export function compileBundleFiveJobPrompt(job: BundleFiveJob, context: string, correction: string | null, missionOverride?: string) {
   const manifest = { jobId: job.id, ownedSection: job.key, categoryId: job.categoryId, categoryLabel: job.categoryLabel, purpose: job.purpose, entryIds: job.entryIds };
-  const assignment = `BOUNDED SPECIALIST JOB\nGenerate only the owned section and entry IDs in JOB_MANIFEST. Other entries in context are reference-only. Do not fill project-wide deficits. Use each assigned ID exactly once. The application validates and merges jobs.\n\nMISSION\n${FORGE_CREATIVE_DEFAULTS[job.key]}\n\nJOB_MANIFEST\n${JSON.stringify(manifest, null, 2)}\n\nSOURCE_CONTEXT\n${context}\n\nOUTPUT_SCHEMA\n${renderSchemaContract(job.schema)}`;
+  const assignment = `BOUNDED SPECIALIST JOB\nGenerate only the owned section and entry IDs in JOB_MANIFEST. Other entries in context are reference-only. Do not fill project-wide deficits. Use each assigned ID exactly once. The application validates and merges jobs.\n\nMISSION\n${missionOverride ?? FORGE_CREATIVE_DEFAULTS[job.key]}\n\nJOB_MANIFEST\n${JSON.stringify(manifest, null, 2)}\n\nSOURCE_CONTEXT\n${context}\n\nOUTPUT_SCHEMA\n${renderSchemaContract(job.schema)}`;
   return {
     systemInstruction: `${FORGE_PROTOCOL}\n\n${FORGE_SHARED_CONSTITUTION}\n\n${FORGE_CRAFT}`,
     userPrompt: correction ? `${assignment}\n\n${FORGE_CORRECTION}\n${correction}` : assignment,

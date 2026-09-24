@@ -36,6 +36,7 @@ import { registerProjectRoutes } from "./server/routes/projects.js";
 import { registerPremiseSuggestionRoutes } from "./server/routes/premiseSuggestions.js";
 import { registerPromptRoutes } from "./server/routes/prompts.js";
 import { createPromptProfileStore, resolveDefaultPromptProfileStorePath } from "./server/prompts/promptProfileStore.js";
+import { resolvePromptSnapshot } from "./src/lib/prompts/resolve.js";
 import { createProjectRepository, resolveDefaultProjectRepositoryPath } from "./server/projects/projectRepository.js";
 import { createModelGateway, ModelGatewayError, StructuredOutputTruncatedError, type ModelGateway } from "./server/model/gateway.js";
 import { parseStructuredOutput } from "./server/model/structuredOutput.js";
@@ -85,7 +86,8 @@ try {
 }
 
 registerPremiseSuggestionRoutes(app, { gateway: modelGateway });
-registerPromptRoutes(app, { store: createPromptProfileStore(resolveDefaultPromptProfileStorePath()) });
+const promptProfileStore = createPromptProfileStore(resolveDefaultPromptProfileStorePath());
+registerPromptRoutes(app, { store: promptProfileStore });
 
 function resolveRequestedModelSelection(value: unknown): ModelSelection | null {
   if (value == null) return null;
@@ -1446,9 +1448,20 @@ app.post("/api/forge", async (req, res) => {
   }
   const forgeBlueprintBrief = createForgeBlueprintBrief(acceptedBlueprintSelection);
 
+  let promptSnapshot;
+  try {
+    const profileId = typeof settings?.promptProfileId === "string" && settings.promptProfileId.trim() ? settings.promptProfileId : null;
+    const profile = profileId ? (await promptProfileStore.list()).find((item) => item.id === profileId) : null;
+    if (profileId && !profile) throw new Error("The selected creative prompt profile no longer exists. Choose another profile in Settings.");
+    promptSnapshot = resolvePromptSnapshot({ profile: profile ?? null });
+  } catch (error) {
+    sendEvent("error", { code: "INVALID_PROMPT_PROFILE", message: error instanceof Error ? error.message : "Creative prompt profile could not be resolved." });
+    return;
+  }
+
   let durableForge:PreparedForgeProject|null=null;
   if(typeof graphProjectId==="string"&&graphProjectId){
-    try{durableForge=await forgeProjectCoordinator.prepare(graphProjectId,{sparkText,parse,canon,physics,chosenTake,blueprintSelection:acceptedBlueprintSelection},executionMode as ForgeExecutionMode);}
+    try{durableForge=await forgeProjectCoordinator.prepare(graphProjectId,{sparkText,parse,canon,physics,chosenTake,blueprintSelection:acceptedBlueprintSelection},executionMode as ForgeExecutionMode,promptSnapshot);}
     catch(error){sendEvent("error",{code:"FORGE_PROJECT_UNAVAILABLE",message:error instanceof Error?error.message:"Durable Forge project could not be prepared."});return;}
   }
   let resumePlan;
@@ -1528,13 +1541,13 @@ app.post("/api/forge", async (req, res) => {
             }
             session.send({ type: "progress", task: "forge", phase: "forge_bundle", label: `${bundle.name} specialist ${jobIndex + 1} of ${jobs.length}: ${job.categoryLabel ?? job.key}`, completedSteps: i, totalSteps: bundles.length });
             let owned: Record<string, unknown>;
-            const renderedPromptHash=hashForgeSpecialistPrompt(job,context);
+            const renderedPromptHash=hashForgeSpecialistPrompt(job,context,durableForge.promptSnapshot);
             const startedJob = durableAttempt && saved ? await forgeProjectCoordinator.beginJob(durableAttempt, saved.job, durableProvenance!.provider, durableProvenance!.modelId,renderedPromptHash) : null;
             try { owned = await runForgeAttempts({
               signal: requestLifecycle.signal,
               onEvent: event => session.send({ type: "progress", task: "forge", phase: event.phase === "correction" ? "retrying" : event.phase === "validation" ? "validating" : "forge_bundle", label: `${job.categoryLabel ?? job.key}: attempt ${event.attempt} of ${event.maximum}${event.code ? ` (${event.code})` : ""}`, completedSteps: i, totalSteps: bundles.length, attempt: event.attempt, maxAttempts: event.maximum }),
               request: ({ correction, signal }) => {
-                const prompt = compileForgeSpecialistJobPrompt(job, context, correction);
+                const prompt = compileForgeSpecialistJobPrompt(job, context, correction, durableForge!.promptSnapshot);
                 let outputMode: "native_schema" | "json_only" | "prompt_contract" | "gemini_sdk_schema" | undefined;
                 return executeGeminiWithRetry<unknown>({
                   ai, systemInstruction: prompt.systemInstruction, userPrompt: prompt.userPrompt,

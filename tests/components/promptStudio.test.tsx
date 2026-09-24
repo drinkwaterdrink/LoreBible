@@ -14,7 +14,7 @@ test("Prompt Studio keeps editable creative text separate from protected require
   expect(html).toContain("Application profile");
   expect(html).toContain("Protected requirements");
   expect(html).toContain("The output schema always applies.");
-  expect(html).toContain("Saved profiles do not affect generation yet");
+  expect(html).toContain("Forge freezes its effective instructions");
   expect(html).toContain("data-prompt-studio-scroll-root=\"true\"");
   expect(html).not.toContain("textarea readonly");
 });

@@ -3,6 +3,7 @@ import { FORGE_BUNDLE_KEYS, type ForgeExecutionMode } from "../../../server/gene
 import { deriveForgeSectionsFromCategoryRecords, projectForgeSections } from "./forgeCategoryRecords";
 import { mergeSpecialistJobs, stopSpecialistJob } from "./forgeSpecialistLedger";
 import { canonicalizeJson } from "./canonicalJson";
+import type { ResolvedPromptSnapshotV1 } from "../../contracts/prompts";
 
 const BUNDLE_NAMES = [
   "Core, User, World Physics, and Status",
@@ -36,7 +37,7 @@ function batchAt(build: ForgeBuildRecordV1, index: number) {
   return batch;
 }
 
-export function createForgeBuild(input: { id: string; sourceRevision: number; inputFingerprint: string; executionMode: ForgeExecutionMode; createdAt: string }): ForgeBuildRecordV1 {
+export function createForgeBuild(input: { id: string; sourceRevision: number; inputFingerprint: string; executionMode: ForgeExecutionMode; createdAt: string; promptSnapshot?: ResolvedPromptSnapshotV1 }): ForgeBuildRecordV1 {
   if (!input.id.trim() || !Number.isSafeInteger(input.sourceRevision) || input.sourceRevision < 1 || !input.inputFingerprint.trim()) throw new ForgeBuildError("Forge build identity, source revision, and input fingerprint are required.", "invalid_build");
   return {
     id: input.id, kind: "forge", schema: "lorebible.forge-build/v1", stage: "forge", status: "pending", artifactIds: [],
@@ -44,6 +45,7 @@ export function createForgeBuild(input: { id: string; sourceRevision: number; in
     createdAt: input.createdAt, updatedAt: input.createdAt,
     batches: FORGE_BUNDLE_KEYS.map((keys, index) => ({ index, name: BUNDLE_NAMES[index], expectedKeys: [...keys], status: "pending", sections: {}, attempts: [], acceptedCommandId: null })),
     categoryRecords: [],
+    promptSnapshot: input.promptSnapshot ? structuredClone(input.promptSnapshot) : undefined,
     checkpoint: { completedBundleCount: 0, sections: {} },
   };
 }

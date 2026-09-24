@@ -4,6 +4,7 @@ import {createForgeSpecialistPlan,hydrateForgeSpecialistJob,compileForgeSpeciali
 import {compileBundleFiveJobPrompt,createBundleFiveJobSpec,type BundleFiveJob} from "../../server/generation/forgeBundleFiveJobs";
 import {createSpecialistLedger,beginSpecialistJob} from "../../src/lib/projectGraph/forgeSpecialistLedger";
 import type {ForgeSpecialistLedgerV1} from "../../src/contracts/projectGraph";
+import {resolvePromptSnapshot} from "../../src/lib/prompts/resolve";
 
 test("one deterministic plan owns bounded Bundle 2 and Bundle 5 category jobs",()=>{
   const selection=structuredClone(blueprintSelectionFixture);
@@ -52,6 +53,14 @@ test("a location specialist receives only its owned schema and slots",()=>{
   expect(prompt.userPrompt).not.toContain('"factions"');
   expect(prompt.userPrompt).not.toContain('"history"');
   expect(hashForgeSpecialistPrompt(job,"source context")).not.toBe(locationSpec.promptHash);
+});
+
+test("specialists use the immutable build snapshot instead of the current shipped mission",()=>{
+  const selection=structuredClone(blueprintSelectionFixture);selection.categories=[{...selection.categories[0],id:"locations",label:"Locations",purpose:"Playable places",status:"required",detail:"standard",targetRange:{min:1,ideal:1,max:1}}];selection.lorebookRange={min:1,ideal:1,max:1};
+  const job=hydrateForgeSpecialistJob(createForgeSpecialistPlan(selection,{},"context","sha256:source").jobs.find(item=>item.destinations[0]==="locations")!);
+  const snapshot=resolvePromptSnapshot({profile:{schemaVersion:1,id:"profile/places",name:"Places",revision:1,overrides:[{featureId:"forge.locations",baseVersion:1,text:"Give every place a precise social function.",revision:1}]}});
+  const prompt=compileForgeSpecialistJobPrompt(job,"context",null,snapshot);
+  expect(prompt.userPrompt).toContain("Give every place a precise social function.");
 });
 
 test("specialists never replace a combined single-request generation batch",()=>{

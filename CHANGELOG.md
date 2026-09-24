@@ -4,6 +4,19 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.72 — 2026-09-23
+
+### Added
+
+- Creative Prompt profiles can now be activated for the current project from Settings → Creative Prompts. The selected profile is preserved with the project's existing generation settings and can be returned to shipped defaults at any time.
+- Forge resolves shipped defaults plus the selected application profile into an immutable, SHA-256-addressed prompt snapshot when a new durable build starts.
+- Durable Forge build records retain that full resolved snapshot. Retries and resumed checkpoints reuse it even if the application profile is edited later, preventing silent instruction drift.
+- Every bounded Forge specialist now reads its mission from the saved build snapshot, including Bundle 5 history, aesthetic, naming, pressure, and additional-lore jobs. Exact rendered prompt hashes remain recorded per attempt.
+
+### Validation boundary
+
+- Automated coverage verifies profile precedence, deterministic hash changes, project selection UI, specialist consumption, and immutable resume behavior. Project-local per-feature overrides, import/export/diff tools, prompt compile preview, isolated prompt test runs, and live-provider creative-quality evaluation remain later R3 work.
+
 ## v0.71 — 2026-09-23
 
 ### Added

@@ -1600,6 +1600,8 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         selection={settings.modelSelection || null}
         onSelectionChange={(modelSelection) => setSettings((current) => ({ ...current, modelSelection }))}
+        promptProfileId={settings.promptProfileId ?? null}
+        onPromptProfileChange={(promptProfileId) => setSettings((current) => ({ ...current, promptProfileId }))}
       />
 
       <CommandPalette
