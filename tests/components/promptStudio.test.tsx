@@ -1,7 +1,7 @@
 import React from "react";
 import { expect, test } from "bun:test";
 import { renderToString } from "react-dom/server";
-import { buildPromptOverrides, PromptStudioView } from "../../src/components/PromptStudio";
+import { buildPromptComparison, buildPromptOverrides, PromptStudioView } from "../../src/components/PromptStudio";
 
 const feature = {
   id: "forge.core", label: "Core premise", purpose: "Creative direction for the core specialist.", defaultVersion: 1,
@@ -31,4 +31,25 @@ test("Prompt Studio exposes a project-only override without confusing it with th
   expect(html).toContain("This project override");
   expect(html).toContain("Project direction");
   expect(html).toContain("Clear project override");
+});
+
+test("prompt comparison explains default, profile, and project precedence", () => {
+  expect(buildPromptComparison(feature, "Profile direction", "Project direction")).toEqual({
+    defaultText: "Build a playable premise.",
+    profileText: "Profile direction",
+    projectText: "Project direction",
+    effectiveText: "Project direction",
+    effectiveSource: "Project override",
+  });
+  expect(buildPromptComparison(feature, "Profile direction", "").effectiveSource).toBe("Application profile");
+  expect(buildPromptComparison(feature, feature.defaultText, "").effectiveSource).toBe("Shipped default");
+});
+
+test("Prompt Studio exposes portable profile actions and effective prompt comparison", () => {
+  const html = renderToString(<PromptStudioView features={[feature]} profiles={[]} selectedProfileId={null} selectedFeatureId="forge.core" draftName="New profile" draftText="Profile direction" busy={false} error={null} status={null} projectOverrideText="Project direction" onProjectOverrideChange={() => undefined} onImport={() => undefined} onExport={() => undefined} onSelectProfile={() => undefined} onSelectFeature={() => undefined} onNameChange={() => undefined} onTextChange={() => undefined} onNew={() => undefined} onSave={() => undefined} onReset={() => undefined} />);
+  expect(html).toContain("Import profile JSON");
+  expect(html).toContain("Export profile JSON");
+  expect(html).toContain("Compare prompt layers");
+  expect(html).toContain("Effective source");
+  expect(html).toContain("Project override");
 });

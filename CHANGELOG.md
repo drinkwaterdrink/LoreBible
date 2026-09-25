@@ -4,6 +4,18 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.74 — 2026-09-24
+
+### Added
+
+- Creative Prompts can now export a portable, prompt-only JSON profile and import it as a new inactive application profile. The transfer format preserves literal prompt macros and versioned feature overrides while excluding internal profile IDs, project canon, manuscript content, connection settings, and credentials.
+- Imported profiles are rejected before saving when JSON is malformed, the envelope version or kind is unsupported, fields or prompt features are unknown, feature overrides are duplicated, objects are prototype-bearing, or the 24,000-character feature and 256,000-character import limits are exceeded.
+- Each feature now includes a mobile-safe “Compare prompt layers” inspector showing the shipped default, application-profile draft, project override, effective prompt, and winning source according to the shipped default → profile → project precedence.
+
+### Validation boundary
+
+- Importing, exporting, comparing, and saving profiles remain generation-free and cannot mutate the manuscript. Automated coverage verifies safe transfer, macro preservation, data exclusion, rejection boundaries, precedence, and the visible Settings surface. Compiled-request preview and explicit isolated provider tests remain the next R3 tooling slice; no live-provider creative-quality certification was performed.
+
 ## v0.73 — 2026-09-24
 
 ### Added
