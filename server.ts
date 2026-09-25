@@ -89,7 +89,7 @@ try {
 
 registerPremiseSuggestionRoutes(app, { gateway: modelGateway });
 const promptProfileStore = createPromptProfileStore(resolveDefaultPromptProfileStorePath());
-registerPromptRoutes(app, { store: promptProfileStore });
+registerPromptRoutes(app, { store: promptProfileStore, gateway: modelGateway });
 
 function resolveRequestedModelSelection(value: unknown): ModelSelection | null {
   if (value == null) return null;

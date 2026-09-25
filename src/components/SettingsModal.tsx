@@ -306,7 +306,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               {isCompleteModelSelection(selection) && <p className="mt-2 text-[10px] font-mono-ui text-[var(--graphite)] truncate">Selected: {selection.modelId}</p>}
             </div>
           </div>
-        </div> : <PromptStudio activeProfileId={promptProfileId} onActiveProfileChange={onPromptProfileChange} projectOverrides={promptOverrides} onProjectOverridesChange={onPromptOverridesChange} blueprintSelection={blueprintSelection} previewSource={promptPreviewSource} />}
+        </div> : <PromptStudio activeProfileId={promptProfileId} onActiveProfileChange={onPromptProfileChange} projectOverrides={promptOverrides} onProjectOverridesChange={onPromptOverridesChange} blueprintSelection={blueprintSelection} previewSource={promptPreviewSource} modelSelection={selection} />}
       </section>
     </div>
   );

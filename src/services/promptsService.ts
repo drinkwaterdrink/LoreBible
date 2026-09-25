@@ -1,6 +1,7 @@
 import type { PromptProfileDraftV1, PromptProfileV1 } from "../contracts/prompts";
 import type { PromptOverrideV1 } from "../contracts/prompts";
 import type { BlueprintSelectionV1 } from "../contracts/blueprintSelection";
+import type { ModelSelection } from "../contracts/generation";
 import type { PromptRegistryEntry } from "../lib/prompts/registry";
 
 export interface PromptCatalog { registryVersion: string; features: PromptRegistryEntry[]; profiles: PromptProfileV1[]; }
@@ -8,6 +9,12 @@ export interface PromptCompilePreview {
   featureId: string; jobId: string; schemaId: string; snapshotHash: string; promptHash: string;
   systemInstruction: string; userPrompt: string;
   disclosure: { includesPrivateProjectContext: true; generationPerformed: false; manuscriptMutated: false };
+}
+export interface PromptTestResult {
+  candidate: Record<string, unknown>;
+  compilation: { featureId: string; jobId: string; schemaId: string; snapshotHash: string; promptHash: string };
+  provenance: { provider: string; modelRequested: string; modelReported?: string | null; usage?: { inputTokens?: number; outputTokens?: number; reasoningTokens?: number }; finishReason?: string; structuredOutputMode?: string };
+  disclosure: { disposable: true; manuscriptMutated: false; checkpointMutated: false };
 }
 async function json<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({})) as { message?: string };
@@ -27,4 +34,10 @@ export async function deletePromptProfile(id: string, expectedRevision: number):
 }
 export async function compilePromptPreview(input: { featureId: string; profileId: string | null; projectOverrides: PromptOverrideV1[]; selection: BlueprintSelectionV1; sourceContext: string }): Promise<PromptCompilePreview> {
   return (await json<{ preview: PromptCompilePreview }>(await fetch("/api/prompts/compile-preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }))).preview;
+}
+export async function runPromptTest(input: { testId: string; featureId: string; profileId: string | null; projectOverrides: PromptOverrideV1[]; selection: BlueprintSelectionV1; sourceContext: string; modelSelection: ModelSelection }, signal?: AbortSignal): Promise<PromptTestResult> {
+  return json<PromptTestResult>(await fetch("/api/prompts/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal }));
+}
+export async function cancelPromptTest(testId: string): Promise<void> {
+  await json(await fetch(`/api/prompts/test/${encodeURIComponent(testId)}/cancel`, { method: "POST" }));
 }

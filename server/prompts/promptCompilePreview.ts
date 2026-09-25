@@ -4,7 +4,7 @@ import { canonicalizeJson, sha256Hex } from "../../src/lib/projectGraph/canonica
 import { getForgePromptFeatureId, getPromptRegistryEntry } from "../../src/lib/prompts/registry.js";
 import { resolvePromptSnapshot } from "../../src/lib/prompts/resolve.js";
 import { createForgeBlueprintBrief, formatForgeBlueprintBrief } from "../generation/forgeBlueprintBrief.js";
-import { compileForgeSpecialistJobPrompt, createForgeSpecialistPlan, hashForgeSpecialistPrompt, hydrateForgeSpecialistJob } from "../generation/forgeSpecialistPlan.js";
+import { compileForgeSpecialistJobPrompt, createForgeSpecialistPlan, hashForgeSpecialistPrompt, hydrateForgeSpecialistJob, type ForgeSpecialistJob } from "../generation/forgeSpecialistPlan.js";
 
 export interface PromptCompilePreview {
   featureId: string;
@@ -17,13 +17,15 @@ export interface PromptCompilePreview {
   disclosure: { includesPrivateProjectContext: true; generationPerformed: false; manuscriptMutated: false };
 }
 
-export function compilePromptPreview(input: {
+export interface PreparedPromptCompilation { preview: PromptCompilePreview; specialist: ForgeSpecialistJob }
+
+export function preparePromptCompilation(input: {
   featureId: string;
   profile: PromptProfileV1 | null;
   projectOverrides: readonly PromptOverrideV1[];
   selection: BlueprintSelectionV1;
   sourceContext: string;
-}): PromptCompilePreview {
+}): PreparedPromptCompilation {
   getPromptRegistryEntry(input.featureId);
   const brief = createForgeBlueprintBrief(input.selection);
   if (!brief) throw new TypeError("An accepted Blueprint is required for compiled prompt preview.");
@@ -35,7 +37,7 @@ export function compilePromptPreview(input: {
   const snapshot = resolvePromptSnapshot({ profile: input.profile, projectOverrides: input.projectOverrides });
   const specialist = hydrateForgeSpecialistJob(job);
   const compiled = compileForgeSpecialistJobPrompt(specialist, context, null, snapshot);
-  return {
+  return { specialist, preview: {
     featureId: input.featureId,
     jobId: job.id,
     schemaId: job.schemaId,
@@ -44,5 +46,9 @@ export function compilePromptPreview(input: {
     systemInstruction: compiled.systemInstruction,
     userPrompt: compiled.userPrompt,
     disclosure: { includesPrivateProjectContext: true, generationPerformed: false, manuscriptMutated: false },
-  };
+  } };
+}
+
+export function compilePromptPreview(input: Parameters<typeof preparePromptCompilation>[0]): PromptCompilePreview {
+  return preparePromptCompilation(input).preview;
 }

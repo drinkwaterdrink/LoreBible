@@ -4,6 +4,19 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.76 — 2026-09-24
+
+### Added
+
+- Settings → Creative Prompts can now run an explicit disposable model test for the selected Forge feature using the project's active saved profile, project override, accepted Blueprint, current private context, and selected connection model.
+- Test responses must satisfy the real specialist response schema and assigned ownership before they are shown. Invalid structured output remains an actionable failure instead of becoming a partial or fabricated candidate.
+- Each test has a deterministic server-side cancellation handle. Cancel aborts the provider request even where a mobile/LAN browser closing its fetch does not reliably propagate through the HTTP stack.
+- Successful tests display the uncommitted candidate plus provider, effective model and reported token usage. Provider reasoning is excluded, and there is deliberately no Apply action.
+
+### Validation boundary
+
+- Prompt tests can spend provider tokens, but their route has no project repository, graph-command or Forge-checkpoint dependency and therefore cannot save the candidate. Automated coverage verifies exact compiled prompt/schema use, validation failure, missing-model handling, cancellation propagation, disclosure, mobile/LAN-safe request IDs, and absence of an apply control. No paid live-provider test was run for this release; creative quality remains unobserved until the user explicitly runs a test.
+
 ## v0.75 — 2026-09-24
 
 ### Added

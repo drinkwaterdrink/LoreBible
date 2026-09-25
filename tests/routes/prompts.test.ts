@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { registerPromptRoutes } from "../../server/routes/prompts";
 import { createPromptProfileStore } from "../../server/prompts/promptProfileStore";
 import { blueprintSelectionFixture } from "../fixtures/blueprintSelection";
+import type { ModelGateway } from "../../server/model/gateway";
 
-async function withApp(callback: (baseUrl: string) => Promise<void>) {
+async function withApp(callback: (baseUrl: string) => Promise<void>, gateway: Pick<ModelGateway, "generate"> | null = null) {
   const app = express(); app.use(express.json());
-  registerPromptRoutes(app, { store: createPromptProfileStore(join(tmpdir(), `lore-bible-prompt-routes-${crypto.randomUUID()}.json`)) });
+  const dependencies = { store: createPromptProfileStore(join(tmpdir(), `lore-bible-prompt-routes-${crypto.randomUUID()}.json`)), gateway };
+  registerPromptRoutes(app, dependencies);
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address(); if (!address || typeof address === "string") throw new Error("test server did not bind");
@@ -25,6 +27,64 @@ test("prompt catalog returns editable defaults and protected summaries without p
     expect(body.profiles).toEqual([]);
     expect(JSON.stringify(body)).not.toContain("SOURCE_CONTEXT");
   });
+});
+
+test("disposable prompt test uses the compiled schema and returns an uncommitted candidate", async () => {
+  const candidate = { core: { title: "Test world", pitch: "A playable test premise.", genreTone: "Grounded", eraScale: "Contemporary city", theRule: "Promises carry weight.", theCost: "Trust is spent.", theSituation: "A visitor arrives.", thePressure: "The deadline approaches.", theQuestion: "Who keeps their word?", permanence: "P" } };
+  let gatewayRequest: Parameters<ModelGateway["generate"]>[0] | null = null;
+  const gateway = { async generate(request: Parameters<ModelGateway["generate"]>[0]) {
+    gatewayRequest = request;
+    return { text: JSON.stringify(candidate), parsed: candidate, provenance: { provider: "openrouter" as const, profileId: "connection-1", modelRequested: "vendor/model", modelReported: "vendor/model", repaired: false, offlineFallback: false, usage: { inputTokens: 100, outputTokens: 80 } } };
+  } };
+  await withApp(async (baseUrl) => {
+    const selection = { ...structuredClone(blueprintSelectionFixture), lorebookRange: { min: 12, ideal: 20, max: 28 } };
+    const response = await fetch(`${baseUrl}/api/prompts/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ testId: "prompt-test-success", featureId: "forge.core", profileId: null, projectOverrides: [], selection, sourceContext: "Private test context", modelSelection: { profileId: "connection-1", modelId: "vendor/model" } }) });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.candidate).toEqual(candidate);
+    expect(body.disclosure).toEqual({ disposable: true, manuscriptMutated: false, checkpointMutated: false });
+    expect(body.provenance).toMatchObject({ provider: "openrouter", modelRequested: "vendor/model", usage: { inputTokens: 100, outputTokens: 80 } });
+    expect(body.provenance.reasoning).toBeUndefined();
+    expect(gatewayRequest).toMatchObject({ profileId: "connection-1", modelId: "vendor/model", responseSchema: { type: "object" }, structuredOutputPolicy: "single_document", stageName: "Prompt Studio disposable test" });
+    expect(gatewayRequest?.userPrompt).toContain("Private test context");
+  }, gateway);
+});
+
+test("disposable prompt test rejects invalid candidates and requires a selected model", async () => {
+  const gateway = { async generate() { return { text: "{}", parsed: {}, provenance: { provider: "gemini" as const, profileId: "connection-1", modelRequested: "vendor/model", modelReported: "vendor/model", repaired: false, offlineFallback: false } }; } };
+  const selection = { ...structuredClone(blueprintSelectionFixture), lorebookRange: { min: 12, ideal: 20, max: 28 } };
+  const request = { testId: "prompt-test-invalid", featureId: "forge.core", profileId: null, projectOverrides: [], selection, sourceContext: "Context", modelSelection: { profileId: "connection-1", modelId: "vendor/model" } };
+  await withApp(async (baseUrl) => {
+    const invalid = await fetch(`${baseUrl}/api/prompts/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
+    expect(invalid.status).toBe(502);
+    expect(await invalid.json()).toMatchObject({ code: "INVALID_STRUCTURED_OUTPUT", operation: "prompt-test" });
+  }, gateway);
+  await withApp(async (baseUrl) => {
+    const missing = await fetch(`${baseUrl}/api/prompts/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...request, modelSelection: null }) });
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toMatchObject({ code: "INVALID_PROMPT_TEST" });
+  });
+});
+
+test("an explicit disposable-test cancellation aborts its gateway request", async () => {
+  let observedAbort = false;
+  let generationStarted!: () => void;
+  const started = new Promise<void>((resolve) => { generationStarted = resolve; });
+  const gateway = { async generate(request: Parameters<ModelGateway["generate"]>[0]): Promise<never> {
+    generationStarted();
+    return await new Promise<never>((_resolve, reject) => request.signal?.addEventListener("abort", () => { observedAbort = true; reject(request.signal?.reason); }, { once: true }));
+  } };
+  await withApp(async (baseUrl) => {
+    const selection = { ...structuredClone(blueprintSelectionFixture), lorebookRange: { min: 12, ideal: 20, max: 28 } };
+    const pending = fetch(`${baseUrl}/api/prompts/test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ testId: "prompt-test-cancel", featureId: "forge.core", profileId: null, projectOverrides: [], selection, sourceContext: "Context", modelSelection: { profileId: "connection-1", modelId: "vendor/model" } }) });
+    await started;
+    const cancellation = await fetch(`${baseUrl}/api/prompts/test/prompt-test-cancel/cancel`, { method: "POST" });
+    expect(cancellation.status).toBe(202);
+    const response = await pending;
+    expect(response.status).toBe(499);
+    for (let index = 0; index < 20 && !observedAbort; index += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(observedAbort).toBe(true);
+  }, gateway);
 });
 
 test("prompt profile routes enforce optimistic revisions", async () => {

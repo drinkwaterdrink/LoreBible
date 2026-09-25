@@ -1,12 +1,16 @@
 import React from "react";
 import { expect, test } from "bun:test";
 import { renderToString } from "react-dom/server";
-import { buildPromptComparison, buildPromptOverrides, PromptStudioView } from "../../src/components/PromptStudio";
+import { buildPromptComparison, buildPromptOverrides, createPromptTestId, PromptStudioView } from "../../src/components/PromptStudio";
 
 const feature = {
   id: "forge.core", label: "Core premise", purpose: "Creative direction for the core specialist.", defaultVersion: 1,
   defaultText: "Build a playable premise.", protectedRequirements: ["The output schema always applies."], allowedVariables: ["{{user}}", "{{char}}"],
 };
+
+test("disposable prompt test IDs are valid without secure-context browser APIs", () => {
+  expect(createPromptTestId(1_727_200_000_000, 0.123456)).toMatch(/^prompt-test-[A-Za-z0-9_-]{8,80}$/);
+});
 
 test("Prompt Studio keeps editable creative text separate from protected requirements", () => {
   const html = renderToString(<PromptStudioView features={[feature]} profiles={[]} selectedProfileId={null} selectedFeatureId="forge.core" draftName="New profile" draftText={feature.defaultText} busy={false} error={null} status={null} onSelectProfile={() => undefined} onSelectFeature={() => undefined} onNameChange={() => undefined} onTextChange={() => undefined} onNew={() => undefined} onSave={() => undefined} onReset={() => undefined} />);
@@ -68,4 +72,18 @@ test("Prompt Studio renders compiled request provenance and disclosure", () => {
   expect(html).toContain("SYSTEM REQUEST");
   expect(html).toContain("PRIVATE CONTEXT");
   expect(html).toContain("No model call was made");
+});
+
+test("Prompt Studio exposes an explicit paid disposable test with cancellation", () => {
+  const html = renderToString(<PromptStudioView features={[feature]} profiles={[]} selectedProfileId={null} selectedFeatureId="forge.core" draftName="New profile" draftText={feature.defaultText} busy={false} error={null} status={null} previewAvailable testAvailable testBusy={false} testResult={null} onTest={() => undefined} onCancelTest={() => undefined} onSelectProfile={() => undefined} onSelectFeature={() => undefined} onNameChange={() => undefined} onTextChange={() => undefined} onNew={() => undefined} onSave={() => undefined} onReset={() => undefined} />);
+  expect(html).toContain("Run disposable model test");
+  expect(html).toContain("provider tokens");
+  expect(html).toContain("candidate is not saved");
+});
+
+test("Prompt Studio shows a disposable candidate without an apply action", () => {
+  const html = renderToString(<PromptStudioView features={[feature]} profiles={[]} selectedProfileId={null} selectedFeatureId="forge.core" draftName="New profile" draftText={feature.defaultText} busy={false} error={null} status={null} previewAvailable testAvailable testBusy={false} onTest={() => undefined} onCancelTest={() => undefined} testResult={{ candidate: { core: { title: "Candidate world" } }, compilation: { featureId: "forge.core", jobId: "job-1", schemaId: "schema-1", snapshotHash: "snapshot-1", promptHash: "prompt-1" }, provenance: { provider: "gemini", modelRequested: "model-1", modelReported: "model-1", usage: { inputTokens: 20, outputTokens: 10 } }, disclosure: { disposable: true, manuscriptMutated: false, checkpointMutated: false } }} onSelectProfile={() => undefined} onSelectFeature={() => undefined} onNameChange={() => undefined} onTextChange={() => undefined} onNew={() => undefined} onSave={() => undefined} onReset={() => undefined} />);
+  expect(html).toContain("Candidate world");
+  expect(html).toContain("Disposable candidate");
+  expect(html).not.toContain("Apply candidate");
 });
