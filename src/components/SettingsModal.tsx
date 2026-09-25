@@ -19,6 +19,8 @@ import { filterAndSortModels, readFavoriteModelIds, toggleFavoriteModel, type Mo
 import { formatConnectionDiagnostics, runtimeCompatibilityMessage, type RuntimeInfo } from "../lib/runtimeDiagnostics";
 import { PromptStudio } from "./PromptStudio";
 import type { PromptOverrideV1 } from "../contracts/prompts";
+import type { BlueprintSelectionV1 } from "../contracts/blueprintSelection";
+import type { ForgeSourceContextInput } from "../lib/prompts/forgeSourceContext";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -29,6 +31,8 @@ interface SettingsModalProps {
   onPromptProfileChange?: (id: string | null) => void;
   promptOverrides?: PromptOverrideV1[];
   onPromptOverridesChange?: (overrides: PromptOverrideV1[]) => void;
+  blueprintSelection?: BlueprintSelectionV1 | null;
+  promptPreviewSource?: ForgeSourceContextInput;
 }
 
 const EMPTY_DRAFT = { id: undefined as string | undefined, name: "", provider: "openrouter" as ProviderId, apiKey: "", customModelIds: [] as string[] };
@@ -61,7 +65,7 @@ export function createModelListResetKey(profileId: string | undefined, sort: Mod
   return [profileId || "", sort, search.trim().toLowerCase(), subscriptionOnly ? "subscription" : "all", ...modelIds].join("\u001f");
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, selection, onSelectionChange, promptProfileId, onPromptProfileChange, promptOverrides, onPromptOverridesChange }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, selection, onSelectionChange, promptProfileId, onPromptProfileChange, promptOverrides, onPromptOverridesChange, blueprintSelection, promptPreviewSource }) => {
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
   const [models, setModels] = useState<AvailableModel[]>([]);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
@@ -302,7 +306,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
               {isCompleteModelSelection(selection) && <p className="mt-2 text-[10px] font-mono-ui text-[var(--graphite)] truncate">Selected: {selection.modelId}</p>}
             </div>
           </div>
-        </div> : <PromptStudio activeProfileId={promptProfileId} onActiveProfileChange={onPromptProfileChange} projectOverrides={promptOverrides} onProjectOverridesChange={onPromptOverridesChange} />}
+        </div> : <PromptStudio activeProfileId={promptProfileId} onActiveProfileChange={onPromptProfileChange} projectOverrides={promptOverrides} onProjectOverridesChange={onPromptOverridesChange} blueprintSelection={blueprintSelection} previewSource={promptPreviewSource} />}
       </section>
     </div>
   );

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { registerPromptRoutes } from "../../server/routes/prompts";
 import { createPromptProfileStore } from "../../server/prompts/promptProfileStore";
+import { blueprintSelectionFixture } from "../fixtures/blueprintSelection";
 
 async function withApp(callback: (baseUrl: string) => Promise<void>) {
   const app = express(); app.use(express.json());
@@ -45,5 +46,28 @@ test("prompt profile routes reject unknown feature IDs instead of saving them", 
     const response = await fetch(`${baseUrl}/api/prompts/profiles`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Bad", overrides: [{ featureId: "forge.fake", baseVersion: 1, text: "x", revision: 1 }] }) });
     expect(response.status).toBe(400);
     expect((await response.json()).code).toBe("INVALID_PROMPT_PROFILE");
+  });
+});
+
+test("compiled preview is explicit, uses saved profile plus project override, and performs no generation", async () => {
+  await withApp(async (baseUrl) => {
+    const createdResponse = await fetch(`${baseUrl}/api/prompts/profiles`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Preview profile", overrides: [{ featureId: "forge.core", baseVersion: 1, text: "Application direction", revision: 1 }] }) });
+    const profile = (await createdResponse.json()).profile;
+    const selection = { ...structuredClone(blueprintSelectionFixture), lorebookRange: { min: 12, ideal: 20, max: 28 } };
+    const response = await fetch(`${baseUrl}/api/prompts/compile-preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ featureId: "forge.core", profileId: profile.id, projectOverrides: [{ featureId: "forge.core", baseVersion: 1, text: "Project direction", revision: 1 }], selection, sourceContext: "Private canon context" }) });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.preview.userPrompt).toContain("Project direction");
+    expect(body.preview.userPrompt).toContain("Private canon context");
+    expect(body.preview.disclosure).toEqual({ includesPrivateProjectContext: true, generationPerformed: false, manuscriptMutated: false });
+  });
+});
+
+test("compiled preview rejects missing profiles and malformed Blueprint input", async () => {
+  await withApp(async (baseUrl) => {
+    const missing = await fetch(`${baseUrl}/api/prompts/compile-preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ featureId: "forge.core", profileId: "missing", projectOverrides: [], selection: blueprintSelectionFixture, sourceContext: "Context" }) });
+    expect(missing.status).toBe(404);
+    const malformed = await fetch(`${baseUrl}/api/prompts/compile-preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ featureId: "forge.core", profileId: null, projectOverrides: [], selection: { bad: true }, sourceContext: "Context" }) });
+    expect(malformed.status).toBe(400);
   });
 });

@@ -4,6 +4,18 @@ All notable LoreBible changes are recorded here. The project adopted this change
 
 ## Unreleased
 
+## v0.75 — 2026-09-24
+
+### Added
+
+- Settings → Creative Prompts now offers an explicit compiled-request preview for the selected Forge feature after a Blueprint is accepted. It shows the exact protected system instruction, user request, specialist job, response schema ID, immutable prompt snapshot hash, and rendered prompt hash.
+- The preview uses the same specialist planner, schema selection, prompt-profile precedence, Blueprint brief, and project-context builder as Forge itself. The shared context builder was extracted from the monolithic server without introducing a parallel prompt path.
+- Private project context is assembled and sent to the local LoreBible server only when the user clicks Preview. The UI clearly discloses that the preview performs no model call, spends no provider tokens, and cannot edit the manuscript or Forge checkpoint.
+
+### Validation boundary
+
+- Automated coverage verifies real specialist compilation, application-profile/project-override precedence, accepted-Blueprint validation, missing-profile and unscheduled-feature rejection, shared context behavior, route disclosure, and the mobile-safe Settings surface. This is structural compilation evidence, not a live provider test or creative-quality certification. Explicit disposable provider tests remain the next R3 slice, followed by canon conflict preflight and R4 raw-idea routing.
+
 ## v0.74 — 2026-09-24
 
 ### Added

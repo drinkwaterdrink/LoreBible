@@ -1604,6 +1604,8 @@ export default function App() {
         onPromptProfileChange={(promptProfileId) => setSettings((current) => ({ ...current, promptProfileId }))}
         promptOverrides={settings.promptOverrides ?? []}
         onPromptOverridesChange={(promptOverrides) => setSettings((current) => ({ ...current, promptOverrides }))}
+        blueprintSelection={blueprintSelection}
+        promptPreviewSource={{ sparkText, parse, canon, chosenTake: takes.find((take) => take.id === selectedTakeId) || takes[0], physics, existingDoc: document }}
       />
 
       <CommandPalette

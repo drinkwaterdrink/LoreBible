@@ -54,6 +54,7 @@ import { RUNTIME_CAPABILITIES } from "./src/lib/runtimeDiagnostics.js";
 import { parseBlueprintSelectionV1, type BlueprintSelectionV1 } from "./src/contracts/blueprintSelection.js";
 import { createForgeBlueprintBrief, formatForgeBlueprintBrief } from "./server/generation/forgeBlueprintBrief.js";
 import { auditForgeBundleCoverage, assertForgeCheckpointCoverage, createForgeCoveragePlan } from "./server/generation/forgeCoveragePlan.js";
+import { buildForgeSourceContext } from "./src/lib/prompts/forgeSourceContext.js";
 
 dotenv.config();
 
@@ -315,105 +316,7 @@ app.get("/api/health", (_req, res) => {
  * Shared Context Builder
  * Single source of truth for constructing prompt context across all stages.
  */
-export function buildSharedContext(params: {
-  sparkText: string;
-  parse?: any;
-  canon?: any;
-  chosenTake?: any;
-  physics?: any;
-  existingDoc?: any;
-}): string {
-  const { sparkText, parse, canon, chosenTake, physics, existingDoc } = params;
-  const nonNegs = parse?.nonNegotiables || [];
-  const regWords = parse?.registerWords || [];
-  const userRole = parse?.userRole || null;
-
-  let ctx = `NON-NEGOTIABLE PREMISE: "${sparkText}".
-Everything generated must be recognisably part of this world.
-Required elements: ${JSON.stringify(nonNegs)}.
-Required register: ${JSON.stringify(regWords)}.
-Player character: ALWAYS leave the player character reference as {{user}}; NEVER generate a persona name for the user.`;
-
-  if (userRole) {
-    ctx += `\nPlayer starting position: ${userRole}.`;
-  }
-
-  if (canon?.enabled && canon.franchiseName) {
-    ctx += `\n\nCANON MODE ACTIVE:
-Franchise: ${canon.franchiseName}
-Fidelity tier: ${canon.fidelity || "Adjacent"}
-MANDATORY INSTRUCTIONS FOR CANON MODE:
-1. Use real in-universe proper nouns, factions, licensing, technologies, and vocabulary from ${canon.franchiseName}.
-2. Reinterpret mundanity as the authentic logistics and material realities OF THIS WORLD (${canon.franchiseName}) — supply lines, protocols, maintenance, and jurisdictional borders.
-3. Keep metaphysical and world rules consistent with canon.`;
-  }
-
-  if (chosenTake) {
-    ctx += `\n\nCHOSEN PREMISE ANGLE:
-Title: ${chosenTake.title}
-Pitch: ${chosenTake.pitch}
-Angle: ${chosenTake.angle}
-What's Strange: ${chosenTake.whatsStrange}
-Tone: ${chosenTake.genreTone}`;
-  }
-
-  if (physics) {
-    ctx += `\n\nWORLD CONSTRAINTS:
-- Density: ${physics.density || "Standard"}
-- Strangeness: ${physics.strangeness || 3}/5
-- Mundanity: ${physics.mundanity || 4}/5
-- Violence: ${physics.violence || "Moderate"}
-- Horror: ${physics.horror || "Psych"}
-- Romance: ${physics.romance || "Subplot"}
-- Pacing: ${physics.pacing || "Slow burn"}`;
-
-    // Strictly OMIT Linguistic Base when Canon Mode is active
-    if (!canon?.enabled && physics.linguisticBase && physics.linguisticBase.trim()) {
-      ctx += `\n- Linguistic Base: ${physics.linguisticBase}`;
-    }
-
-    if (physics.mustInclude && physics.mustInclude.trim()) {
-      ctx += `\n- Author Must-Include: "${physics.mustInclude.trim()}"`;
-    }
-    if (physics.mustAvoid && physics.mustAvoid.trim()) {
-      ctx += `\n- Author Must-Avoid: "${physics.mustAvoid.trim()}"`;
-    }
-  }
-
-  // If previous sections were already generated in preceding bundles, provide their context
-  if (existingDoc) {
-    ctx += `\n\nALREADY ESTABLISHED SECTIONS (Hold full continuity and coherence with these):`;
-    if (existingDoc.core) {
-      ctx += `\n- Title: "${existingDoc.core.title}"`;
-      ctx += `\n- Core Rule: "${existingDoc.core.theRule}"`;
-      ctx += `\n- Core Cost: "${existingDoc.core.theCost}"`;
-      ctx += `\n- Situation: "${existingDoc.core.theSituation}"`;
-      ctx += `\n- Pressure: "${existingDoc.core.thePressure}"`;
-    }
-    if (existingDoc.user) {
-      ctx += `\n- User Position: "${existingDoc.user.rolePosition}"`;
-      ctx += `\n- User Starts With: "${existingDoc.user.startsWith}"`;
-    }
-    if (existingDoc.worldPhysics) {
-      ctx += `\n- Authority Check: "${existingDoc.worldPhysics.authorityCheck}"`;
-      ctx += `\n- Power Ceiling: "${existingDoc.worldPhysics.powerCeiling}"`;
-    }
-    if (existingDoc.locations && existingDoc.locations.length > 0) {
-      const locNames = existingDoc.locations.map((l: any) => l.fields?.name || l.id).join(", ");
-      ctx += `\n- Established Locations: ${locNames}`;
-    }
-    if (existingDoc.factions && existingDoc.factions.length > 0) {
-      const facNames = existingDoc.factions.map((f: any) => f.fields?.name || f.id).join(", ");
-      ctx += `\n- Established Factions: ${facNames}`;
-    }
-    if (existingDoc.npcs && existingDoc.npcs.length > 0) {
-      const npcNames = existingDoc.npcs.map((n: any) => `${n.fields?.name || n.id} (${n.fields?.role || ""})`).join(", ");
-      ctx += `\n- Established NPCs: ${npcNames}`;
-    }
-  }
-
-  return ctx;
-}
+export const buildSharedContext = buildForgeSourceContext;
 
 /**
  * Execute Gemini call with 2 retries with backoff, JSON repair, and contamination blocklist check.

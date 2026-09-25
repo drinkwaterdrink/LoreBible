@@ -182,7 +182,7 @@ Add a “Creative Prompts” section to `src/components/SettingsModal.tsx` witho
 3. Editable creative prompt and read-only protected requirements disclosure.
 4. Save, Reset this feature, Duplicate profile, Import, Export.
 5. Version diff when shipped defaults change; preserve customizations.
-6. Preview effective prompt (explicit private-canon disclosure); test on a disposable candidate, never the accepted manuscript.
+6. Preview effective prompt (explicit private-canon disclosure); test on a disposable candidate, never the accepted manuscript. **v0.75:** compiled preview is shipped and reuses the real Forge specialist compiler; isolated provider testing remains next.
 
 Save performs no generation. Reset affects only selected feature, not credentials or Blueprint. Profile export includes creative text and versions only, excluding private project context and API keys. Preview includes actual effective text only after the user asks; never put it in telemetry.
 
@@ -204,7 +204,7 @@ Canonical fact status must distinguish explicit, accepted invention, generated p
 
 - [ ] Profile precedence, revision conflict, malformed import, duplicate/unknown IDs, unsupported version, oversized text, prototype keys.
 - [ ] Phone/desktop share global profile via server; project override does not change other project.
-- [ ] Save costs zero calls; preview redacts secrets from diagnostics; isolated test preserves manuscript.
+- [ ] Save costs zero calls; compiled preview is explicit, generation-free and mutation-free; diagnostic redaction and isolated-test manuscript preservation remain to close.
 - [ ] Paused-build hash remains fixed; switching defaults/overrides does not silently resume with new prompt.
 - [ ] Effective request tests for every exposed feature; deterministic planner labeled honestly.
 - [ ] Source conflict preserved until explicit resolution; macros unchanged.

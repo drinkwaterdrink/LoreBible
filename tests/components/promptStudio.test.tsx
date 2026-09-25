@@ -53,3 +53,19 @@ test("Prompt Studio exposes portable profile actions and effective prompt compar
   expect(html).toContain("Effective source");
   expect(html).toContain("Project override");
 });
+
+test("Prompt Studio explains and exposes the opt-in compiled request preview", () => {
+  const html = renderToString(<PromptStudioView features={[feature]} profiles={[]} selectedProfileId={null} selectedFeatureId="forge.core" draftName="New profile" draftText={feature.defaultText} busy={false} error={null} status={null} previewAvailable previewBusy={false} preview={null} onPreview={() => undefined} onSelectProfile={() => undefined} onSelectFeature={() => undefined} onNameChange={() => undefined} onTextChange={() => undefined} onNew={() => undefined} onSave={() => undefined} onReset={() => undefined} />);
+  expect(html).toContain("Preview compiled request");
+  expect(html).toContain("private project context");
+  expect(html).toContain("does not call the model");
+});
+
+test("Prompt Studio renders compiled request provenance and disclosure", () => {
+  const html = renderToString(<PromptStudioView features={[feature]} profiles={[]} selectedProfileId={null} selectedFeatureId="forge.core" draftName="New profile" draftText={feature.defaultText} busy={false} error={null} status={null} previewAvailable previewBusy={false} onPreview={() => undefined} preview={{ featureId: "forge.core", jobId: "job-core", schemaId: "forge.bundle.core", snapshotHash: "snapshot-1", promptHash: "prompt-1", systemInstruction: "SYSTEM REQUEST", userPrompt: "PRIVATE CONTEXT", disclosure: { includesPrivateProjectContext: true, generationPerformed: false, manuscriptMutated: false } }} onSelectProfile={() => undefined} onSelectFeature={() => undefined} onNameChange={() => undefined} onTextChange={() => undefined} onNew={() => undefined} onSave={() => undefined} onReset={() => undefined} />);
+  expect(html).toContain("job-core");
+  expect(html).toContain("forge.bundle.core");
+  expect(html).toContain("SYSTEM REQUEST");
+  expect(html).toContain("PRIVATE CONTEXT");
+  expect(html).toContain("No model call was made");
+});
